@@ -1,0 +1,98 @@
+name: SLC Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review, reopened]
+
+jobs:
+  slc-review:
+    if: |
+      !github.event.pull_request.draft &&
+      !contains(github.event.pull_request.labels.*.name, 'skip-review') &&
+      !contains(github.event.pull_request.labels.*.name, 'tiny')
+
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: read
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Run SLC Review
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            Review this pull request using our SLC (Simple, Lovable, Complete) principles for the IdeaSpaces desktop client.
+
+            ## Context
+            - This repo: a Tauri v2 desktop client. Rust core (`src-tauri/`) + React 19 / Vite / TypeScript frontend (`src/`).
+            - Product: local-first. "Obsidian's on-disk editing fused with GitHub's browse-and-collaborate." v1 scope is deliberately tiny — **login, edit, sync**. Browse/graph/collaboration ride the hosted API; a local Pi agent is a later fast-follow.
+            - **Thin-GUI-over-CLI invariant:** the bundled `@ideaspaces/cli` sidecar owns authentication (credentials in `~/.ideaspaces/credentials.json`), git, clone, and sync. The desktop *drives CLI verbs and reads/writes local files* — it does NOT reimplement auth, token storage, OAuth, or git logic in Rust or TS. New shared capabilities belong in the SDK/CLI first, then the desktop drives them.
+            - **Thin Rust core:** `src-tauri` handles native concerns only — window, filesystem, spawning the sidecar, (later) secure storage. Domain logic stays in the CLI/SDK (TypeScript) or the hosted API.
+            - **Reuse over rebuild:** React 19.1 is pinned to match `is_web` so its editor/conversation components transplant directly. Prefer porting `is_web` UI to inventing new.
+            - **Locality model:** a space is either `remote-only` (browse over the API) or a `local clone` (edit/sync); "clone to work locally" is the bridge. Git is source of truth; the server index is derived.
+
+            ## SLC label context
+            - `slc:simple` / `slc:lovable` / `slc:complete`: quick validation for labeled dimensions, deeper review for unlabeled.
+            - `needs:slc-review`: do deeper analysis.
+            - No SLC labels: standard full review.
+
+            ## SLC Framework Review
+
+            ### Simple 🎯
+            - Is this the simplest implementation that solves the user problem?
+            - Does it reuse existing patterns (is_web components, CLI verbs, SDK primitives) rather than build new abstractions?
+            - Does it respect the thin-GUI-over-CLI and thin-Rust-core invariants — or does it duplicate auth/git/sync logic that already lives in the CLI/SDK?
+            - Any speculative or framework-like complexity that should be deferred?
+
+            ### Lovable ❤️
+            - UX: clear states for the long-running operations that define this app — login (browser handoff), clone, sync, save. Every async path has loading + error + empty states.
+            - Failure modes are actionable: offline, not-logged-in, sidecar missing/crashed, git conflict, merge needed — surfaced with useful hints, never a silent hang or raw stderr dump.
+            - Local-first feel: edits land on disk immediately; sync status is legible; nothing blocks the editor on the network.
+
+            ### Complete 🏁
+            - Error handling covers the unhappy paths above (auth failure, sidecar non-zero exit, conflicting edits, missing repo)?
+            - Frontend checks pass (`npm run typecheck`, `npm run lint`, `npm run build`)?
+            - Rust checks pass (`cargo fmt --check`, `cargo clippy -D warnings`, `cargo build`)?
+            - No leftover scaffold cruft, dead code, or TODOs shipped as production behavior?
+
+            ## Desktop / Tauri-specific checks
+            - **Capabilities least-privilege:** `src-tauri/capabilities/*` grant only what's used. No blanket `shell:allow-execute`/open scopes; sidecar invocation is constrained to the bundled binary with a bounded argument allow-list — never arbitrary shell or user-interpolated commands.
+            - **Sidecar safety:** the CLI sidecar is invoked as a Tauri `externalBin`, not via a shell string. Arguments are passed as an array (no string interpolation / injection). Paths from the UI are validated before reaching the filesystem or git.
+            - **No secrets in the bundle or repo.** The token lives in `~/.ideaspaces/credentials.json` (CLI-owned); the desktop never embeds API keys or hardcodes API URLs.
+            - **CSP / webview:** content security policy is set (not left `null`) before shipping; no loading of remote untrusted content into the privileged webview.
+            - **Filesystem discipline:** never overwrite a user's file without intent; respect the working-copy git state.
+            - **Cross-platform:** no hardcoded macOS-only paths/commands where a cross-platform path is expected; sidecar resolved by target triple.
+
+            ## Anti-pattern detection 🚨
+            - Reimplementing CLI/SDK logic (auth, git, sync, frontmatter) in Rust or the webview instead of driving the sidecar.
+            - Over-broad Tauri capabilities or `shell` scopes "to make it work."
+            - Building bespoke UI where an `is_web` component would transplant.
+            - Scope creep beyond v1 (login/edit/sync) — speculative graph/agent/collaboration infrastructure.
+            - Incomplete features: missing error/loading handling, no offline fallback, network on the editor's critical path.
+
+            ## Output format
+
+            **SLC Assessment:**
+            - ✅/⚠️/❌ Simple: [brief assessment]
+            - ✅/⚠️/❌ Lovable: [brief assessment]
+            - ✅/⚠️/❌ Complete: [brief assessment]
+
+            **Anti-Patterns Found:** [list or "None detected"]
+
+            **Desktop/Tauri Issues:** [list or "None detected"]
+
+            **Detailed Feedback:** [specific issues and suggestions]
+
+            **Recommendation:** Approve / Request Changes / Comment
+
+            Use `gh pr comment` to post your review.
+
+          claude_args: '--allowed-tools "Bash(gh issue view:*),Bash(gh search:*),Bash(gh issue list:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*)"'
