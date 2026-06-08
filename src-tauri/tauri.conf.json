@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "is_desktop",
+        "title": "IdeaSpaces",
         "width": 800,
         "height": 600
       }
