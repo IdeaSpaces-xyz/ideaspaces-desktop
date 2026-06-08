@@ -4,7 +4,7 @@
 // command here must have a matching scoped entry in
 // src-tauri/capabilities/default.json — the arg vectors are an allow-list.
 
-import { Command } from "@tauri-apps/plugin-shell";
+import { Command, type Child } from "@tauri-apps/plugin-shell";
 
 interface SidecarResult {
   code: number | null;
@@ -36,17 +36,51 @@ export async function whoami(): Promise<WhoamiResult> {
   return parseJson<WhoamiResult>(stdout, "whoami");
 }
 
+export interface LoginHandle {
+  /** Resolves when login completes or is cancelled; rejects on failure. */
+  done: Promise<void>;
+  /** Kill the login process, closing the OAuth callback server. */
+  cancel: () => Promise<void>;
+}
+
 /**
- * Run the OAuth login flow. The CLI opens the browser and runs a local
- * callback server; this resolves when the CLI process completes (or rejects
- * on non-zero exit, e.g. the CLI's ~120s callback timeout). The resulting
- * state is read back via whoami(), so the login output itself isn't returned.
+ * Start the OAuth login flow. The CLI opens the browser and runs a local
+ * callback server. Spawned (not execute()'d) so it can be cancelled: `cancel()`
+ * kills the process and its callback server. Await `done` for completion; the
+ * resulting state is read back via whoami(), so login output isn't returned.
  */
-export async function login(): Promise<void> {
-  const { code, stderr } = await runCli(["login", "--json"]);
-  if (code !== 0) {
-    throw new Error(stderr.trim() || `Sign-in failed (exit ${code ?? "unknown"}).`);
-  }
+export function login(): LoginHandle {
+  const command = Command.sidecar("binaries/ideaspaces", ["login", "--json"]);
+  let stderr = "";
+  command.stderr.on("data", (line) => {
+    stderr += line;
+  });
+
+  let child: Child | null = null;
+  let cancelled = false;
+
+  const done = new Promise<void>((resolve, reject) => {
+    command.on("error", (err) => reject(new Error(String(err))));
+    command.on("close", ({ code }) => {
+      if (cancelled || code === 0) resolve();
+      else reject(new Error(stderr.trim() || `Sign-in failed (exit ${code ?? "unknown"}).`));
+    });
+    command
+      .spawn()
+      .then((spawned) => {
+        child = spawned;
+        // Cancelled before spawn resolved — kill immediately.
+        if (cancelled) void spawned.kill();
+      })
+      .catch(reject);
+  });
+
+  const cancel = async () => {
+    cancelled = true;
+    if (child) await child.kill();
+  };
+
+  return { done, cancel };
 }
 
 /** Clear stored credentials. */

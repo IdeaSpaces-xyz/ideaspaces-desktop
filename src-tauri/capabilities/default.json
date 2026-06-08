@@ -17,14 +17,20 @@
         {
           "name": "binaries/ideaspaces",
           "sidecar": true,
-          "args": ["login", "--json"]
-        },
-        {
-          "name": "binaries/ideaspaces",
-          "sidecar": true,
           "args": ["power", "logout", "--json"]
         }
       ]
-    }
+    },
+    {
+      "identifier": "shell:allow-spawn",
+      "allow": [
+        {
+          "name": "binaries/ideaspaces",
+          "sidecar": true,
+          "args": ["login", "--json"]
+        }
+      ]
+    },
+    "shell:allow-kill"
   ]
 }
