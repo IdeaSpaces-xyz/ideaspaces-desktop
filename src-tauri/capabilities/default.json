@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capability for the main window",
+  "description": "Main window. Sidecar execution scoped to the ideaspaces CLI binary only. `args: true` is required: Tauri runs a sidecar with the matched scope entry's args (not the call's), so per-command arg allow-lists all resolve to the first entry. Verbs are passed at the call site instead.",
   "windows": ["main"],
   "permissions": [
     "core:default",

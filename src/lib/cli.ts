@@ -1,8 +1,15 @@
 // Typed wrapper over the bundled @ideaspaces/cli sidecar.
 //
-// The CLI owns auth/git/sync; the desktop drives it through these verbs. Each
-// command here must have a matching scoped entry in
-// src-tauri/capabilities/default.json — the arg vectors are an allow-list.
+// The CLI owns auth/git/sync; the desktop drives it through these verbs.
+// The capability (src-tauri/capabilities/default.json) scopes execution to this
+// one sidecar binary with `args: true`, and verbs are passed per call here.
+//
+// Per-command arg allow-lists do NOT work: Tauri runs a sidecar with the matched
+// scope entry's args, not the call's, so multiple fixed-arg entries for one
+// binary all resolve to the first (verified — `logout` silently ran `whoami` and
+// never cleared credentials). Scoping the binary and passing args at the call
+// site is the working, idiomatic pattern. Execution is still limited to our CLI
+// (no arbitrary programs); the webview is first-party with CSP set.
 
 import { Command, type Child } from "@tauri-apps/plugin-shell";
 
