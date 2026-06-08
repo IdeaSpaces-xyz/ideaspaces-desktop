@@ -12,12 +12,7 @@
         {
           "name": "binaries/ideaspaces",
           "sidecar": true,
-          "args": ["whoami", "--json"]
-        },
-        {
-          "name": "binaries/ideaspaces",
-          "sidecar": true,
-          "args": ["power", "logout", "--json"]
+          "args": true
         }
       ]
     },
@@ -27,7 +22,7 @@
         {
           "name": "binaries/ideaspaces",
           "sidecar": true,
-          "args": ["login", "--json"]
+          "args": true
         }
       ]
     },
