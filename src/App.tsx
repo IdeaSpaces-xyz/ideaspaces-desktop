@@ -18,6 +18,7 @@ function App() {
         <h1>IdeaSpaces</h1>
         <p>Signed in{auth.apiUrl ? ` to ${auth.apiUrl}` : ""}.</p>
         <button onClick={auth.signOut}>Sign out</button>
+        {auth.error && <p className="error">{auth.error}</p>}
       </main>
     );
   }
@@ -30,8 +31,13 @@ function App() {
       <button onClick={auth.signIn} disabled={signingIn}>
         {signingIn ? "Waiting for browser…" : "Sign in with Google"}
       </button>
-      {signingIn && <p>Complete sign-in in the browser window that opened.</p>}
-      {auth.error && <p style={{ color: "#c0392b" }}>{auth.error}</p>}
+      {signingIn && (
+        <p>
+          Complete sign-in in the browser window that opened.{" "}
+          <button onClick={auth.cancelSignIn}>Cancel</button>
+        </p>
+      )}
+      {auth.error && <p className="error">{auth.error}</p>}
     </main>
   );
 }

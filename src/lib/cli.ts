@@ -38,6 +38,7 @@ export async function whoami(): Promise<WhoamiResult> {
 
 export interface LoginResult {
   logged_in: boolean;
+  // The CLI opens the browser itself, so the desktop doesn't surface web_url yet.
   web_url?: string;
 }
 
