@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { login, logout, whoami } from "../lib/cli";
+import { login, logout, whoami, type LoginHandle } from "../lib/cli";
 
 export type AuthStatus =
   | "checking"
@@ -27,6 +27,8 @@ export function useAuth() {
   const [state, setState] = useState<AuthState>({ status: "checking" });
   // Bumped on cancel so a late-resolving sign-in can't override the reset.
   const generation = useRef(0);
+  // Live login process, so cancel can kill it.
+  const loginHandle = useRef<LoginHandle | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -48,13 +50,17 @@ export function useAuth() {
   const signIn = useCallback(async () => {
     const gen = ++generation.current;
     setState({ status: "signing-in" });
+    const handle = login();
+    loginHandle.current = handle;
     try {
-      await login();
+      await handle.done;
     } catch (err) {
       if (gen === generation.current) {
         setState({ status: "signed-out", error: errMessage(err) });
       }
       return;
+    } finally {
+      if (loginHandle.current === handle) loginHandle.current = null;
     }
     // Ignore the result if the user cancelled while the browser flow ran.
     if (gen === generation.current) await refresh();
@@ -74,14 +80,13 @@ export function useAuth() {
     await refresh();
   }, [refresh]);
 
-  // Abandon an in-flight sign-in (e.g. the browser flow stalled). The generation
-  // guard makes the cancelled login's late result a no-op so it can't corrupt
-  // state. Known v1 limitation: login uses execute() (no process handle), so the
-  // orphaned CLI process and its callback server keep running until the CLI's
-  // own ~120s timeout — cancelling then immediately retrying briefly runs two
-  // flows. Follow-up: switch login to spawn()/kill() for true cancellation.
+  // Abandon an in-flight sign-in (e.g. the browser flow stalled). Kills the
+  // login process and its callback server; the generation guard makes any
+  // late result a no-op so it can't override the reset.
   const cancelSignIn = useCallback(() => {
     generation.current++;
+    void loginHandle.current?.cancel();
+    loginHandle.current = null;
     setState({ status: "signed-out" });
   }, []);
 
