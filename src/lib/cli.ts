@@ -36,23 +36,17 @@ export async function whoami(): Promise<WhoamiResult> {
   return parseJson<WhoamiResult>(stdout, "whoami");
 }
 
-export interface LoginResult {
-  logged_in: boolean;
-  // The CLI opens the browser itself, so the desktop doesn't surface web_url yet.
-  web_url?: string;
-}
-
 /**
  * Run the OAuth login flow. The CLI opens the browser and runs a local
  * callback server; this resolves when the CLI process completes (or rejects
- * on non-zero exit, e.g. the 120s callback timeout).
+ * on non-zero exit, e.g. the CLI's ~120s callback timeout). The resulting
+ * state is read back via whoami(), so the login output itself isn't returned.
  */
-export async function login(): Promise<LoginResult> {
-  const { code, stdout, stderr } = await runCli(["login", "--json"]);
+export async function login(): Promise<void> {
+  const { code, stderr } = await runCli(["login", "--json"]);
   if (code !== 0) {
     throw new Error(stderr.trim() || `Sign-in failed (exit ${code ?? "unknown"}).`);
   }
-  return parseJson<LoginResult>(stdout, "login");
 }
 
 /** Clear stored credentials. */

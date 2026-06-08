@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { login, logout, whoami } from "../lib/cli";
 
-export type AuthStatus = "checking" | "signed-out" | "signing-in" | "signed-in";
+export type AuthStatus =
+  | "checking"
+  | "signed-out"
+  | "signing-in"
+  | "signing-out"
+  | "signed-in";
 
 export interface AuthState {
   status: AuthStatus;
@@ -56,6 +61,7 @@ export function useAuth() {
   }, [refresh]);
 
   const signOut = useCallback(async () => {
+    setState((prev) => ({ ...prev, status: "signing-out", error: undefined }));
     try {
       await logout();
     } catch (err) {
@@ -68,9 +74,12 @@ export function useAuth() {
     await refresh();
   }, [refresh]);
 
-  // Abandon an in-flight sign-in (e.g. the browser flow stalled). The orphaned
-  // CLI process exits on its own callback timeout; the generation guard makes
-  // its late result a no-op.
+  // Abandon an in-flight sign-in (e.g. the browser flow stalled). The generation
+  // guard makes the cancelled login's late result a no-op so it can't corrupt
+  // state. Known v1 limitation: login uses execute() (no process handle), so the
+  // orphaned CLI process and its callback server keep running until the CLI's
+  // own ~120s timeout — cancelling then immediately retrying briefly runs two
+  // flows. Follow-up: switch login to spawn()/kill() for true cancellation.
   const cancelSignIn = useCallback(() => {
     generation.current++;
     setState({ status: "signed-out" });

@@ -12,12 +12,15 @@ function App() {
     );
   }
 
-  if (auth.status === "signed-in") {
+  if (auth.status === "signed-in" || auth.status === "signing-out") {
+    const signingOut = auth.status === "signing-out";
     return (
       <main className="container">
         <h1>IdeaSpaces</h1>
         <p>Signed in{auth.apiUrl ? ` to ${auth.apiUrl}` : ""}.</p>
-        <button onClick={auth.signOut}>Sign out</button>
+        <button onClick={auth.signOut} disabled={signingOut}>
+          {signingOut ? "Signing out…" : "Sign out"}
+        </button>
         {auth.error && <p className="error">{auth.error}</p>}
       </main>
     );
@@ -29,7 +32,7 @@ function App() {
       <h1>IdeaSpaces</h1>
       <p>Local-first knowledge, with built-in sync.</p>
       <button onClick={auth.signIn} disabled={signingIn}>
-        {signingIn ? "Waiting for browser…" : "Sign in with Google"}
+        {signingIn ? "Waiting for browser…" : "Sign in"}
       </button>
       {signingIn && (
         <p>
