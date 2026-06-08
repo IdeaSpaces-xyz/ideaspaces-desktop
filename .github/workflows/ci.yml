@@ -73,14 +73,23 @@ jobs:
         with:
           workspaces: src-tauri
 
-      # tauri-build verifies `frontendDist` (../dist) exists at compile time.
-      # We are compile-checking the Rust core, not bundling, so a placeholder
-      # satisfies that check without running the full frontend build here.
+      # tauri-build verifies `frontendDist` (../dist) and `externalBin` exist at
+      # compile time. We are compile-checking the Rust core, not bundling, so
+      # placeholders satisfy those checks without building the frontend or the
+      # real sidecar here. (A regression in the sidecar build itself is caught
+      # locally / before release, not by this lean compile gate.)
       - name: Placeholder frontend dist
         working-directory: .
         run: |
           mkdir -p dist
           echo '<!doctype html><title>ci</title>' > dist/index.html
+
+      - name: Placeholder CLI sidecar
+        run: |
+          triple=$(rustc -vV | sed -n 's/^host: //p')
+          mkdir -p binaries
+          printf '#!/bin/sh\n' > "binaries/ideaspaces-${triple}"
+          chmod +x "binaries/ideaspaces-${triple}"
 
       - name: Format check
         run: cargo fmt --all -- --check
