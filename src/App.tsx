@@ -104,6 +104,7 @@ function SignedInView({
             spaces={visibleSpaces}
             cloneIndex={cloneIndex}
             statuses={cloneStatuses.statuses}
+            failedStatuses={cloneStatuses.failed}
             busyIds={actions.busyIds}
             emptyMessage={
               spaces.spaces.length === 0

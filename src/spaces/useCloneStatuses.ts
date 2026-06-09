@@ -8,6 +8,7 @@ import { cloneStatus, type CloneRecord, type CloneStatus } from "../lib/cli";
  */
 export function useCloneStatuses(clones: CloneRecord[]) {
   const [statuses, setStatuses] = useState<Record<string, CloneStatus>>({});
+  const [failed, setFailed] = useState<Set<string>>(new Set());
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(
@@ -17,10 +18,15 @@ export function useCloneStatuses(clones: CloneRecord[]) {
         clones.map(async (c) => [c.repo_id, await cloneStatus(c.path, fetch)] as const),
       );
       const next: Record<string, CloneStatus> = {};
-      for (const r of results) {
+      const failedIds = new Set<string>();
+      results.forEach((r, i) => {
         if (r.status === "fulfilled") next[r.value[0]] = r.value[1];
-      }
-      setStatuses(next);
+        else failedIds.add(clones[i].repo_id);
+      });
+      // Merge over previous: a clone that fails this round keeps its last-known
+      // status rather than regressing to "checking…".
+      setStatuses((prev) => ({ ...prev, ...next }));
+      setFailed(failedIds);
       if (fetch) setRefreshing(false);
     },
     [clones],
@@ -30,5 +36,7 @@ export function useCloneStatuses(clones: CloneRecord[]) {
     void load(false);
   }, [load]);
 
-  return { statuses, refreshing, refresh: () => load(true) };
+  const refresh = useCallback(() => load(true), [load]);
+
+  return { statuses, failed, refreshing, refresh };
 }

@@ -10,14 +10,19 @@ function needsSync(status: CloneStatus | undefined): boolean {
   return !!status && (!!status.ahead || !!status.behind);
 }
 
-function StatusBadge({ status }: { status: CloneStatus | undefined }) {
-  if (!status) return <span className="text-xs text-is-text-tertiary">checking…</span>;
-  const parts: string[] = [];
-  if (status.behind) parts.push(`↓${status.behind}`);
-  if (status.ahead) parts.push(`↑${status.ahead}`);
-  if (status.dirty) parts.push("uncommitted");
+function StatusBadge({ status, failed }: { status: CloneStatus | undefined; failed: boolean }) {
+  if (status) {
+    const parts: string[] = [];
+    if (status.behind) parts.push(`↓${status.behind}`);
+    if (status.ahead) parts.push(`↑${status.ahead}`);
+    if (status.dirty) parts.push("uncommitted");
+    return (
+      <span className="text-xs text-is-text-tertiary">{parts.length ? parts.join(" ") : "up to date"}</span>
+    );
+  }
+  // No status yet: errored (rejected) vs still loading.
   return (
-    <span className="text-xs text-is-text-tertiary">{parts.length ? parts.join(" ") : "up to date"}</span>
+    <span className="text-xs text-is-text-tertiary">{failed ? "status unavailable" : "checking…"}</span>
   );
 }
 
@@ -25,6 +30,7 @@ export function SpacesList({
   spaces,
   cloneIndex,
   statuses,
+  failedStatuses,
   busyIds,
   emptyMessage,
   onClone,
@@ -34,6 +40,7 @@ export function SpacesList({
   spaces: Space[];
   cloneIndex: Map<string, CloneRecord>;
   statuses: Record<string, CloneStatus>;
+  failedStatuses: Set<string>;
   busyIds: Set<string>;
   emptyMessage: string;
   onClone: (space: Space) => void;
@@ -66,7 +73,7 @@ export function SpacesList({
             <div className="flex shrink-0 items-center gap-2">
               {clone ? (
                 <>
-                  <StatusBadge status={status} />
+                  <StatusBadge status={status} failed={failedStatuses.has(space.repo_id)} />
                   {needsSync(status) && (
                     <button
                       type="button"
