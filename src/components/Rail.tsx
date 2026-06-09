@@ -22,6 +22,7 @@ export function Rail({ view, onSelect }: { view: View; onSelect: (view: View) =>
               type="button"
               onClick={() => onSelect(key)}
               aria-current={active ? "page" : undefined}
+              title={label}
               className={cn(
                 "flex items-center gap-3 rounded-md py-2 pl-2.5 font-chrome text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring",
                 active
