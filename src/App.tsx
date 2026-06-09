@@ -82,7 +82,12 @@ function SignedInView({
           <SpacesList
             spaces={visibleSpaces}
             cloneIndex={cloneIndex}
-            busyId={actions.busyId}
+            busyIds={actions.busyIds}
+            emptyMessage={
+              spaces.spaces.length === 0
+                ? "No spaces yet — create one from your account to get started."
+                : "No spaces in this context."
+            }
             onClone={actions.clone}
             onCloneTo={actions.cloneTo}
             onSync={actions.sync}

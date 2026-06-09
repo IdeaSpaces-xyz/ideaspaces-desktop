@@ -26,12 +26,18 @@ export function useSpaces() {
   const reload = useCallback(async () => {
     setState((prev) => ({ ...prev, status: "loading" }));
     try {
-      const [result, clones] = await Promise.all([listSpaces(), listClones()]);
+      // Spaces are required; the clone registry is supplementary — a clones
+      // failure shouldn't hide the user's spaces (it just drops local badges).
+      const [spacesResult, clonesResult] = await Promise.allSettled([
+        listSpaces(),
+        listClones(),
+      ]);
+      if (spacesResult.status === "rejected") throw spacesResult.reason;
       setState({
         status: "loaded",
-        spaces: result.repos,
-        clones,
-        username: result.username,
+        spaces: spacesResult.value.repos,
+        clones: clonesResult.status === "fulfilled" ? clonesResult.value : [],
+        username: spacesResult.value.username,
       });
     } catch (err) {
       setState({

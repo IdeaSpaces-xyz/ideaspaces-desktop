@@ -9,27 +9,29 @@ const iconBtn =
 export function SpacesList({
   spaces,
   cloneIndex,
-  busyId,
+  busyIds,
+  emptyMessage,
   onClone,
   onCloneTo,
   onSync,
 }: {
   spaces: Space[];
   cloneIndex: Map<string, CloneRecord>;
-  busyId: string | null;
+  busyIds: Set<string>;
+  emptyMessage: string;
   onClone: (space: Space) => void;
   onCloneTo: (space: Space) => void;
   onSync: (repoId: string, path: string, slug: string) => void;
 }) {
   if (spaces.length === 0) {
-    return <p className="text-sm text-is-text-secondary">No spaces here yet.</p>;
+    return <p className="text-sm text-is-text-secondary">{emptyMessage}</p>;
   }
 
   return (
     <ul className="flex flex-col gap-2">
       {spaces.map((space) => {
         const clone = cloneIndex.get(space.repo_id);
-        const busy = busyId === space.repo_id;
+        const busy = busyIds.has(space.repo_id);
 
         return (
           <li

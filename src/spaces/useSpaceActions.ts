@@ -7,15 +7,26 @@ import { useToast } from "../toast/toast-context";
 
 /** Clone / sync actions over the CLI sidecar, with per-row busy state + toasts. */
 export function useSpaceActions(reload: () => Promise<void> | void) {
-  const [busyId, setBusyId] = useState<string | null>(null);
+  // Set, not a single id — concurrent actions on different rows must not stomp
+  // each other's busy state.
+  const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
   const toast = useToast();
+
+  const setBusy = useCallback((id: string, busy: boolean) => {
+    setBusyIds((prev) => {
+      const next = new Set(prev);
+      if (busy) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }, []);
 
   const errMessage = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
   // Clone into `<parent>/<slug>` — parent defaults to the workspace dir.
   const clone = useCallback(
     async (space: Space, parentDir?: string) => {
-      setBusyId(space.repo_id);
+      setBusy(space.repo_id, true);
       try {
         const parent = parentDir ?? (await defaultWorkspaceDir());
         const target = await join(parent, space.slug);
@@ -25,10 +36,10 @@ export function useSpaceActions(reload: () => Promise<void> | void) {
       } catch (err) {
         toast(errMessage(err), "error");
       } finally {
-        setBusyId(null);
+        setBusy(space.repo_id, false);
       }
     },
-    [reload, toast],
+    [reload, setBusy, toast],
   );
 
   // Pick a parent folder, then clone there.
@@ -46,7 +57,7 @@ export function useSpaceActions(reload: () => Promise<void> | void) {
 
   const sync = useCallback(
     async (repoId: string, path: string, slug: string) => {
-      setBusyId(repoId);
+      setBusy(repoId, true);
       try {
         const result = await syncClone(path);
         await reload();
@@ -58,11 +69,11 @@ export function useSpaceActions(reload: () => Promise<void> | void) {
       } catch (err) {
         toast(errMessage(err), "error");
       } finally {
-        setBusyId(null);
+        setBusy(repoId, false);
       }
     },
-    [reload, toast],
+    [reload, setBusy, toast],
   );
 
-  return { busyId, clone, cloneTo, sync };
+  return { busyIds, clone, cloneTo, sync };
 }
