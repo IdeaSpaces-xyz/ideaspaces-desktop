@@ -19,8 +19,8 @@ interface SidecarResult {
   stderr: string;
 }
 
-async function runCli(args: string[]): Promise<SidecarResult> {
-  const out = await Command.sidecar("binaries/ideaspaces", args).execute();
+async function runCli(args: string[], cwd?: string): Promise<SidecarResult> {
+  const out = await Command.sidecar("binaries/ideaspaces", args, cwd ? { cwd } : undefined).execute();
   return { code: out.code, stdout: out.stdout, stderr: out.stderr };
 }
 
@@ -63,6 +63,48 @@ export async function listSpaces(): Promise<SpacesResult> {
     throw new Error(stderr.trim() || `Could not load spaces (exit ${code ?? "unknown"}).`);
   }
   return parseJson<SpacesResult>(stdout, "repos");
+}
+
+export interface CloneRecord {
+  path: string;
+  repo_id: string;
+  slug: string;
+  namespace: string;
+}
+
+/** Local clone registry — which folders are bound to which spaces. */
+export async function listClones(): Promise<CloneRecord[]> {
+  const { code, stdout, stderr } = await runCli(["clones", "--json"]);
+  if (code !== 0) {
+    throw new Error(stderr.trim() || `Could not load clones (exit ${code ?? "unknown"}).`);
+  }
+  return parseJson<{ clones: CloneRecord[] }>(stdout, "clones").clones;
+}
+
+/** Clone a space into `dir` and bind it (drives `ideaspaces clone`). */
+export async function cloneSpace(repoId: string, dir: string): Promise<CloneRecord> {
+  const { code, stdout, stderr } = await runCli(["clone", repoId, dir, "--json"]);
+  if (code !== 0) {
+    throw new Error(stderr.trim() || `Clone failed (exit ${code ?? "unknown"}).`);
+  }
+  return parseJson<CloneRecord>(stdout, "clone");
+}
+
+export interface SyncResult {
+  upstream: string | null;
+  /** Commits pushed to the remote. */
+  pushed: number;
+  /** Commits integrated from the remote. */
+  integrated: number;
+}
+
+/** Sync a local clone — fetch/rebase/push, run in the clone's folder. */
+export async function syncClone(dir: string): Promise<SyncResult> {
+  const { code, stdout, stderr } = await runCli(["sync", "--json"], dir);
+  if (code !== 0) {
+    throw new Error(stderr.trim() || `Sync failed (exit ${code ?? "unknown"}).`);
+  }
+  return parseJson<SyncResult>(stdout, "sync");
 }
 
 export interface LoginHandle {

@@ -6,6 +6,10 @@ pub fn run() {
         // login/clone/sync. It is invoked from the frontend via the shell
         // plugin, scoped in capabilities/default.json.
         .plugin(tauri_plugin_shell::init())
+        // Native folder picker for choosing where to clone a space.
+        .plugin(tauri_plugin_dialog::init())
+        // Durable settings (the workspace dir preference).
+        .plugin(tauri_plugin_store::Builder::default().build())
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
