@@ -6,13 +6,19 @@ type SpacesStatus = "loading" | "loaded" | "error";
 export interface SpacesState {
   status: SpacesStatus;
   spaces: Space[];
-  username?: string | null;
+  // null = no username (or not yet loaded); never undefined, so callers
+  // distinguish "no username" without checking two falsy values.
+  username: string | null;
   error?: string;
 }
 
 /** Loads the signed-in user's spaces via the CLI sidecar (`ideaspaces repos`). */
 export function useSpaces() {
-  const [state, setState] = useState<SpacesState>({ status: "loading", spaces: [] });
+  const [state, setState] = useState<SpacesState>({
+    status: "loading",
+    spaces: [],
+    username: null,
+  });
 
   const reload = useCallback(async () => {
     setState((prev) => ({ ...prev, status: "loading" }));
@@ -23,6 +29,7 @@ export function useSpaces() {
       setState({
         status: "error",
         spaces: [],
+        username: null,
         error: err instanceof Error ? err.message : String(err),
       });
     }

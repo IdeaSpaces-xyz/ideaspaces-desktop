@@ -47,8 +47,6 @@ export interface Space {
   repo_id: string;
   slug: string;
   hostname: string | null;
-  /** Org hostname or username — for clone-URL construction later. */
-  namespace: string | null;
   role: string;
   member_count: number;
 }
