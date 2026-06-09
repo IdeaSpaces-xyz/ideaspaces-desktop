@@ -1,7 +1,9 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { RefreshCw } from "lucide-react";
+import { ConversationsView } from "./components/ConversationsView";
 import { Header } from "./components/Header";
 import { LogoSymbol } from "./components/LogoSymbol";
+import { Rail, type View } from "./components/Rail";
 import { SpacesList } from "./components/SpacesList";
 import { ThemeToggle } from "./components/ThemeToggle";
 import { WorkspaceBar } from "./components/WorkspaceBar";
@@ -37,6 +39,7 @@ function SignedInView({
   const spaces = useSpaces();
   const actions = useSpaceActions(spaces.reload);
   const [activeRef, setActiveRef] = useState<string | undefined>(undefined);
+  const [view, setView] = useState<View>("repos");
 
   const contexts = useMemo(
     () => deriveSpaceContexts(spaces.username, spaces.spaces),
@@ -64,60 +67,69 @@ function SignedInView({
         onSignOut={auth.signOut}
         signingOut={auth.status === "signing-out"}
       />
-      <main className="mx-auto w-full max-w-2xl flex-1 px-6 py-8">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-medium text-is-text-secondary">Your spaces</h2>
-          {spaces.clones.length > 0 && (
-            <button
-              type="button"
-              onClick={() => void cloneStatuses.refresh()}
-              disabled={cloneStatuses.refreshing}
-              className="inline-flex items-center gap-1.5 text-xs text-is-text-tertiary transition hover:text-is-text disabled:opacity-50"
-            >
-              <RefreshCw
-                size={13}
-                strokeWidth={1.333}
-                className={cloneStatuses.refreshing ? "animate-spin" : undefined}
-                aria-hidden="true"
-              />
-              {cloneStatuses.refreshing ? "Refreshing…" : "Refresh status"}
-            </button>
+      <div className="flex min-h-0 flex-1">
+        <Rail view={view} onSelect={setView} />
+        <main className="flex-1 overflow-y-auto">
+          {view === "repos" ? (
+            <div className="mx-auto w-full max-w-2xl px-6 py-8">
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="text-sm font-medium text-is-text-secondary">Repos</h2>
+                {spaces.clones.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => void cloneStatuses.refresh()}
+                    disabled={cloneStatuses.refreshing}
+                    className="inline-flex items-center gap-1.5 text-xs text-is-text-tertiary transition hover:text-is-text disabled:opacity-50"
+                  >
+                    <RefreshCw
+                      size={13}
+                      strokeWidth={1.333}
+                      className={cloneStatuses.refreshing ? "animate-spin" : undefined}
+                      aria-hidden="true"
+                    />
+                    {cloneStatuses.refreshing ? "Refreshing…" : "Refresh status"}
+                  </button>
+                )}
+              </div>
+              <WorkspaceBar />
+              {spaces.status === "loading" && (
+                <p className="text-sm text-is-text-tertiary">Loading repos…</p>
+              )}
+              {spaces.status === "error" && (
+                <p className="text-sm text-is-danger-text">
+                  {spaces.error}{" "}
+                  <button
+                    className="underline underline-offset-2 hover:text-is-text"
+                    onClick={() => void spaces.reload()}
+                  >
+                    Retry
+                  </button>
+                </p>
+              )}
+              {spaces.status === "loaded" && (
+                <SpacesList
+                  spaces={visibleSpaces}
+                  cloneIndex={cloneIndex}
+                  statuses={cloneStatuses.statuses}
+                  failedStatuses={cloneStatuses.failed}
+                  busyIds={actions.busyIds}
+                  emptyMessage={
+                    spaces.spaces.length === 0
+                      ? "No repos yet — create one from your account to get started."
+                      : "No repos in this context."
+                  }
+                  onClone={actions.clone}
+                  onCloneTo={actions.cloneTo}
+                  onSync={actions.sync}
+                />
+              )}
+              {auth.error && <p className="mt-3 text-sm text-is-danger-text">{auth.error}</p>}
+            </div>
+          ) : (
+            <ConversationsView />
           )}
-        </div>
-        <WorkspaceBar />
-        {spaces.status === "loading" && (
-          <p className="text-sm text-is-text-tertiary">Loading spaces…</p>
-        )}
-        {spaces.status === "error" && (
-          <p className="text-sm text-is-danger-text">
-            {spaces.error}{" "}
-            <button
-              className="underline underline-offset-2 hover:text-is-text"
-              onClick={() => void spaces.reload()}
-            >
-              Retry
-            </button>
-          </p>
-        )}
-        {spaces.status === "loaded" && (
-          <SpacesList
-            spaces={visibleSpaces}
-            cloneIndex={cloneIndex}
-            statuses={cloneStatuses.statuses}
-            failedStatuses={cloneStatuses.failed}
-            busyIds={actions.busyIds}
-            emptyMessage={
-              spaces.spaces.length === 0
-                ? "No spaces yet — create one from your account to get started."
-                : "No spaces in this context."
-            }
-            onClone={actions.clone}
-            onCloneTo={actions.cloneTo}
-            onSync={actions.sync}
-          />
-        )}
-        {auth.error && <p className="mt-3 text-sm text-is-danger-text">{auth.error}</p>}
-      </main>
+        </main>
+      </div>
     </div>
   );
 }
