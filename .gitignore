@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# Generated icon source (rebuilt by `npm run make-icon`)
+icon-source.png
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
