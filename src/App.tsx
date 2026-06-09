@@ -1,4 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
+import { RefreshCw } from "lucide-react";
 import { Header } from "./components/Header";
 import { LogoSymbol } from "./components/LogoSymbol";
 import { SpacesList } from "./components/SpacesList";
@@ -7,6 +8,7 @@ import { WorkspaceBar } from "./components/WorkspaceBar";
 import { useAuth } from "./auth/useAuth";
 import { useSpaces } from "./spaces/useSpaces";
 import { useSpaceActions } from "./spaces/useSpaceActions";
+import { useCloneStatuses } from "./spaces/useCloneStatuses";
 import { useTheme, type ThemeMode } from "./theme/useTheme";
 import { deriveSpaceContexts, resolveContext, spacesForContext } from "./lib/space-context";
 
@@ -48,6 +50,7 @@ function SignedInView({
     () => new Map(spaces.clones.map((c) => [c.repo_id, c])),
     [spaces.clones],
   );
+  const cloneStatuses = useCloneStatuses(spaces.clones);
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -62,7 +65,25 @@ function SignedInView({
         signingOut={auth.status === "signing-out"}
       />
       <main className="mx-auto w-full max-w-2xl flex-1 px-6 py-8">
-        <h2 className="mb-3 text-sm font-medium text-is-text-secondary">Your spaces</h2>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-sm font-medium text-is-text-secondary">Your spaces</h2>
+          {spaces.clones.length > 0 && (
+            <button
+              type="button"
+              onClick={() => void cloneStatuses.refresh()}
+              disabled={cloneStatuses.refreshing}
+              className="inline-flex items-center gap-1.5 text-xs text-is-text-tertiary transition hover:text-is-text disabled:opacity-50"
+            >
+              <RefreshCw
+                size={13}
+                strokeWidth={1.333}
+                className={cloneStatuses.refreshing ? "animate-spin" : undefined}
+                aria-hidden="true"
+              />
+              {cloneStatuses.refreshing ? "Refreshing…" : "Refresh status"}
+            </button>
+          )}
+        </div>
         <WorkspaceBar />
         {spaces.status === "loading" && (
           <p className="text-sm text-is-text-tertiary">Loading spaces…</p>
@@ -82,6 +103,8 @@ function SignedInView({
           <SpacesList
             spaces={visibleSpaces}
             cloneIndex={cloneIndex}
+            statuses={cloneStatuses.statuses}
+            failedStatuses={cloneStatuses.failed}
             busyIds={actions.busyIds}
             emptyMessage={
               spaces.spaces.length === 0

@@ -1,14 +1,36 @@
 import { Download, FolderInput, RefreshCw } from "lucide-react";
-import type { CloneRecord, Space } from "../lib/cli";
+import type { CloneRecord, CloneStatus, Space } from "../lib/cli";
 
 const actionBtn =
   "inline-flex items-center gap-1.5 rounded-md border border-is-border bg-is-surface px-2.5 py-1.5 text-xs text-is-text-secondary transition hover:border-is-accent hover:text-is-text disabled:cursor-not-allowed disabled:opacity-50";
 const iconBtn =
   "inline-flex items-center justify-center rounded-md border border-is-border bg-is-surface p-1.5 text-is-text-secondary transition hover:border-is-accent hover:text-is-text disabled:cursor-not-allowed disabled:opacity-50";
 
+function needsSync(status: CloneStatus | undefined): boolean {
+  return !!status && (!!status.ahead || !!status.behind);
+}
+
+function StatusBadge({ status, failed }: { status: CloneStatus | undefined; failed: boolean }) {
+  if (status) {
+    const parts: string[] = [];
+    if (status.behind) parts.push(`↓${status.behind}`);
+    if (status.ahead) parts.push(`↑${status.ahead}`);
+    if (status.dirty) parts.push("uncommitted");
+    return (
+      <span className="text-xs text-is-text-tertiary">{parts.length ? parts.join(" ") : "up to date"}</span>
+    );
+  }
+  // No status yet: errored (rejected) vs still loading.
+  return (
+    <span className="text-xs text-is-text-tertiary">{failed ? "status unavailable" : "checking…"}</span>
+  );
+}
+
 export function SpacesList({
   spaces,
   cloneIndex,
+  statuses,
+  failedStatuses,
   busyIds,
   emptyMessage,
   onClone,
@@ -17,6 +39,8 @@ export function SpacesList({
 }: {
   spaces: Space[];
   cloneIndex: Map<string, CloneRecord>;
+  statuses: Record<string, CloneStatus>;
+  failedStatuses: Set<string>;
   busyIds: Set<string>;
   emptyMessage: string;
   onClone: (space: Space) => void;
@@ -31,6 +55,7 @@ export function SpacesList({
     <ul className="flex flex-col gap-2">
       {spaces.map((space) => {
         const clone = cloneIndex.get(space.repo_id);
+        const status = statuses[space.repo_id];
         const busy = busyIds.has(space.repo_id);
 
         return (
@@ -47,20 +72,25 @@ export function SpacesList({
 
             <div className="flex shrink-0 items-center gap-2">
               {clone ? (
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => onSync(space.repo_id, clone.path, space.slug)}
-                  className={actionBtn}
-                >
-                  <RefreshCw
-                    size={14}
-                    strokeWidth={1.333}
-                    className={busy ? "animate-spin" : undefined}
-                    aria-hidden="true"
-                  />
-                  {busy ? "Syncing…" : "Sync"}
-                </button>
+                <>
+                  <StatusBadge status={status} failed={failedStatuses.has(space.repo_id)} />
+                  {needsSync(status) && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => onSync(space.repo_id, clone.path, space.slug)}
+                      className={actionBtn}
+                    >
+                      <RefreshCw
+                        size={14}
+                        strokeWidth={1.333}
+                        className={busy ? "animate-spin" : undefined}
+                        aria-hidden="true"
+                      />
+                      {busy ? "Syncing…" : "Sync"}
+                    </button>
+                  )}
+                </>
               ) : (
                 <>
                   <button
