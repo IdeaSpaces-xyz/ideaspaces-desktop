@@ -7,7 +7,9 @@ export function WorkspaceBar() {
   const [dir, setDir] = useState("");
 
   useEffect(() => {
-    void defaultWorkspaceDir().then(setDir);
+    defaultWorkspaceDir()
+      .then(setDir)
+      .catch(() => setDir("~/IdeaSpaces"));
   }, []);
 
   async function change() {
@@ -17,7 +19,7 @@ export function WorkspaceBar() {
       title: "Choose where clones go",
     });
     if (typeof picked === "string") {
-      setWorkspaceDir(picked);
+      await setWorkspaceDir(picked);
       setDir(picked);
     }
   }

@@ -27,6 +27,7 @@
       ]
     },
     "shell:allow-kill",
-    "dialog:allow-open"
+    "dialog:allow-open",
+    "store:default"
   ]
 }

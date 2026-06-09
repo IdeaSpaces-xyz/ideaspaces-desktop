@@ -33,7 +33,6 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         {items.map((item) => (
           <Toast.Root
             key={item.id}
-            duration={DURATION}
             onOpenChange={(open) => {
               if (!open) remove(item.id);
             }}

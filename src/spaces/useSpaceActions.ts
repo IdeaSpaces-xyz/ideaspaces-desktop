@@ -26,6 +26,13 @@ export function useSpaceActions(reload: () => Promise<void> | void) {
   // Clone into `<parent>/<slug>` — parent defaults to the workspace dir.
   const clone = useCallback(
     async (space: Space, parentDir?: string) => {
+      // The slug is the folder name appended to the parent — guard against a
+      // path-traversal slug escaping the chosen directory (defense in depth;
+      // the API already validates slugs).
+      if (/[/\\]|\.\./.test(space.slug)) {
+        toast(`Refusing to clone "${space.slug}" — unexpected characters in the name.`, "error");
+        return;
+      }
       setBusy(space.repo_id, true);
       try {
         const parent = parentDir ?? (await defaultWorkspaceDir());
