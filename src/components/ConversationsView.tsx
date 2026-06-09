@@ -12,7 +12,7 @@ export function ConversationsView({
   repos: Space[];
   reposLoading: boolean;
 }) {
-  const { status, rows, error, reload } = useConversations(repos);
+  const { status, rows, error, truncated, reload } = useConversations(repos);
   // Repos still loading → repos is [] and conversations resolve to a false
   // "empty"; show loading until the repo set is known.
   const effectiveStatus = reposLoading ? "loading" : status;
@@ -72,6 +72,11 @@ export function ConversationsView({
                 </li>
               ))}
             </ul>
+          )}
+          {rows.length > 0 && truncated && (
+            <p className="mt-3 text-center text-xs text-is-text-tertiary">
+              Showing recent conversations.
+            </p>
           )}
         </>
       )}
