@@ -90,6 +90,27 @@ export async function cloneSpace(repoId: string, dir: string): Promise<CloneReco
   return parseJson<CloneRecord>(stdout, "clone");
 }
 
+export interface CloneStatus {
+  branch: string | null;
+  /** null when no upstream is configured. */
+  ahead: number | null;
+  behind: number | null;
+  dirty: boolean;
+}
+
+/**
+ * Git status of a local clone (drives `ideaspaces status`). `fetch: true` adds
+ * `--fetch` to refresh ahead/behind against the real remote (network).
+ */
+export async function cloneStatus(dir: string, fetch = false): Promise<CloneStatus> {
+  const args = fetch ? ["status", "--fetch", "--json"] : ["status", "--json"];
+  const { code, stdout, stderr } = await runCli(args, dir);
+  if (code !== 0) {
+    throw new Error(stderr.trim() || `Status failed (exit ${code ?? "unknown"}).`);
+  }
+  return parseJson<CloneStatus>(stdout, "status");
+}
+
 export interface SyncResult {
   upstream: string | null;
   /** Commits pushed to the remote. */
