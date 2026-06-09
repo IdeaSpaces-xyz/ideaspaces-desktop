@@ -1,8 +1,14 @@
-import type { ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
+import { Header } from "./components/Header";
 import { LogoSymbol } from "./components/LogoSymbol";
+import { SpacesList } from "./components/SpacesList";
 import { ThemeToggle } from "./components/ThemeToggle";
 import { useAuth } from "./auth/useAuth";
-import { useTheme } from "./theme/useTheme";
+import { useSpaces } from "./spaces/useSpaces";
+import { useTheme, type ThemeMode } from "./theme/useTheme";
+import { deriveSpaceContexts, resolveContext, spacesForContext } from "./lib/space-context";
+
+type Auth = ReturnType<typeof useAuth>;
 
 function Screen({ children }: { children: ReactNode }) {
   return (
@@ -14,12 +20,64 @@ function Screen({ children }: { children: ReactNode }) {
 
 const primaryButton =
   "rounded-lg bg-is-text px-5 py-2.5 text-sm font-medium text-is-bg transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50";
-const secondaryButton =
-  "rounded-lg border border-is-border bg-is-surface px-5 py-2.5 text-sm font-medium text-is-text transition hover:border-is-accent disabled:cursor-not-allowed disabled:opacity-50";
 
-function AuthView() {
-  const auth = useAuth();
+function SignedInView({
+  auth,
+  mode,
+  setMode,
+}: {
+  auth: Auth;
+  mode: ThemeMode;
+  setMode: (mode: ThemeMode) => void;
+}) {
+  const spaces = useSpaces();
+  const [activeRef, setActiveRef] = useState<string | undefined>(undefined);
 
+  const contexts = useMemo(
+    () => deriveSpaceContexts(spaces.username, spaces.spaces),
+    [spaces.username, spaces.spaces],
+  );
+  const activeContext = resolveContext(contexts, activeRef);
+  const visibleSpaces = activeContext
+    ? spacesForContext(spaces.spaces, activeContext)
+    : spaces.spaces;
+
+  return (
+    <div className="flex min-h-dvh flex-col">
+      <Header
+        contexts={contexts}
+        activeContext={activeContext}
+        onSelectContext={setActiveRef}
+        username={spaces.username ?? undefined}
+        mode={mode}
+        setMode={setMode}
+        onSignOut={auth.signOut}
+        signingOut={auth.status === "signing-out"}
+      />
+      <main className="mx-auto w-full max-w-2xl flex-1 px-6 py-8">
+        <h2 className="mb-3 text-sm font-medium text-is-text-secondary">Your spaces</h2>
+        {spaces.status === "loading" && (
+          <p className="text-sm text-is-text-tertiary">Loading spaces…</p>
+        )}
+        {spaces.status === "error" && (
+          <p className="text-sm text-is-danger-text">
+            {spaces.error}{" "}
+            <button
+              className="underline underline-offset-2 hover:text-is-text"
+              onClick={() => void spaces.reload()}
+            >
+              Retry
+            </button>
+          </p>
+        )}
+        {spaces.status === "loaded" && <SpacesList spaces={visibleSpaces} />}
+        {auth.error && <p className="mt-3 text-sm text-is-danger-text">{auth.error}</p>}
+      </main>
+    </div>
+  );
+}
+
+function CenteredAuth({ auth }: { auth: Auth }) {
   if (auth.status === "checking") {
     return (
       <Screen>
@@ -29,29 +87,10 @@ function AuthView() {
     );
   }
 
-  if (auth.status === "signed-in" || auth.status === "signing-out") {
-    const signingOut = auth.status === "signing-out";
-    return (
-      <Screen>
-        <LogoSymbol className="h-12 w-12 text-is-text" />
-        <div className="space-y-1">
-          <h1 className="text-2xl font-medium text-is-text">IdeaSpaces</h1>
-          <p className="text-sm text-is-text-secondary">
-            Signed in{auth.apiUrl ? ` to ${auth.apiUrl}` : ""}.
-          </p>
-        </div>
-        <button className={secondaryButton} onClick={auth.signOut} disabled={signingOut}>
-          {signingOut ? "Signing out…" : "Sign out"}
-        </button>
-        {auth.error && <p className="text-sm text-is-danger-text">{auth.error}</p>}
-      </Screen>
-    );
-  }
-
   const signingIn = auth.status === "signing-in";
   return (
     <Screen>
-      <LogoSymbol className="h-12 w-12 text-is-accent" />
+      <LogoSymbol className="h-12 w-12 text-is-text" />
       <div className="space-y-1">
         <h1 className="text-2xl font-medium text-is-text">IdeaSpaces</h1>
         <p className="max-w-xs text-sm text-is-text-secondary">
@@ -78,14 +117,19 @@ function AuthView() {
 }
 
 function App() {
+  const auth = useAuth();
   const { mode, setMode } = useTheme();
+
+  if (auth.status === "signed-in" || auth.status === "signing-out") {
+    return <SignedInView auth={auth} mode={mode} setMode={setMode} />;
+  }
 
   return (
     <>
       <div className="fixed right-4 top-4 z-10">
         <ThemeToggle mode={mode} setMode={setMode} />
       </div>
-      <AuthView />
+      <CenteredAuth auth={auth} />
     </>
   );
 }
