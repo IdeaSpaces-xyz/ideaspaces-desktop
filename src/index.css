@@ -1,0 +1,113 @@
+@import 'tailwindcss';
+
+/*
+ * Design tokens — IdeaSpaces desktop.
+ *
+ * Mirrors the canonical system in `projects/IdeaSpaces Design System` and
+ * `is_web` (semantic `--is-*` names; components use `bg-is-bg`, `text-is-text`).
+ * Trimmed to app-relevant tokens (no Three.js canvas/network tokens yet).
+ *
+ * Desktop follows the OS theme by default (prefers-color-scheme); `.light` /
+ * `.dark` on <html> can force a theme later. Fonts are bundled locally
+ * (@fontsource) rather than fetched from a CDN — offline-first and CSP-clean.
+ */
+
+:root {
+  --is-bg: #ffffff;
+  --is-surface: #ffffff;
+  --is-surface-alt: #f6f7f9;
+  --is-text: #12141a;
+  --is-text-secondary: #4b5262;
+  --is-text-tertiary: #7b8190;
+  --is-border: #e5e8ef;
+  --is-accent: #4a7898;
+  --is-accent-text: #385b75;
+  --is-focus-ring: #4a7898;
+  --is-danger: #dc2626;
+  --is-danger-text: #dc2626;
+  --is-overlay: rgba(0, 0, 0, 0.4);
+
+  /* Brand dusk gradient — sparse, signature accent surface. */
+  --grad-dusk: linear-gradient(
+    to bottom,
+    #02101c 0%,
+    #203955 25%,
+    #918a8a 50%,
+    #deb19a 84%,
+    #b59f9c 100%
+  );
+
+  color-scheme: light dark;
+}
+
+.dark {
+  --is-bg: #050505;
+  --is-surface: #1f1f1f;
+  --is-surface-alt: #2e2e2e;
+  --is-text: #f4f4f4;
+  --is-text-secondary: #d4d4d4;
+  --is-text-tertiary: #a3a3a3;
+  --is-border: #4a4a4a;
+  --is-accent: #7ba8cc;
+  --is-accent-text: #a0c3de;
+  --is-focus-ring: #7ba8cc;
+  --is-danger: #ef4444;
+  --is-danger-text: #f87171;
+  --is-overlay: rgba(0, 0, 0, 0.6);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    --is-bg: #050505;
+    --is-surface: #1f1f1f;
+    --is-surface-alt: #2e2e2e;
+    --is-text: #f4f4f4;
+    --is-text-secondary: #d4d4d4;
+    --is-text-tertiary: #a3a3a3;
+    --is-border: #4a4a4a;
+    --is-accent: #7ba8cc;
+    --is-accent-text: #a0c3de;
+    --is-focus-ring: #7ba8cc;
+    --is-danger: #ef4444;
+    --is-danger-text: #f87171;
+    --is-overlay: rgba(0, 0, 0, 0.6);
+  }
+}
+
+@theme {
+  --color-is-bg: var(--is-bg);
+  --color-is-surface: var(--is-surface);
+  --color-is-surface-alt: var(--is-surface-alt);
+  --color-is-text: var(--is-text);
+  --color-is-text-secondary: var(--is-text-secondary);
+  --color-is-text-tertiary: var(--is-text-tertiary);
+  --color-is-border: var(--is-border);
+  --color-is-accent: var(--is-accent);
+  --color-is-accent-text: var(--is-accent-text);
+  --color-is-focus-ring: var(--is-focus-ring);
+  --color-is-danger: var(--is-danger);
+  --color-is-danger-text: var(--is-danger-text);
+  --color-is-overlay: var(--is-overlay);
+
+  /* Type system: Inter (UI body), Fragment Mono (chrome/labels/wordmark),
+     Sorts Mill Goudy (prose — loaded when a reading surface ships). */
+  --font-sans: 'Inter Variable', 'Inter', system-ui, -apple-system, sans-serif;
+  --font-chrome: 'Fragment Mono', ui-monospace, Menlo, monospace;
+  --font-prose: 'Sorts Mill Goudy', Georgia, 'Times New Roman', serif;
+}
+
+/* --- Base --- */
+
+html {
+  background-color: var(--is-bg);
+}
+
+body {
+  min-height: 100dvh;
+  margin: 0;
+  background-color: var(--is-bg);
+  color: var(--is-text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
