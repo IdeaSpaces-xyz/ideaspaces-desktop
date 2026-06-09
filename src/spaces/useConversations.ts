@@ -26,12 +26,22 @@ export function useConversations(repos: Space[]) {
         repos.map(async (repo) => ({ repo, res: await listConversations(repo.repo_id) })),
       );
       const next: ConversationRow[] = [];
+      const rejected: string[] = [];
       for (const r of results) {
         if (r.status === "fulfilled") {
           for (const c of r.value.res.conversations) {
             next.push({ ...c, repoId: r.value.repo.repo_id, repoSlug: r.value.repo.slug });
           }
+        } else {
+          rejected.push(r.reason instanceof Error ? r.reason.message : String(r.reason));
         }
+      }
+      // allSettled never rejects, so a total failure would otherwise look like
+      // an empty context. If every repo failed, surface an error instead.
+      if (rejected.length > 0 && rejected.length === repos.length) {
+        setError(rejected[0]);
+        setStatus("error");
+        return;
       }
       next.sort((a, b) => (a.updated_at < b.updated_at ? 1 : -1));
       setRows(next);
