@@ -127,7 +127,7 @@ function SignedInView({
               {auth.error && <p className="mt-3 text-sm text-is-danger-text">{auth.error}</p>}
             </div>
           ) : (
-            <ConversationsView repos={visibleSpaces} />
+            <ConversationsView repos={visibleSpaces} reposLoading={spaces.status !== "loaded"} />
           )}
         </main>
       </div>

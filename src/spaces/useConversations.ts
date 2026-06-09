@@ -45,6 +45,10 @@ export function useConversations(repos: Space[]) {
       }
       next.sort((a, b) => (a.updated_at < b.updated_at ? 1 : -1));
       setRows(next);
+      // Partial failure: show what loaded, but warn the list is incomplete.
+      if (rejected.length > 0) {
+        setError(`${rejected.length} repo${rejected.length === 1 ? "" : "s"} couldn't be loaded.`);
+      }
       setStatus("loaded");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
