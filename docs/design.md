@@ -21,9 +21,23 @@ so components don't care which theme is active.
 
 ## Theme
 
-Desktop follows the OS theme by default (`prefers-color-scheme`). `.light` /
-`.dark` on `<html>` can force a theme later (a toggle isn't built yet). The CSP
-is set; the webview is first-party.
+Light / dark / system, via `useTheme` (`src/theme/useTheme.ts`) and the
+`ThemeToggle` control (`src/components/ThemeToggle.tsx`). `system` (the default)
+follows the OS through `prefers-color-scheme`; `light` / `dark` add a `.light` /
+`.dark` class on `<html>` to force a theme. The choice persists in localStorage.
+
+Known limitation: a brief flash on startup when a *forced* theme differs from the
+OS — the strict CSP rules out an inline pre-paint script (see below). System mode
+has no flash.
+
+## CSP
+
+`tauri.conf.json` sets a strict policy: `default-src 'self'`, `script-src 'self'`.
+Fonts are bundled locally (`@fontsource`), so `font-src 'self'` suffices — no CDN.
+`style-src` keeps `'unsafe-inline'`: Tailwind v4 emits a static stylesheet (which
+would not need it), but React inline `style=` attributes and webview/HMR-injected
+`<style>` tags do. It's a contained relaxation on a first-party local webview;
+revisit if a future audit shows no runtime inline styles ship.
 
 ## Type system
 

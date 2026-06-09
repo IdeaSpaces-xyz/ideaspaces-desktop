@@ -10,8 +10,11 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const logoPath = join(root, "..", "IdeaSpaces Design System", "assets", "logo-symbol.svg");
+const here = dirname(fileURLToPath(import.meta.url));
+const root = join(here, "..");
+// Vendored copy of the canonical mark (projects/IdeaSpaces Design System/assets)
+// so the icon is reproducible without that sibling checked out.
+const logoPath = join(here, "logo-symbol.svg");
 
 const svg = readFileSync(logoPath, "utf8");
 const d = svg.match(/\sd="([^"]+)"/)?.[1];
