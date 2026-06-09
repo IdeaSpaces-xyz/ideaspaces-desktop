@@ -128,6 +128,31 @@ export async function syncClone(dir: string): Promise<SyncResult> {
   return parseJson<SyncResult>(stdout, "sync");
 }
 
+export interface Conversation {
+  conversation_id: string;
+  name: string;
+  summary: string;
+  message_count: number;
+  status: string;
+  updated_at: string;
+}
+
+export interface ConversationsResult {
+  repo_id: string;
+  conversations: Conversation[];
+  total: number;
+  has_more: boolean;
+}
+
+/** List a repo's conversations (drives `ideaspaces conversations`). */
+export async function listConversations(repoId: string): Promise<ConversationsResult> {
+  const { code, stdout, stderr } = await runCli(["conversations", repoId, "--json"]);
+  if (code !== 0) {
+    throw new Error(stderr.trim() || `Could not load conversations (exit ${code ?? "unknown"}).`);
+  }
+  return parseJson<ConversationsResult>(stdout, "conversations");
+}
+
 export interface LoginHandle {
   /** Resolves when login completes or is cancelled; rejects on failure. */
   done: Promise<void>;

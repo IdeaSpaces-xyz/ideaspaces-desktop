@@ -46,9 +46,10 @@ function SignedInView({
     [spaces.username, spaces.spaces],
   );
   const activeContext = resolveContext(contexts, activeRef);
-  const visibleSpaces = activeContext
-    ? spacesForContext(spaces.spaces, activeContext)
-    : spaces.spaces;
+  const visibleSpaces = useMemo(
+    () => (activeContext ? spacesForContext(spaces.spaces, activeContext) : spaces.spaces),
+    [activeContext, spaces.spaces],
+  );
   const cloneIndex = useMemo(
     () => new Map(spaces.clones.map((c) => [c.repo_id, c])),
     [spaces.clones],
@@ -126,7 +127,7 @@ function SignedInView({
               {auth.error && <p className="mt-3 text-sm text-is-danger-text">{auth.error}</p>}
             </div>
           ) : (
-            <ConversationsView />
+            <ConversationsView repos={visibleSpaces} reposLoading={spaces.status !== "loaded"} />
           )}
         </main>
       </div>
