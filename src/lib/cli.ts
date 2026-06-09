@@ -43,6 +43,30 @@ export async function whoami(): Promise<WhoamiResult> {
   return parseJson<WhoamiResult>(stdout, "whoami");
 }
 
+export interface Space {
+  repo_id: string;
+  slug: string;
+  hostname: string | null;
+  /** Org hostname or username — for clone-URL construction later. */
+  namespace: string | null;
+  role: string;
+  member_count: number;
+}
+
+export interface SpacesResult {
+  username: string | null;
+  repos: Space[];
+}
+
+/** List the signed-in user's spaces (drives `ideaspaces repos`). */
+export async function listSpaces(): Promise<SpacesResult> {
+  const { code, stdout, stderr } = await runCli(["repos", "--json"]);
+  if (code !== 0) {
+    throw new Error(stderr.trim() || `Could not load spaces (exit ${code ?? "unknown"}).`);
+  }
+  return parseJson<SpacesResult>(stdout, "repos");
+}
+
 export interface LoginHandle {
   /** Resolves when login completes or is cancelled; rejects on failure. */
   done: Promise<void>;
