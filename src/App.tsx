@@ -3,8 +3,10 @@ import { Header } from "./components/Header";
 import { LogoSymbol } from "./components/LogoSymbol";
 import { SpacesList } from "./components/SpacesList";
 import { ThemeToggle } from "./components/ThemeToggle";
+import { WorkspaceBar } from "./components/WorkspaceBar";
 import { useAuth } from "./auth/useAuth";
 import { useSpaces } from "./spaces/useSpaces";
+import { useSpaceActions } from "./spaces/useSpaceActions";
 import { useTheme, type ThemeMode } from "./theme/useTheme";
 import { deriveSpaceContexts, resolveContext, spacesForContext } from "./lib/space-context";
 
@@ -31,6 +33,7 @@ function SignedInView({
   setMode: (mode: ThemeMode) => void;
 }) {
   const spaces = useSpaces();
+  const actions = useSpaceActions(spaces.reload);
   const [activeRef, setActiveRef] = useState<string | undefined>(undefined);
 
   const contexts = useMemo(
@@ -41,6 +44,10 @@ function SignedInView({
   const visibleSpaces = activeContext
     ? spacesForContext(spaces.spaces, activeContext)
     : spaces.spaces;
+  const cloneIndex = useMemo(
+    () => new Map(spaces.clones.map((c) => [c.repo_id, c])),
+    [spaces.clones],
+  );
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -56,6 +63,7 @@ function SignedInView({
       />
       <main className="mx-auto w-full max-w-2xl flex-1 px-6 py-8">
         <h2 className="mb-3 text-sm font-medium text-is-text-secondary">Your spaces</h2>
+        <WorkspaceBar />
         {spaces.status === "loading" && (
           <p className="text-sm text-is-text-tertiary">Loading spaces…</p>
         )}
@@ -70,7 +78,16 @@ function SignedInView({
             </button>
           </p>
         )}
-        {spaces.status === "loaded" && <SpacesList spaces={visibleSpaces} />}
+        {spaces.status === "loaded" && (
+          <SpacesList
+            spaces={visibleSpaces}
+            cloneIndex={cloneIndex}
+            busyId={actions.busyId}
+            onClone={actions.clone}
+            onCloneTo={actions.cloneTo}
+            onSync={actions.sync}
+          />
+        )}
         {auth.error && <p className="mt-3 text-sm text-is-danger-text">{auth.error}</p>}
       </main>
     </div>
