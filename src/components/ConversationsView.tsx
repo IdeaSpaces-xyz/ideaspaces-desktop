@@ -37,7 +37,17 @@ export function ConversationsView({
       )}
       {effectiveStatus === "loaded" && (
         <>
-          {error && <p className="mb-3 text-xs text-is-danger-text">{error}</p>}
+          {error && (
+            <p className="mb-3 text-xs text-is-danger-text">
+              {error}{" "}
+              <button
+                className="underline underline-offset-2 hover:text-is-text"
+                onClick={() => void reload()}
+              >
+                Retry
+              </button>
+            </p>
+          )}
           {rows.length === 0 ? (
             <div className="flex flex-col items-center py-16 text-center">
               <MessageSquare
