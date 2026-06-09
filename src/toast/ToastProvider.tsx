@@ -33,6 +33,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         {items.map((item) => (
           <Toast.Root
             key={item.id}
+            // Errors can be multi-sentence CLI stderr — keep them up until the
+            // user dismisses; success toasts auto-dismiss.
+            duration={item.kind === "error" ? Infinity : DURATION}
             onOpenChange={(open) => {
               if (!open) remove(item.id);
             }}
