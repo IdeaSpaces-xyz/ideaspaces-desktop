@@ -65,7 +65,10 @@ function SignedInView({
   const cloneStatuses = useCloneStatuses(spaces.clones);
 
   return (
-    <div className="flex min-h-dvh flex-col">
+    // Fixed viewport height + overflow-hidden so inner panes (the repos list,
+    // and the editor's tree vs. preview) each own their scroll instead of the
+    // whole window growing and scrolling as one.
+    <div className="flex h-dvh flex-col overflow-hidden">
       <Header
         contexts={contexts}
         activeContext={activeContext}
