@@ -1,11 +1,27 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Main window. Sidecar execution scoped to the ideaspaces CLI binary only. `args: true` is required: Tauri runs a sidecar with the matched scope entry's args (not the call's), so per-command arg allow-lists all resolve to the first entry. Verbs are passed at the call site instead.",
+  "description": "Main window. Sidecar execution scoped to the ideaspaces CLI binary only. `args: true` is required: Tauri runs a sidecar with the matched scope entry's args (not the call's), so per-command arg allow-lists all resolve to the first entry. Verbs are passed at the call site instead. Filesystem access is read/write text + read-dir scoped to the home tree — clones may live anywhere the user picked (default `~/IdeaSpaces`, or Documents/Dropbox), and the editor reads/writes their note *content* only; git stays in the sidecar. macOS TCC gates protected folders on top of this scope.",
   "windows": ["main"],
   "permissions": [
     "core:default",
     "opener:default",
+    {
+      "identifier": "fs:allow-read-text-file",
+      "allow": [{ "path": "$HOME/**" }]
+    },
+    {
+      "identifier": "fs:allow-write-text-file",
+      "allow": [{ "path": "$HOME/**" }]
+    },
+    {
+      "identifier": "fs:allow-read-dir",
+      "allow": [{ "path": "$HOME/**" }]
+    },
+    {
+      "identifier": "fs:allow-exists",
+      "allow": [{ "path": "$HOME/**" }]
+    },
     {
       "identifier": "shell:allow-execute",
       "allow": [

@@ -119,6 +119,33 @@ export interface SyncResult {
   integrated: number;
 }
 
+export interface CommitResult {
+  commit_sha: string;
+  committed_paths: string[];
+}
+
+/**
+ * Commit named note paths in a clone (drives `ideaspaces commit -m`). Paths are
+ * relative to the clone root and run with the clone as cwd. Commits the working
+ * tree of those tracked paths — the editor saves to disk first, then commits.
+ * `sync` only pushes committed history, so this is the bridge between a local
+ * save and a push.
+ */
+export async function commitClone(
+  dir: string,
+  message: string,
+  relPaths: string[],
+): Promise<CommitResult> {
+  const { code, stdout, stderr } = await runCli(
+    ["commit", "-m", message, ...relPaths, "--json"],
+    dir,
+  );
+  if (code !== 0) {
+    throw new Error(stderr.trim() || `Commit failed (exit ${code ?? "unknown"}).`);
+  }
+  return parseJson<CommitResult>(stdout, "commit");
+}
+
 /** Sync a local clone — fetch/rebase/push, run in the clone's folder. */
 export async function syncClone(dir: string): Promise<SyncResult> {
   const { code, stdout, stderr } = await runCli(["sync", "--json"], dir);

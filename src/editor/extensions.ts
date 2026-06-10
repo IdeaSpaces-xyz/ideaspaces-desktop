@@ -1,0 +1,110 @@
+// CodeMirror extension set for the note editor.
+//
+// Composes the atomic-editor live-preview layer (Obsidian-style inline
+// rendering — hide markup, reveal on the cursor's line) over CM's markdown
+// language, then swaps atomic-editor's own theme for our `--is-*` chrome.
+// Typography (the is_web v2 note look) is layered in editor.css by overriding
+// the `cm-atomic-*` classes the live-preview layer emits.
+
+import {
+  atomicMarkdownSyntax,
+  autoCloseCodeFence,
+  extendEmphasisPair,
+  imageBlocks,
+  inlinePreview,
+} from "@atomic-editor/editor";
+import "@atomic-editor/editor/styles.css";
+import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
+import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
+import { markdown, markdownKeymap, markdownLanguage } from "@codemirror/lang-markdown";
+import { indentOnInput } from "@codemirror/language";
+import { EditorState, type Extension } from "@codemirror/state";
+import {
+  drawSelection,
+  dropCursor,
+  EditorView,
+  highlightActiveLine,
+  highlightSpecialChars,
+  keymap,
+  rectangularSelection,
+} from "@codemirror/view";
+
+// Editor chrome mapped to the desktop's semantic tokens. Colors are `var(--is-*)`
+// so light/dark follows the app theme with no reconfigure. Typography of the
+// rendered content lives in editor.css (the cm-atomic-* overrides).
+const isChromeTheme = EditorView.theme({
+  "&": {
+    color: "var(--is-text)",
+    backgroundColor: "transparent",
+    height: "100%",
+  },
+  ".cm-content": {
+    fontFamily: "var(--font-sans)",
+    fontSize: "1.0625rem",
+    lineHeight: "1.7",
+    caretColor: "var(--is-text)",
+    padding: "0",
+    maxWidth: "640px",
+    margin: "0 auto",
+  },
+  ".cm-scroller": { overflow: "auto" },
+  "&.cm-focused": { outline: "none" },
+  ".cm-cursor, .cm-dropCursor": { borderLeftColor: "var(--is-text)" },
+  "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection": {
+    backgroundColor: "color-mix(in srgb, var(--is-accent) 22%, transparent)",
+  },
+  ".cm-activeLine": { backgroundColor: "transparent" },
+  ".cm-gutters": { display: "none" },
+});
+
+/** Build the note-editor extensions. `onSave` fires on Cmd/Ctrl+S. */
+export function noteEditorExtensions(opts: {
+  onChange: (doc: string) => void;
+  onSave: () => void;
+  onLinkClick: (url: string) => void;
+}): Extension[] {
+  return [
+    highlightSpecialChars(),
+    history(),
+    drawSelection(),
+    dropCursor(),
+    EditorState.allowMultipleSelections.of(true),
+    indentOnInput(),
+    rectangularSelection(),
+    highlightActiveLine(),
+    closeBrackets(),
+    extendEmphasisPair,
+    autoCloseCodeFence,
+    EditorView.lineWrapping,
+    // GFM base so the live-preview layer sees tasks/strikethrough/autolinks.
+    markdown({ base: markdownLanguage }),
+    markdownLanguage.data.of({
+      closeBrackets: { brackets: ["(", "[", "{", "'", '"', "*", "_", "`"] },
+    }),
+    atomicMarkdownSyntax,
+    isChromeTheme,
+    // Save shortcut sits above the defaults so it wins.
+    keymap.of([
+      {
+        key: "Mod-s",
+        preventDefault: true,
+        run: () => {
+          opts.onSave();
+          return true;
+        },
+      },
+    ]),
+    keymap.of([
+      ...closeBracketsKeymap,
+      ...historyKeymap,
+      ...markdownKeymap,
+      indentWithTab,
+      ...defaultKeymap,
+    ]),
+    imageBlocks(),
+    inlinePreview({ onLinkClick: opts.onLinkClick }),
+    EditorView.updateListener.of((update) => {
+      if (update.docChanged) opts.onChange(update.state.doc.toString());
+    }),
+  ];
+}
