@@ -37,12 +37,15 @@ const FIELD_SEP = String.fromCharCode(1);
 const serialize = (fields: FrontmatterField[]): string =>
   fields.map((f) => f.key + KV_SEP + f.value).join(FIELD_SEP);
 
-// Reveal the raw YAML for editing, with the cursor on the first field line.
+// Reveal the raw YAML for editing, with the cursor on the first field line
+// (the line after the opening fence), not the `---` delimiter itself.
 function revealRaw(view: EditorView): void {
-  const firstField = Math.min(view.state.doc.lines, 2);
+  const fm = frontmatterRange(view.state);
+  const target = fm ? Math.min(fm.startLine + 1, fm.endLine - 1) : 2;
+  const line = Math.min(Math.max(target, 1), view.state.doc.lines);
   view.dispatch({
     effects: setReveal.of(true),
-    selection: { anchor: view.state.doc.line(firstField).from },
+    selection: { anchor: view.state.doc.line(line).from },
   });
   view.focus();
 }
@@ -119,9 +122,15 @@ class FrontmatterWidget extends WidgetType {
 // large note that would allocate and GC the full string per character typed.
 const SCAN_LIMIT = 4096; // generous; real frontmatter is well under 1 KB
 
-function frontmatterRange(
-  state: EditorState,
-): { from: number; to: number; fields: FrontmatterField[] } | null {
+interface FrontmatterRange {
+  from: number;
+  to: number;
+  startLine: number;
+  endLine: number;
+  fields: FrontmatterField[];
+}
+
+function frontmatterRange(state: EditorState): FrontmatterRange | null {
   const head = state.doc.sliceString(0, Math.min(state.doc.length, SCAN_LIMIT));
   const fm = parseFrontmatter(head);
   if (!fm) return null;
@@ -133,7 +142,7 @@ function frontmatterRange(
     fm.endLine < state.doc.lines
       ? state.doc.line(fm.endLine + 1).from
       : state.doc.line(fm.endLine).to;
-  return { from, to, fields: fm.fields };
+  return { from, to, startLine: fm.startLine, endLine: fm.endLine, fields: fm.fields };
 }
 
 function buildDecorations(state: EditorState): DecorationSet {
