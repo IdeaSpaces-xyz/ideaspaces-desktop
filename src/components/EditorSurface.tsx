@@ -576,7 +576,7 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
         toast(errMessage(err), "error");
       }
     },
-    [creating, clone.path, path, reload, wiki, confirmLeave, toast],
+    [creating, clone.path, path, reload, wiki.reload, confirmLeave, toast],
   );
 
   // `[[wiki-link]]` styling: resolved (points at a note) vs. missing.
@@ -606,7 +606,10 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
         return;
       }
       const name = wikiTargetName(target);
-      if (!name) return;
+      if (!name) {
+        toast("That link has no note name to create.", "error");
+        return;
+      }
       const create = await ask(`"${name}" doesn't exist yet. Create it?`, {
         title: "Create note",
         kind: "info",
@@ -623,7 +626,7 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
         toast(errMessage(err), "error");
       }
     },
-    [wiki, confirmLeave, clone.path, path, reload, toast],
+    [wiki.index, wiki.reload, confirmLeave, clone.path, path, reload, toast],
   );
 
   const segments = path ? path.split("/") : [];
