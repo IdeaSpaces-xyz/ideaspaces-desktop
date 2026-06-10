@@ -60,11 +60,22 @@ const isChromeTheme = EditorView.theme({
   ".cm-gutters": { display: "none" },
 });
 
+// Let the editor grow to its content height (no internal scroll) — for the
+// inline read-only README render, where the surrounding page scrolls instead.
+const autoHeightTheme = EditorView.theme({
+  "&": { height: "auto" },
+  ".cm-scroller": { overflow: "visible" },
+});
+
 /** Build the note-editor extensions. `onSave` fires on Cmd/Ctrl+S. */
 export function noteEditorExtensions(opts: {
   onChange: (doc: string) => void;
   onSave: () => void;
   onLinkClick: (url: string) => void;
+  /** Render-only (README preview): no edits, no save. */
+  readOnly?: boolean;
+  /** Grow to content height instead of filling/scrolling the host. */
+  autoHeight?: boolean;
 }): Extension[] {
   return [
     highlightSpecialChars(),
@@ -87,8 +98,11 @@ export function noteEditorExtensions(opts: {
     atomicMarkdownSyntax,
     // Render leading YAML frontmatter as a Properties panel (after the markdown
     // syntax layer, so it overrides how the `---` block would otherwise render).
-    frontmatterPanel(),
+    // No Edit affordance in read-only (README) renders.
+    frontmatterPanel({ editable: !opts.readOnly }),
     isChromeTheme,
+    ...(opts.autoHeight ? [autoHeightTheme] : []),
+    ...(opts.readOnly ? [EditorState.readOnly.of(true), EditorView.editable.of(false)] : []),
     // Save shortcut sits above the defaults so it wins.
     keymap.of([
       {

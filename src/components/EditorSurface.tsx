@@ -1,8 +1,23 @@
 import { Fragment, useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
-import { ArrowLeft, ChevronRight, FileText, Folder, RefreshCw, Save, UploadCloud, X } from "lucide-react";
+import {
+  ArrowLeft,
+  BookText,
+  ChevronDown,
+  ChevronRight,
+  FilePlus,
+  FileText,
+  Folder,
+  FolderPlus,
+  Plus,
+  RefreshCw,
+  Save,
+  UploadCloud,
+  X,
+} from "lucide-react";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { NoteEditor } from "../editor/NoteEditor";
 import { useDir } from "../editor/useDir";
-import { readNote, writeNote, type FolderEntry, type NoteFile } from "../lib/notes";
+import { createFolder, createNote, readNote, writeNote, type FolderEntry, type NoteFile } from "../lib/notes";
 import { ask } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { commitClone, syncClone, type CloneRecord } from "../lib/cli";
@@ -303,19 +318,183 @@ function NoteList({
   );
 }
 
+// The folder's README, rendered inline as a collapsible guide (read-only
+// live-preview). Open by default — it's the folder's orientation. Keyed by path
+// so navigating folders remounts with the new README. CodeMirror only mounts
+// when expanded, so a collapsed README costs nothing.
+function ReadmeCard({ note, onLinkClick }: { note: NoteFile; onLinkClick: (url: string) => void }) {
+  const [open, setOpen] = useState(true);
+  const [content, setContent] = useState<string | null>(null);
+  const [error, setError] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    if (!open || content !== null) return;
+    let alive = true;
+    readNote(note.path)
+      .then((text) => alive && setContent(text))
+      .catch((err) => alive && setError(errMessage(err)));
+    return () => {
+      alive = false;
+    };
+  }, [open, note.path, content]);
+
+  return (
+    <div className="mb-6 overflow-hidden rounded-lg border border-is-border bg-is-surface">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="flex w-full items-center gap-2 px-4 py-2.5 text-left transition hover:bg-is-surface-alt focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
+      >
+        <BookText size={15} strokeWidth={1.333} className="shrink-0 text-is-text-tertiary" aria-hidden="true" />
+        <span className="flex-1 text-sm font-medium text-is-text">README</span>
+        <ChevronDown
+          size={16}
+          strokeWidth={1.5}
+          className={cn("shrink-0 text-is-text-tertiary transition-transform", !open && "-rotate-90")}
+          aria-hidden="true"
+        />
+      </button>
+      {open && (
+        <div className="border-t border-is-border px-4 py-3">
+          {error ? (
+            <p className="text-sm text-is-danger-text">{error}</p>
+          ) : content === null ? (
+            <p className="text-sm text-is-text-tertiary">Loading…</p>
+          ) : (
+            <NoteEditor
+              initialContent={content}
+              readOnly
+              autoHeight
+              autoFocus={false}
+              onChange={() => {}}
+              onSave={() => {}}
+              onLinkClick={onLinkClick}
+            />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// "Add" menu in the browser bar — create a note or folder in the current path.
+function AddMenu({
+  onNewNote,
+  onNewFolder,
+  disabled,
+}: {
+  onNewNote: () => void;
+  onNewFolder: () => void;
+  disabled: boolean;
+}) {
+  const item =
+    "flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm text-is-text-secondary outline-none data-[highlighted]:bg-is-surface-alt data-[highlighted]:text-is-text";
+  return (
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger asChild>
+        <button
+          type="button"
+          disabled={disabled}
+          aria-label="Add a note or folder"
+          title="Add…"
+          className="inline-flex shrink-0 items-center gap-1 rounded-md border border-is-border bg-is-surface px-2 py-1.5 text-xs text-is-text-secondary transition hover:border-is-accent hover:text-is-text disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <Plus size={14} strokeWidth={1.5} aria-hidden="true" />
+          Add
+        </button>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content
+          align="end"
+          sideOffset={6}
+          className="z-50 min-w-[10rem] rounded-lg border border-is-border bg-is-surface p-1 shadow-md"
+        >
+          <DropdownMenu.Item className={item} onSelect={onNewNote}>
+            <FilePlus size={15} strokeWidth={1.333} className="text-is-text-tertiary" aria-hidden="true" />
+            New note
+          </DropdownMenu.Item>
+          <DropdownMenu.Item className={item} onSelect={onNewFolder}>
+            <FolderPlus size={15} strokeWidth={1.333} className="text-is-text-tertiary" aria-hidden="true" />
+            New folder
+          </DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
+  );
+}
+
+// Inline name input for creating a note/folder in the current path.
+function CreateRow({
+  kind,
+  onSubmit,
+  onCancel,
+}: {
+  kind: "note" | "folder";
+  onSubmit: (name: string) => void;
+  onCancel: () => void;
+}) {
+  const [name, setName] = useState("");
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (name.trim()) onSubmit(name);
+      }}
+      className="mb-4 flex items-center gap-2"
+    >
+      {kind === "folder" ? (
+        <FolderPlus size={16} strokeWidth={1.333} className="shrink-0 text-is-text-tertiary" aria-hidden="true" />
+      ) : (
+        <FilePlus size={16} strokeWidth={1.333} className="shrink-0 text-is-text-tertiary" aria-hidden="true" />
+      )}
+      <input
+        autoFocus
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        onKeyDown={(e) => e.key === "Escape" && onCancel()}
+        placeholder={kind === "folder" ? "New folder name" : "New note name"}
+        aria-label={kind === "folder" ? "New folder name" : "New note name"}
+        className="min-w-0 flex-1 rounded-md border border-is-border bg-is-bg px-2.5 py-1.5 text-sm text-is-text outline-none focus-visible:border-is-accent"
+      />
+      <button
+        type="submit"
+        disabled={!name.trim()}
+        className="rounded-md bg-is-text px-3 py-1.5 text-xs font-medium text-is-bg transition hover:opacity-90 disabled:opacity-50"
+      >
+        Create
+      </button>
+      <button
+        type="button"
+        onClick={onCancel}
+        className="rounded-md px-2 py-1.5 text-xs text-is-text-tertiary transition hover:text-is-text"
+      >
+        Cancel
+      </button>
+    </form>
+  );
+}
+
 // The editor surface for one local clone: a folder-drill-in tree on the left
 // (breadcrumb + Folders + Notes), and the selected note open in a resizable
 // live-preview editor pane on the right. Mirrors is_web v2's repo browser, with
 // the desktop twist that the right pane *is* the editor (no read-only → edit
 // toggle — the live-preview surface is editable in place).
 export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose: () => void }) {
+  const toast = useToast();
   const [path, setPath] = useState("");
   const [selected, setSelected] = useState<NoteFile | undefined>(undefined);
   const [paneWidth, setPaneWidth] = useState(540);
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [creating, setCreating] = useState<null | "note" | "folder">(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const { status, folders, files, error, reload } = useDir(clone.path, path);
+
+  const openLink = useCallback(
+    (url: string) => void openUrl(url).catch((err) => toast(errMessage(err), "error")),
+    [toast],
+  );
 
   // Guard navigation: never leave mid-publish, and confirm before dropping the
   // open note's unsaved edits. Native Tauri dialog (consistent across webview
@@ -336,6 +515,7 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
       // open dirty note (e.g. clicking the root crumb while already at root).
       if (await confirmLeave()) {
         setSelected(undefined); // the open note belongs to the level you left
+        setCreating(null); // a pending "new note/folder" belongs to that level too
         setPath(nextPath);
       }
     },
@@ -353,9 +533,36 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
     if (await confirmLeave()) setSelected(undefined);
   }, [confirmLeave]);
 
+  const submitCreate = useCallback(
+    async (name: string) => {
+      const kind = creating;
+      if (!kind) return;
+      try {
+        if (kind === "folder") {
+          await createFolder(clone.path, path, name);
+          await reload();
+        } else {
+          // Opening the new note replaces any open one — guard unsaved edits.
+          if (!(await confirmLeave())) return;
+          const note = await createNote(clone.path, path, name);
+          await reload();
+          setSelected(note);
+        }
+        setCreating(null);
+      } catch (err) {
+        toast(errMessage(err), "error");
+      }
+    },
+    [creating, clone.path, path, reload, confirmLeave, toast],
+  );
+
   const segments = path ? path.split("/") : [];
   // Title is the current folder name, or the repo itself at the root.
   const title = segments.length ? segments[segments.length - 1] : clone.slug;
+  // README is pulled out of the notes list and shown as the folder's guide.
+  const readme = files.find((f) => /^readme$/i.test(f.name));
+  const noteFiles = readme ? files.filter((f) => f.relPath !== readme.relPath) : files;
+  const hasTree = folders.length > 0 || noteFiles.length > 0;
   const empty = folders.length === 0 && files.length === 0;
 
   return (
@@ -371,7 +578,14 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
           Repos
         </button>
         <span className="h-3.5 w-px shrink-0 bg-is-border" aria-hidden="true" />
-        <Breadcrumb slug={clone.slug} segments={segments} onNavigate={(p) => void navigate(p)} />
+        <div className="min-w-0 flex-1">
+          <Breadcrumb slug={clone.slug} segments={segments} onNavigate={(p) => void navigate(p)} />
+        </div>
+        <AddMenu
+          onNewNote={() => setCreating("note")}
+          onNewFolder={() => setCreating("folder")}
+          disabled={busy}
+        />
       </div>
 
       <div ref={containerRef} className="flex min-h-0 flex-1" style={{ "--pane-width": `${paneWidth}px` } as CSSProperties}>
@@ -391,24 +605,39 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
                 </button>
               </p>
             )}
-            {status === "loaded" &&
-              (empty ? (
-                <p className="text-sm text-is-text-tertiary">This folder has no notes or sub-folders.</p>
-              ) : (
-                <div className="grid gap-x-8 gap-y-6 sm:grid-cols-[11rem_minmax(0,1fr)]">
-                  {folders.length > 0 && <FolderList folders={folders} onOpen={(f) => void navigate(f.relPath)} />}
-                  {files.length > 0 ? (
-                    <NoteList
-                      files={files}
-                      selectedRel={selected?.relPath}
-                      onSelect={(n) => void selectNote(n)}
-                      disabled={busy}
-                    />
-                  ) : (
-                    <p className="text-sm text-is-text-tertiary">No notes in this folder.</p>
-                  )}
-                </div>
-              ))}
+            {status === "loaded" && (
+              <>
+                {creating && (
+                  <CreateRow
+                    kind={creating}
+                    onSubmit={(n) => void submitCreate(n)}
+                    onCancel={() => setCreating(null)}
+                  />
+                )}
+                {readme && <ReadmeCard key={readme.path} note={readme} onLinkClick={openLink} />}
+                {empty && !readme ? (
+                  <p className="text-sm text-is-text-tertiary">This folder has no notes or sub-folders.</p>
+                ) : (
+                  hasTree && (
+                    <div className="grid gap-x-8 gap-y-6 sm:grid-cols-[11rem_minmax(0,1fr)]">
+                      {folders.length > 0 && (
+                        <FolderList folders={folders} onOpen={(f) => void navigate(f.relPath)} />
+                      )}
+                      {noteFiles.length > 0 ? (
+                        <NoteList
+                          files={noteFiles}
+                          selectedRel={selected?.relPath}
+                          onSelect={(n) => void selectNote(n)}
+                          disabled={busy}
+                        />
+                      ) : (
+                        <p className="text-sm text-is-text-tertiary">No notes in this folder.</p>
+                      )}
+                    </div>
+                  )
+                )}
+              </>
+            )}
           </div>
         </nav>
 
