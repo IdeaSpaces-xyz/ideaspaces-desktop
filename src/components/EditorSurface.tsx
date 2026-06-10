@@ -330,6 +330,7 @@ function ReadmeCard({ note, onLinkClick }: { note: NoteFile; onLinkClick: (url: 
   useEffect(() => {
     if (!open || content !== null) return;
     let alive = true;
+    setError(undefined); // clear any prior error before re-fetching
     readNote(note.path)
       .then((text) => alive && setContent(text))
       .catch((err) => alive && setError(errMessage(err)));
@@ -584,7 +585,9 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
         <AddMenu
           onNewNote={() => setCreating("note")}
           onNewFolder={() => setCreating("folder")}
-          disabled={busy}
+          // Block creation until the listing is ready — reload() after creating
+          // wouldn't surface the new item while loading/errored.
+          disabled={busy || status !== "loaded"}
         />
       </div>
 
@@ -615,7 +618,7 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
                   />
                 )}
                 {readme && <ReadmeCard key={readme.path} note={readme} onLinkClick={openLink} />}
-                {empty && !readme ? (
+                {empty && !readme && !creating ? (
                   <p className="text-sm text-is-text-tertiary">This folder has no notes or sub-folders.</p>
                 ) : (
                   hasTree && (
