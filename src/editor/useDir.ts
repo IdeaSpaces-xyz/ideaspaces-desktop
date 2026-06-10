@@ -1,29 +1,31 @@
 import { useCallback, useEffect, useState } from "react";
-import { listNotes, type NoteFile } from "../lib/notes";
+import { listDir, type DirListing } from "../lib/notes";
 
 type Status = "loading" | "loaded" | "error";
 
-/** The markdown notes in a clone's working tree (fs-listed, recursive). */
-export function useNotes(cloneDir: string) {
+const EMPTY: DirListing = { folders: [], files: [] };
+
+/** One level of a clone's working tree (folders + notes at `relPath`). */
+export function useDir(cloneDir: string, relPath: string) {
   const [status, setStatus] = useState<Status>("loading");
-  const [notes, setNotes] = useState<NoteFile[]>([]);
+  const [listing, setListing] = useState<DirListing>(EMPTY);
   const [error, setError] = useState<string | undefined>(undefined);
 
   const load = useCallback(async () => {
     setStatus("loading");
     setError(undefined);
     try {
-      setNotes(await listNotes(cloneDir));
+      setListing(await listDir(cloneDir, relPath));
       setStatus("loaded");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setStatus("error");
     }
-  }, [cloneDir]);
+  }, [cloneDir, relPath]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  return { status, notes, error, reload: load };
+  return { status, folders: listing.folders, files: listing.files, error, reload: load };
 }
