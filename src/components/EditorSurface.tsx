@@ -44,6 +44,7 @@ function NotePane({
   onDirtyChange,
   onBusyChange,
   onClose,
+  onLinkClick,
   onWikiOpen,
   resolveWiki,
 }: {
@@ -52,6 +53,7 @@ function NotePane({
   onDirtyChange: (dirty: boolean) => void;
   onBusyChange: (busy: boolean) => void;
   onClose: () => void;
+  onLinkClick: (url: string) => void;
   onWikiOpen: (target: string) => void;
   resolveWiki: (target: string) => WikiLinkResolvedTarget | null;
 }) {
@@ -185,7 +187,7 @@ function NotePane({
               setDirty(doc !== savedRef.current);
             }}
             onSave={() => void save()}
-            onLinkClick={(url) => void openUrl(url).catch((err) => toast(errMessage(err), "error"))}
+            onLinkClick={onLinkClick}
             onWikiOpen={onWikiOpen}
             resolveWiki={resolveWiki}
           />
@@ -514,11 +516,6 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
   const { status, folders, files, error, reload } = useDir(clone.path, path);
   const { index: wikiIndex, reload: reloadWiki } = useWikiIndex(clone.path);
 
-  const openLink = useCallback(
-    (url: string) => void openUrl(url).catch((err) => toast(errMessage(err), "error")),
-    [toast],
-  );
-
   // Guard navigation: never leave mid-publish, and confirm before dropping the
   // open note's unsaved edits. Native Tauri dialog (consistent across webview
   // backends, unlike window.confirm).
@@ -629,6 +626,21 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
     [wikiIndex, reloadWiki, confirmLeave, clone.path, path, reload, toast],
   );
 
+  // A clicked link: external schemes (http:, https:, mailto:, …) open in the OS
+  // browser; everything else is a link to a note in the clone (`[[wiki]]` or a
+  // relative `note.md`), so route it through the same resolve-or-create path —
+  // never `openUrl`, which rejects non-web URLs.
+  const handleLink = useCallback(
+    (url: string) => {
+      if (/^[a-z][a-z\d+.-]*:/i.test(url)) {
+        void openUrl(url).catch((err) => toast(errMessage(err), "error"));
+      } else {
+        void openWiki(url);
+      }
+    },
+    [openWiki, toast],
+  );
+
   const segments = path ? path.split("/") : [];
   // Title is the current folder name, or the repo itself at the root.
   const title = segments.length ? segments[segments.length - 1] : clone.slug;
@@ -693,7 +705,7 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
                   <ReadmeCard
                     key={readme.path}
                     note={readme}
-                    onLinkClick={openLink}
+                    onLinkClick={handleLink}
                     onWikiOpen={(t) => void openWiki(t)}
                     resolveWiki={resolveWiki}
                   />
@@ -738,6 +750,7 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
                 onDirtyChange={setDirty}
                 onBusyChange={setBusy}
                 onClose={() => void closeNote()}
+                onLinkClick={handleLink}
                 onWikiOpen={(t) => void openWiki(t)}
                 resolveWiki={resolveWiki}
               />
