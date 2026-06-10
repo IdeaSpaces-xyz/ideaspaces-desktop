@@ -131,7 +131,6 @@
   background-color: var(--is-surface-alt);
   overflow: hidden;
   font-family: var(--font-sans);
-  user-select: none;
 }
 .cm-note-host .cm-fm-head {
   display: flex;
@@ -139,6 +138,8 @@
   gap: 0.4rem;
   padding: 0.4rem 0.75rem;
   border-bottom: 1px solid var(--is-border);
+  /* Header is chrome — not selectable; field values below stay copyable. */
+  user-select: none;
 }
 .cm-note-host .cm-fm-icon {
   display: inline-flex;
