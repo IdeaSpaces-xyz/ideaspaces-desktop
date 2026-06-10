@@ -40,7 +40,10 @@
   line-height: 1.25;
   letter-spacing: -0.008em;
 }
-/* h4–h6 — Fragment Mono kicker (uppercase, tertiary), as in v2 prose. */
+/* h4–h6 — Fragment Mono kicker (uppercase). v2 prose uses tertiary for these,
+   but at 11px tertiary lands ≈3.9:1 in light (below AA for normal text); on a
+   writing surface these are real headings, so we use secondary for legibility
+   in both themes. */
 .cm-note-host .cm-atomic-h4,
 .cm-note-host .cm-atomic-h5,
 .cm-note-host .cm-atomic-h6 {
@@ -49,7 +52,7 @@
   font-weight: 400;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--is-text-tertiary);
+  color: var(--is-text-secondary);
 }
 
 /* Inline emphasis. */
@@ -114,5 +117,74 @@
   border-top: 1px solid var(--is-border);
 }
 .cm-note-host .cm-atomic-task-done {
+  color: var(--is-text-tertiary);
+}
+
+/* Frontmatter "Properties" panel (frontmatterPanel.ts) — a structured view of
+   the note's leading YAML, which organizes it in the platform. Sits in the
+   content column; colors are `--is-*` tokens, contrast-checked for both themes
+   (label/value read on --is-surface-alt at AA in light and dark). */
+.cm-note-host .cm-fm-panel {
+  margin-block: 0.25rem 1.5rem;
+  border: 1px solid var(--is-border);
+  border-radius: 8px;
+  background-color: var(--is-surface-alt);
+  overflow: hidden;
+  font-family: var(--font-sans);
+}
+.cm-note-host .cm-fm-head {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.75rem;
+  border-bottom: 1px solid var(--is-border);
+  /* Header is chrome — not selectable; field values below stay copyable. */
+  user-select: none;
+}
+.cm-note-host .cm-fm-icon {
+  display: inline-flex;
+  color: var(--is-text-tertiary);
+}
+.cm-note-host .cm-fm-note {
+  font-size: 0.75rem;
+  color: var(--is-text-secondary);
+}
+.cm-note-host .cm-fm-edit {
+  margin-left: auto;
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: 0.75rem;
+  color: var(--is-accent-text);
+  cursor: pointer;
+}
+.cm-note-host .cm-fm-edit:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.cm-note-host .cm-fm-rows {
+  display: grid;
+  grid-template-columns: minmax(4.5rem, auto) 1fr;
+  gap: 0.3rem 0.9rem;
+  margin: 0;
+  padding: 0.6rem 0.75rem;
+}
+.cm-note-host .cm-fm-key {
+  margin: 0;
+  font-family: var(--font-chrome);
+  font-size: 0.8125rem;
+  color: var(--is-text-secondary);
+}
+.cm-note-host .cm-fm-val {
+  margin: 0;
+  min-width: 0;
+  font-size: 0.875rem;
+  color: var(--is-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cm-note-host .cm-fm-empty {
   color: var(--is-text-tertiary);
 }

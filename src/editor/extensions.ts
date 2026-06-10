@@ -16,6 +16,7 @@ import {
 import "@atomic-editor/editor/styles.css";
 // Serif heading font — loaded with the editor (lazy chunk), not the initial app.
 import "@fontsource/sorts-mill-goudy";
+import { frontmatterPanel } from "./frontmatterPanel";
 import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { markdown, markdownKeymap, markdownLanguage } from "@codemirror/lang-markdown";
@@ -84,6 +85,9 @@ export function noteEditorExtensions(opts: {
       closeBrackets: { brackets: ["(", "[", "{", "'", '"', "*", "_", "`"] },
     }),
     atomicMarkdownSyntax,
+    // Render leading YAML frontmatter as a Properties panel (after the markdown
+    // syntax layer, so it overrides how the `---` block would otherwise render).
+    frontmatterPanel(),
     isChromeTheme,
     // Save shortcut sits above the defaults so it wins.
     keymap.of([
