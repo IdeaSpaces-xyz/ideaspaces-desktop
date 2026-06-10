@@ -22,10 +22,12 @@ function NotePane({
   note,
   clone,
   onDirtyChange,
+  onBusyChange,
 }: {
   note: NoteFile;
   clone: CloneRecord;
   onDirtyChange: (dirty: boolean) => void;
+  onBusyChange: (busy: boolean) => void;
 }) {
   const toast = useToast();
   const [content, setContent] = useState<string | null>(null);
@@ -44,6 +46,11 @@ function NotePane({
     onDirtyChange(dirty);
   }, [dirty, onDirtyChange]);
   useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
+  // Report publish-in-flight up so the surface blocks navigation mid-commit/sync.
+  useEffect(() => {
+    onBusyChange(busy);
+  }, [busy, onBusyChange]);
+  useEffect(() => () => onBusyChange(false), [onBusyChange]);
 
   useEffect(() => {
     let alive = true;
@@ -155,27 +162,34 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
   const { status, notes, error, reload } = useNotes(clone.path);
   const [selected, setSelected] = useState<NoteFile | undefined>(undefined);
   const [dirty, setDirty] = useState(false);
+  const [busy, setBusy] = useState(false);
 
-  // Guard navigation that would drop the open note's unsaved edits. Uses the
-  // native Tauri dialog (consistent across webview backends, unlike window.confirm).
-  async function confirmLeave(): Promise<boolean> {
+  // Guard navigation: never leave mid-publish, and confirm before dropping the
+  // open note's unsaved edits. Native Tauri dialog (consistent across webview
+  // backends, unlike window.confirm).
+  const confirmLeave = useCallback(async (): Promise<boolean> => {
+    if (busy) return false;
     if (!dirty) return true;
     return ask("Discard unsaved changes to this note?", {
       title: "Unsaved changes",
       kind: "warning",
     });
-  }
-  async function selectNote(note: NoteFile) {
-    if (note.relPath === selected?.relPath || (await confirmLeave())) setSelected(note);
-  }
+  }, [busy, dirty]);
+  const selectNote = useCallback(
+    async (note: NoteFile) => {
+      if (note.relPath === selected?.relPath || (await confirmLeave())) setSelected(note);
+    },
+    [selected?.relPath, confirmLeave],
+  );
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center gap-3 border-b border-is-border px-4 py-2.5">
         <button
           type="button"
+          disabled={busy}
           onClick={() => void confirmLeave().then((ok) => ok && onClose())}
-          className="inline-flex items-center gap-1.5 text-xs text-is-text-tertiary transition hover:text-is-text"
+          className="inline-flex items-center gap-1.5 text-xs text-is-text-tertiary transition hover:text-is-text disabled:cursor-not-allowed disabled:opacity-50"
         >
           <ArrowLeft size={14} strokeWidth={1.333} aria-hidden="true" />
           Repos
@@ -207,9 +221,10 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
                   <li key={note.relPath}>
                     <button
                       type="button"
+                      disabled={busy}
                       onClick={() => void selectNote(note)}
                       aria-current={selected?.relPath === note.relPath}
-                      className={`flex w-full items-center gap-2 truncate rounded-md px-2 py-1.5 text-left text-sm transition ${
+                      className={`flex w-full items-center gap-2 truncate rounded-md px-2 py-1.5 text-left text-sm transition disabled:cursor-not-allowed disabled:opacity-50 ${
                         selected?.relPath === note.relPath
                           ? "bg-is-surface-alt text-is-text"
                           : "text-is-text-secondary hover:bg-is-surface-alt"
@@ -226,7 +241,13 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
         </nav>
 
         {selected ? (
-          <NotePane key={selected.path} note={selected} clone={clone} onDirtyChange={setDirty} />
+          <NotePane
+            key={selected.path}
+            note={selected}
+            clone={clone}
+            onDirtyChange={setDirty}
+            onBusyChange={setBusy}
+          />
         ) : (
           <div className="flex flex-1 items-center justify-center">
             <p className="text-sm text-is-text-tertiary">Select a note to edit.</p>
