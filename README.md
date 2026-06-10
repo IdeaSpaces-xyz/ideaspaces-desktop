@@ -26,12 +26,46 @@ frontend (React) → Command.sidecar("binaries/ideaspaces", […]) → bundled C
   binary (`bun build --compile`)
 - Platform deps for Tauri v2 — https://tauri.app/start/prerequisites/
 
-## Development
+## Run it
+
+Two ways, depending on whether you want to develop or just click-and-test.
+
+### Develop (hot-reload window)
 
 ```bash
 npm install            # installs deps; @ideaspaces/cli builds its bundle on install
-npm run tauri dev      # builds the sidecar, serves Vite, launches the app
+npm run tauri dev      # builds the sidecar, serves Vite, launches the app window
 ```
+
+First run compiles the Rust core (a few minutes); subsequent runs are fast and
+hot-reload the frontend. This is the quickest way to try the app.
+
+### Build a clickable app (.app / .dmg)
+
+```bash
+npm run tauri build    # sidecar + frontend + Rust release, then bundles the app
+```
+
+Output lands in `src-tauri/target/release/bundle/`:
+
+- **`macos/IdeaSpaces.app`** — double-click to launch (or `open` it).
+- **`dmg/IdeaSpaces_<version>_aarch64.dmg`** — drag-to-Applications installer.
+
+```bash
+open src-tauri/target/release/bundle/macos/IdeaSpaces.app
+```
+
+> **Unsigned build — macOS Gatekeeper.** The app you just built runs directly
+> (a locally-built binary carries no quarantine flag). But once the `.app`/`.dmg`
+> is **downloaded or copied to another Mac**, Gatekeeper blocks the first launch
+> with *"IdeaSpaces can't be opened because Apple cannot check it…"* — until we
+> code-sign + notarize (a tracked follow-up). On that machine, either
+> **right-click the app → Open** (confirm once), or clear the quarantine flag:
+> ```bash
+> xattr -dr com.apple.quarantine /path/to/IdeaSpaces.app
+> ```
+> Editing clones inside protected folders (Documents/Desktop/Downloads/Dropbox)
+> also triggers a one-time macOS file-access prompt — expected, grant per folder.
 
 Other checks:
 
