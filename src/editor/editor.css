@@ -117,7 +117,11 @@
   color: var(--is-text-tertiary);
 }
 
-/* Wiki links — IdeaSpaces [[name]] references. */
+/*
+ * Wiki links — IdeaSpaces [[name]] references. Scaffolding: the wikiLinks()
+ * extension isn't wired yet (it needs a resolver against the space's notes), so
+ * these rules don't fire today. Kept so the look is ready when it lands.
+ */
 .cm-note-host .cm-atomic-wiki-link {
   color: var(--is-accent-text);
   cursor: pointer;

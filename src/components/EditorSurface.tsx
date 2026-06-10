@@ -16,13 +16,32 @@ function errMessage(err: unknown): string {
 // One opened note: loads its content, holds the draft + dirty state, saves to
 // disk, and commits+pushes via the CLI. Keyed by path so each note gets fresh
 // state (NoteEditor mounts per note).
-function NotePane({ note, clone }: { note: NoteFile; clone: CloneRecord }) {
+function NotePane({
+  note,
+  clone,
+  onDirtyChange,
+}: {
+  note: NoteFile;
+  clone: CloneRecord;
+  onDirtyChange: (dirty: boolean) => void;
+}) {
   const toast = useToast();
   const [content, setContent] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | undefined>(undefined);
   const draftRef = useRef("");
+  // Baseline the dirty check tracks: the last text written to disk (initially
+  // the loaded text). Without this, an edit-then-save-then-edit cycle compares
+  // against the original load and shows false "unsaved".
+  const savedRef = useRef("");
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  // Report dirty up so the surface can guard navigation; clear it on unmount
+  // (note switch) so the next note starts clean.
+  useEffect(() => {
+    onDirtyChange(dirty);
+  }, [dirty, onDirtyChange]);
+  useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
 
   useEffect(() => {
     let alive = true;
@@ -30,6 +49,7 @@ function NotePane({ note, clone }: { note: NoteFile; clone: CloneRecord }) {
       .then((text) => {
         if (!alive) return;
         draftRef.current = text;
+        savedRef.current = text;
         setContent(text);
       })
       .catch((err) => alive && setLoadError(errMessage(err)));
@@ -41,6 +61,7 @@ function NotePane({ note, clone }: { note: NoteFile; clone: CloneRecord }) {
   const save = useCallback(async (): Promise<boolean> => {
     try {
       await writeNote(note.path, draftRef.current);
+      savedRef.current = draftRef.current;
       setDirty(false);
       return true;
     } catch (err) {
@@ -53,7 +74,13 @@ function NotePane({ note, clone }: { note: NoteFile; clone: CloneRecord }) {
     setBusy(true);
     try {
       if (dirty && !(await save())) return;
-      await commitClone(clone.path, `Edit ${note.relPath}`, [note.relPath]);
+      try {
+        await commitClone(clone.path, `Edit ${note.relPath}`, [note.relPath]);
+      } catch (err) {
+        // Nothing new to commit for this note is fine — fall through and sync
+        // to push any already-committed history.
+        if (!/nothing to commit/i.test(errMessage(err))) throw err;
+      }
       const res = await syncClone(clone.path);
       toast(`Published ${note.name} — pushed ${res.pushed}`);
     } catch (err) {
@@ -97,7 +124,7 @@ function NotePane({ note, clone }: { note: NoteFile; clone: CloneRecord }) {
           initialContent={content}
           onChange={(doc) => {
             draftRef.current = doc;
-            setDirty(doc !== content);
+            setDirty(doc !== savedRef.current);
           }}
           onSave={() => void save()}
         />
@@ -111,13 +138,22 @@ function NotePane({ note, clone }: { note: NoteFile; clone: CloneRecord }) {
 export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose: () => void }) {
   const { status, notes, error, reload } = useNotes(clone.path);
   const [selected, setSelected] = useState<NoteFile | undefined>(undefined);
+  const [dirty, setDirty] = useState(false);
+
+  // Guard navigation that would drop the open note's unsaved edits.
+  function confirmLeave(): boolean {
+    return !dirty || window.confirm("Discard unsaved changes to this note?");
+  }
+  function selectNote(note: NoteFile) {
+    if (note.relPath === selected?.relPath || confirmLeave()) setSelected(note);
+  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center gap-3 border-b border-is-border px-4 py-2.5">
         <button
           type="button"
-          onClick={onClose}
+          onClick={() => confirmLeave() && onClose()}
           className="inline-flex items-center gap-1.5 text-xs text-is-text-tertiary transition hover:text-is-text"
         >
           <ArrowLeft size={14} strokeWidth={1.333} aria-hidden="true" />
@@ -132,7 +168,11 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
           {status === "error" && (
             <p className="px-2 text-xs text-is-danger-text">
               {error}{" "}
-              <button className="underline underline-offset-2 hover:text-is-text" onClick={() => void reload()}>
+              <button
+                type="button"
+                className="underline underline-offset-2 hover:text-is-text"
+                onClick={() => void reload()}
+              >
                 Retry
               </button>
             </p>
@@ -146,7 +186,7 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
                   <li key={note.relPath}>
                     <button
                       type="button"
-                      onClick={() => setSelected(note)}
+                      onClick={() => selectNote(note)}
                       aria-current={selected?.relPath === note.relPath}
                       className={`flex w-full items-center gap-2 truncate rounded-md px-2 py-1.5 text-left text-sm transition ${
                         selected?.relPath === note.relPath
@@ -165,7 +205,7 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
         </nav>
 
         {selected ? (
-          <NotePane key={selected.path} note={selected} clone={clone} />
+          <NotePane key={selected.path} note={selected} clone={clone} onDirtyChange={setDirty} />
         ) : (
           <div className="flex flex-1 items-center justify-center">
             <p className="text-sm text-is-text-tertiary">Select a note to edit.</p>

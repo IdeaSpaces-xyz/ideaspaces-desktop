@@ -136,6 +136,11 @@ export async function commitClone(
   message: string,
   relPaths: string[],
 ): Promise<CommitResult> {
+  // Paths come from readDir, but a file literally named `--force` would land as
+  // a CLI flag once spread into argv. Refuse leading-dash paths defensively.
+  if (relPaths.some((p) => p.startsWith("-"))) {
+    throw new Error("Refusing to commit a path that looks like a flag.");
+  }
   const { code, stdout, stderr } = await runCli(
     ["commit", "-m", message, ...relPaths, "--json"],
     dir,

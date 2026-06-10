@@ -15,7 +15,7 @@ import {
 } from "@atomic-editor/editor";
 import "@atomic-editor/editor/styles.css";
 import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
-import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
+import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { markdown, markdownKeymap, markdownLanguage } from "@codemirror/lang-markdown";
 import { indentOnInput } from "@codemirror/language";
 import { EditorState, type Extension } from "@codemirror/state";
@@ -94,13 +94,9 @@ export function noteEditorExtensions(opts: {
         },
       },
     ]),
-    keymap.of([
-      ...closeBracketsKeymap,
-      ...historyKeymap,
-      ...markdownKeymap,
-      indentWithTab,
-      ...defaultKeymap,
-    ]),
+    // No indentWithTab — this is a prose editor; Tab should stay available for
+    // UI navigation/accessibility, and markdownKeymap handles list continuation.
+    keymap.of([...closeBracketsKeymap, ...historyKeymap, ...markdownKeymap, ...defaultKeymap]),
     imageBlocks(),
     inlinePreview({ onLinkClick: opts.onLinkClick }),
     EditorView.updateListener.of((update) => {
