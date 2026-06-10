@@ -1,7 +1,6 @@
 import { useEffect, useRef } from "react";
 import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import { noteEditorExtensions } from "./extensions";
 import "./editor.css";
 
@@ -14,16 +13,20 @@ export function NoteEditor({
   initialContent,
   onChange,
   onSave,
+  onLinkClick,
 }: {
   initialContent: string;
   onChange: (doc: string) => void;
   onSave: () => void;
+  onLinkClick: (url: string) => void;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const onChangeRef = useRef(onChange);
   const onSaveRef = useRef(onSave);
+  const onLinkClickRef = useRef(onLinkClick);
   onChangeRef.current = onChange;
   onSaveRef.current = onSave;
+  onLinkClickRef.current = onLinkClick;
 
   useEffect(() => {
     const host = hostRef.current;
@@ -36,9 +39,9 @@ export function NoteEditor({
         extensions: noteEditorExtensions({
           onChange: (doc) => onChangeRef.current(doc),
           onSave: () => onSaveRef.current(),
-          // Route links through the host so they open in the OS browser, not
-          // inside the webview.
-          onLinkClick: (url) => void openUrl(url).catch(() => {}),
+          // Links open in the OS browser; the host (NotePane) owns the opener
+          // so it can surface failures via toast.
+          onLinkClick: (url) => onLinkClickRef.current(url),
         }),
       }),
     });

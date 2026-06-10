@@ -4,6 +4,7 @@ import { NoteEditor } from "../editor/NoteEditor";
 import { useNotes } from "../editor/useNotes";
 import { readNote, writeNote, type NoteFile } from "../lib/notes";
 import { ask } from "@tauri-apps/plugin-dialog";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { commitClone, syncClone, type CloneRecord } from "../lib/cli";
 import { useToast } from "../toast/toast-context";
 
@@ -109,7 +110,13 @@ function NotePane({
           {dirty && <span className="ml-2 text-is-text-tertiary">• unsaved</span>}
         </p>
         <div className="flex shrink-0 items-center gap-2">
-          <button type="button" className={barBtn} disabled={!dirty || busy} onClick={() => void save()}>
+          <button
+            type="button"
+            className={barBtn}
+            disabled={!dirty || busy}
+            onClick={() => void save()}
+            title="Save (⌘S)"
+          >
             <Save size={14} strokeWidth={1.333} aria-hidden="true" />
             Save
           </button>
@@ -131,6 +138,7 @@ function NotePane({
             setDirty(doc !== savedRef.current);
           }}
           onSave={() => void save()}
+          onLinkClick={(url) => void openUrl(url).catch((err) => toast(errMessage(err), "error"))}
         />
       </div>
     </div>
