@@ -90,6 +90,20 @@ export async function cloneSpace(repoId: string, dir: string): Promise<CloneReco
   return parseJson<CloneRecord>(stdout, "clone");
 }
 
+/**
+ * Bind an existing local clone to a space (no re-clone). With `repoId`, the CLI
+ * verifies the folder's git origin matches that space; without it, the origin
+ * is auto-matched against the user's spaces. Returns the same record as clone.
+ */
+export async function linkClone(dir: string, repoId?: string): Promise<CloneRecord> {
+  const args = repoId ? ["link", dir, repoId, "--json"] : ["link", dir, "--json"];
+  const { code, stdout, stderr } = await runCli(args);
+  if (code !== 0) {
+    throw new Error(stderr.trim() || `Link failed (exit ${code ?? "unknown"}).`);
+  }
+  return parseJson<CloneRecord>(stdout, "link");
+}
+
 export interface CloneStatus {
   branch: string | null;
   /** null when no upstream is configured. */

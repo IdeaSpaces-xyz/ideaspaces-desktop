@@ -1,4 +1,4 @@
-import { Download, FolderInput, PenLine, RefreshCw } from "lucide-react";
+import { Download, FolderInput, Link2, PenLine, RefreshCw } from "lucide-react";
 import type { CloneRecord, CloneStatus, Space } from "../lib/cli";
 
 const actionBtn =
@@ -35,6 +35,7 @@ export function SpacesList({
   emptyMessage,
   onClone,
   onCloneTo,
+  onLinkExisting,
   onSync,
   onOpen,
 }: {
@@ -46,6 +47,7 @@ export function SpacesList({
   emptyMessage: string;
   onClone: (space: Space) => void;
   onCloneTo: (space: Space) => void;
+  onLinkExisting: (space: Space) => void;
   onSync: (repoId: string, path: string, slug: string) => void;
   onOpen: (clone: CloneRecord) => void;
 }) {
@@ -122,6 +124,16 @@ export function SpacesList({
                     className={iconBtn}
                   >
                     <FolderInput size={14} strokeWidth={1.333} aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => onLinkExisting(space)}
+                    aria-label={`Link an existing local folder to ${space.slug}`}
+                    title="Link an existing folder…"
+                    className={iconBtn}
+                  >
+                    <Link2 size={14} strokeWidth={1.333} aria-hidden="true" />
                   </button>
                 </>
               )}

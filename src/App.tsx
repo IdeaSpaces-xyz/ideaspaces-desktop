@@ -107,7 +107,7 @@ function SignedInView({
                   </button>
                 )}
               </div>
-              <WorkspaceBar />
+              <WorkspaceBar onLinkFolder={actions.linkFolder} linking={actions.linking} />
               {spaces.status === "loading" && (
                 <p className="text-sm text-is-text-tertiary">Loading repos…</p>
               )}
@@ -136,6 +136,7 @@ function SignedInView({
                   }
                   onClone={actions.clone}
                   onCloneTo={actions.cloneTo}
+                  onLinkExisting={actions.linkExisting}
                   onSync={actions.sync}
                   onOpen={setEditingClone}
                 />
