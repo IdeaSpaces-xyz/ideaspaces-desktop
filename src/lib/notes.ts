@@ -106,6 +106,39 @@ export async function listDir(cloneDir: string, relPath: string): Promise<DirLis
   return { folders, files };
 }
 
+/**
+ * Every markdown note in the clone, recursively (skipping hidden/build dirs).
+ * No content is read — just path/relPath/name — so this is cheap enough to build
+ * the wiki-link index on. Sub-folders are walked in parallel.
+ */
+export async function listAllNotes(cloneDir: string): Promise<NoteFile[]> {
+  const root = cloneDir.replace(/\/+$/, "");
+  const out: NoteFile[] = [];
+
+  async function walk(absDir: string, relDir: string): Promise<void> {
+    let entries: DirEntry[];
+    try {
+      entries = await readDir(absDir);
+    } catch {
+      return; // unreadable dir (permissions/TCC) — skip, don't abort the walk
+    }
+    const subdirs: Array<{ abs: string; rel: string }> = [];
+    for (const entry of entries) {
+      const rel = relDir ? `${relDir}/${entry.name}` : entry.name;
+      const abs = `${absDir}/${entry.name}`;
+      if (entry.isDirectory) {
+        if (!isHiddenOrSkipped(entry.name)) subdirs.push({ abs, rel });
+      } else if (entry.isFile && isMarkdown(entry.name)) {
+        out.push({ path: abs, relPath: rel, name: baseName(entry.name) });
+      }
+    }
+    await Promise.all(subdirs.map((d) => walk(d.abs, d.rel)));
+  }
+
+  await walk(root, "");
+  return out;
+}
+
 /** Read a note's raw content from disk. */
 export function readNote(path: string): Promise<string> {
   return readTextFile(path);

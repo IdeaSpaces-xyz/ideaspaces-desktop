@@ -15,8 +15,11 @@ import {
   X,
 } from "lucide-react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import type { WikiLinkResolvedTarget } from "@atomic-editor/editor";
 import { NoteEditor } from "../editor/NoteEditor";
 import { useDir } from "../editor/useDir";
+import { useWikiIndex } from "../editor/useWikiIndex";
+import { wikiTargetName } from "../editor/wikiIndex";
 import { createFolder, createNote, readNote, writeNote, type FolderEntry, type NoteFile } from "../lib/notes";
 import { ask } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -41,12 +44,16 @@ function NotePane({
   onDirtyChange,
   onBusyChange,
   onClose,
+  onWikiOpen,
+  resolveWiki,
 }: {
   note: NoteFile;
   clone: CloneRecord;
   onDirtyChange: (dirty: boolean) => void;
   onBusyChange: (busy: boolean) => void;
   onClose: () => void;
+  onWikiOpen: (target: string) => void;
+  resolveWiki: (target: string) => WikiLinkResolvedTarget | null;
 }) {
   const toast = useToast();
   const [content, setContent] = useState<string | null>(null);
@@ -179,6 +186,8 @@ function NotePane({
             }}
             onSave={() => void save()}
             onLinkClick={(url) => void openUrl(url).catch((err) => toast(errMessage(err), "error"))}
+            onWikiOpen={onWikiOpen}
+            resolveWiki={resolveWiki}
           />
         )}
       </div>
@@ -322,7 +331,17 @@ function NoteList({
 // live-preview). Open by default — it's the folder's orientation. Keyed by path
 // so navigating folders remounts with the new README. CodeMirror only mounts
 // when expanded, so a collapsed README costs nothing.
-function ReadmeCard({ note, onLinkClick }: { note: NoteFile; onLinkClick: (url: string) => void }) {
+function ReadmeCard({
+  note,
+  onLinkClick,
+  onWikiOpen,
+  resolveWiki,
+}: {
+  note: NoteFile;
+  onLinkClick: (url: string) => void;
+  onWikiOpen: (target: string) => void;
+  resolveWiki: (target: string) => WikiLinkResolvedTarget | null;
+}) {
   const [open, setOpen] = useState(true);
   const [content, setContent] = useState<string | null>(null);
   const [error, setError] = useState<string | undefined>(undefined);
@@ -371,6 +390,8 @@ function ReadmeCard({ note, onLinkClick }: { note: NoteFile; onLinkClick: (url: 
               onChange={() => {}}
               onSave={() => {}}
               onLinkClick={onLinkClick}
+              onWikiOpen={onWikiOpen}
+              resolveWiki={resolveWiki}
             />
           )}
         </div>
@@ -491,6 +512,7 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
   const [creating, setCreating] = useState<null | "note" | "folder">(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const { status, folders, files, error, reload } = useDir(clone.path, path);
+  const wiki = useWikiIndex(clone.path);
 
   const openLink = useCallback(
     (url: string) => void openUrl(url).catch((err) => toast(errMessage(err), "error")),
@@ -546,7 +568,7 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
           // Opening the new note replaces any open one — guard unsaved edits.
           if (!(await confirmLeave())) return;
           const note = await createNote(clone.path, path, name);
-          await reload();
+          await Promise.all([reload(), wiki.reload()]);
           setSelected(note);
         }
         setCreating(null);
@@ -554,7 +576,54 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
         toast(errMessage(err), "error");
       }
     },
-    [creating, clone.path, path, reload, confirmLeave, toast],
+    [creating, clone.path, path, reload, wiki, confirmLeave, toast],
+  );
+
+  // `[[wiki-link]]` styling: resolved (points at a note) vs. missing.
+  const resolveWiki = useCallback(
+    (target: string): WikiLinkResolvedTarget | null => {
+      const note = wiki.index.resolve(target);
+      return note
+        ? { target, label: note.name, status: "resolved" }
+        : { target, label: target, status: "missing" };
+    },
+    [wiki.index],
+  );
+
+  // Click a `[[wiki-link]]`: open the matching note, or offer to create it
+  // (Obsidian-style). A new note is created in the current folder, blank.
+  const openWiki = useCallback(
+    async (target: string) => {
+      const note = wiki.index.resolve(target);
+      if (note) {
+        if (!(await confirmLeave())) return;
+        const dir = note.relPath.includes("/")
+          ? note.relPath.slice(0, note.relPath.lastIndexOf("/"))
+          : "";
+        setCreating(null);
+        setPath(dir);
+        setSelected(note);
+        return;
+      }
+      const name = wikiTargetName(target);
+      if (!name) return;
+      const create = await ask(`"${name}" doesn't exist yet. Create it?`, {
+        title: "Create note",
+        kind: "info",
+      });
+      if (!create) return;
+      if (!(await confirmLeave())) return;
+      try {
+        const created = await createNote(clone.path, path, name);
+        await Promise.all([reload(), wiki.reload()]);
+        setCreating(null);
+        setSelected(created);
+        toast(`Created ${created.name}`);
+      } catch (err) {
+        toast(errMessage(err), "error");
+      }
+    },
+    [wiki, confirmLeave, clone.path, path, reload, toast],
   );
 
   const segments = path ? path.split("/") : [];
@@ -617,7 +686,15 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
                     onCancel={() => setCreating(null)}
                   />
                 )}
-                {readme && <ReadmeCard key={readme.path} note={readme} onLinkClick={openLink} />}
+                {readme && (
+                  <ReadmeCard
+                    key={readme.path}
+                    note={readme}
+                    onLinkClick={openLink}
+                    onWikiOpen={(t) => void openWiki(t)}
+                    resolveWiki={resolveWiki}
+                  />
+                )}
                 {empty && !readme && !creating ? (
                   <p className="text-sm text-is-text-tertiary">This folder has no notes or sub-folders.</p>
                 ) : (
@@ -658,6 +735,8 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
                 onDirtyChange={setDirty}
                 onBusyChange={setBusy}
                 onClose={() => void closeNote()}
+                onWikiOpen={(t) => void openWiki(t)}
+                resolveWiki={resolveWiki}
               />
             </section>
           </>

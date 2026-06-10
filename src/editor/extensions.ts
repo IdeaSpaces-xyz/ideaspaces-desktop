@@ -12,6 +12,8 @@ import {
   extendEmphasisPair,
   imageBlocks,
   inlinePreview,
+  wikiLinks,
+  type WikiLinkResolvedTarget,
 } from "@atomic-editor/editor";
 import "@atomic-editor/editor/styles.css";
 // Serif heading font — loaded with the editor (lazy chunk), not the initial app.
@@ -76,6 +78,10 @@ export function noteEditorExtensions(opts: {
   readOnly?: boolean;
   /** Grow to content height instead of filling/scrolling the host. */
   autoHeight?: boolean;
+  /** Open a `[[wiki-link]]` target (resolve + navigate, or offer to create). */
+  onWikiOpen?: (target: string) => void;
+  /** Resolve a target's status for styling (resolved vs. missing). */
+  resolveWiki?: (target: string) => WikiLinkResolvedTarget | null;
 }): Extension[] {
   return [
     highlightSpecialChars(),
@@ -119,6 +125,19 @@ export function noteEditorExtensions(opts: {
     keymap.of([...closeBracketsKeymap, ...historyKeymap, ...markdownKeymap, ...defaultKeymap]),
     imageBlocks(),
     inlinePreview({ onLinkClick: opts.onLinkClick }),
+    // `[[wiki-links]]` — render + resolve (resolved/missing styling) + open on
+    // click. Only wired when the host supplies handlers (the clone's note index).
+    ...(opts.onWikiOpen || opts.resolveWiki
+      ? [
+          wikiLinks({
+            openOnClick: true,
+            onOpen: opts.onWikiOpen,
+            resolve: opts.resolveWiki
+              ? async (target) => opts.resolveWiki!(target)
+              : undefined,
+          }),
+        ]
+      : []),
     EditorView.updateListener.of((update) => {
       if (update.docChanged) opts.onChange(update.state.doc.toString());
     }),

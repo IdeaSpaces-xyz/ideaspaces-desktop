@@ -82,6 +82,31 @@
   text-decoration-color: var(--is-accent-text);
 }
 
+/* Wiki-links — resolved reads like a link (accent); missing is dimmed + dashed
+   to signal "click to create". Both themes via `--is-*`. */
+.cm-note-host .cm-atomic-wiki-link {
+  color: var(--is-accent-text);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-decoration-color: color-mix(in srgb, var(--is-accent-text) 45%, transparent);
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.cm-note-host .cm-atomic-wiki-link:hover {
+  text-decoration-color: var(--is-accent-text);
+}
+.cm-note-host .cm-atomic-wiki-link-missing,
+.cm-note-host .cm-atomic-wiki-link-unresolved {
+  color: var(--is-text-tertiary);
+  text-decoration-style: dashed;
+  text-decoration-color: color-mix(in srgb, var(--is-text-tertiary) 60%, transparent);
+}
+.cm-note-host .cm-atomic-wiki-link-missing:hover,
+.cm-note-host .cm-atomic-wiki-link-unresolved:hover {
+  color: var(--is-text-secondary);
+  text-decoration-color: var(--is-text-tertiary);
+}
+
 /* Code. */
 .cm-note-host .cm-atomic-inline-code {
   font-family: var(--font-chrome);
