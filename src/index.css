@@ -98,6 +98,17 @@
 
 /* --- Base --- */
 
+/* Invisible scrollbars across the app — content still scrolls (wheel/trackpad),
+   the bars just don't take visual space. Desktop-app convention; macOS already
+   overlays them, this also covers "always show scrollbars" systems. */
+* {
+  scrollbar-width: none; /* Firefox / spec */
+}
+*::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
 html {
   background-color: var(--is-bg);
 }
