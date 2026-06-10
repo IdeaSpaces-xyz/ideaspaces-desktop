@@ -512,7 +512,7 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
   const [creating, setCreating] = useState<null | "note" | "folder">(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const { status, folders, files, error, reload } = useDir(clone.path, path);
-  const wiki = useWikiIndex(clone.path);
+  const { index: wikiIndex, reload: reloadWiki } = useWikiIndex(clone.path);
 
   const openLink = useCallback(
     (url: string) => void openUrl(url).catch((err) => toast(errMessage(err), "error")),
@@ -568,7 +568,7 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
           // Opening the new note replaces any open one — guard unsaved edits.
           if (!(await confirmLeave())) return;
           const note = await createNote(clone.path, path, name);
-          await Promise.all([reload(), wiki.reload()]);
+          await Promise.all([reload(), reloadWiki()]);
           setSelected(note);
         }
         setCreating(null);
@@ -576,25 +576,25 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
         toast(errMessage(err), "error");
       }
     },
-    [creating, clone.path, path, reload, wiki.reload, confirmLeave, toast],
+    [creating, clone.path, path, reload, reloadWiki, confirmLeave, toast],
   );
 
   // `[[wiki-link]]` styling: resolved (points at a note) vs. missing.
   const resolveWiki = useCallback(
     (target: string): WikiLinkResolvedTarget | null => {
-      const note = wiki.index.resolve(target);
+      const note = wikiIndex.resolve(target);
       return note
         ? { target, label: note.name, status: "resolved" }
         : { target, label: target, status: "missing" };
     },
-    [wiki.index],
+    [wikiIndex],
   );
 
   // Click a `[[wiki-link]]`: open the matching note, or offer to create it
   // (Obsidian-style). A new note is created in the current folder, blank.
   const openWiki = useCallback(
     async (target: string) => {
-      const note = wiki.index.resolve(target);
+      const note = wikiIndex.resolve(target);
       if (note) {
         if (!(await confirmLeave())) return;
         const dir = note.relPath.includes("/")
@@ -618,7 +618,7 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
       if (!(await confirmLeave())) return;
       try {
         const created = await createNote(clone.path, path, name);
-        await Promise.all([reload(), wiki.reload()]);
+        await Promise.all([reload(), reloadWiki()]);
         setCreating(null);
         setSelected(created);
         toast(`Created ${created.name}`);
@@ -626,7 +626,7 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
         toast(errMessage(err), "error");
       }
     },
-    [wiki.index, wiki.reload, confirmLeave, clone.path, path, reload, toast],
+    [wikiIndex, reloadWiki, confirmLeave, clone.path, path, reload, toast],
   );
 
   const segments = path ? path.split("/") : [];
