@@ -87,7 +87,11 @@ function NotePane({
         if (!/nothing to commit|no changes/i.test(errMessage(err))) throw err;
       }
       const res = await syncClone(clone.path);
-      toast(`Published ${note.name} — pushed ${res.pushed}`);
+      toast(
+        res.pushed
+          ? `Published ${note.name} — pushed ${res.pushed} commit${res.pushed === 1 ? "" : "s"}`
+          : `Synced ${note.name} — already up to date`,
+      );
     } catch (err) {
       toast(errMessage(err), "error");
     } finally {

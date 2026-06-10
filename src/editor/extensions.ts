@@ -14,6 +14,8 @@ import {
   inlinePreview,
 } from "@atomic-editor/editor";
 import "@atomic-editor/editor/styles.css";
+// Serif heading font — loaded with the editor (lazy chunk), not the initial app.
+import "@fontsource/sorts-mill-goudy";
 import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { markdown, markdownKeymap, markdownLanguage } from "@codemirror/lang-markdown";
