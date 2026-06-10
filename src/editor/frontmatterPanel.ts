@@ -100,7 +100,7 @@ class FrontmatterWidget extends WidgetType {
         const val = document.createElement("dd");
         val.className = f.value ? "cm-fm-val" : "cm-fm-val cm-fm-empty";
         val.textContent = f.value || "—";
-        val.title = f.value;
+        if (f.value) val.title = f.value;
         rows.append(key, val);
       }
       root.append(rows);
@@ -167,7 +167,9 @@ const cursorGuard = EditorView.updateListener.of((u) => {
   if (!u.selectionSet && !u.docChanged) return;
   const fm = frontmatterRange(u.state);
   const head = u.state.selection.main.head;
-  if (!fm || head < fm.from || head > fm.to) {
+  // `fm.to` is the start of the first body line, so `>=` collapses as soon as
+  // the cursor reaches the body (e.g. ↓ from the closing fence).
+  if (!fm || head < fm.from || head >= fm.to) {
     u.view.dispatch({ effects: setReveal.of(false) });
   }
 });
