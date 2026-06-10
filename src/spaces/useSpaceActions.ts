@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import { join } from "@tauri-apps/api/path";
 import { open } from "@tauri-apps/plugin-dialog";
-import { cloneSpace, syncClone, type Space } from "../lib/cli";
+import { cloneSpace, linkClone, syncClone, type Space } from "../lib/cli";
 import { defaultWorkspaceDir } from "../lib/workspace";
 import { useToast } from "../toast/toast-context";
 
@@ -62,6 +62,52 @@ export function useSpaceActions(reload: () => Promise<void> | void) {
     [clone],
   );
 
+  // Repo-first: bind a folder you already have to THIS space. The CLI verifies
+  // the folder's git origin matches the space before recording the binding.
+  const linkExisting = useCallback(
+    async (space: Space) => {
+      const picked = await open({
+        directory: true,
+        multiple: false,
+        title: `Link a local folder to ${space.slug}…`,
+      });
+      if (typeof picked !== "string") return;
+      setBusy(space.repo_id, true);
+      try {
+        await linkClone(picked, space.repo_id);
+        await reload();
+        toast(`Linked ${space.slug}`);
+      } catch (err) {
+        toast(errMessage(err), "error");
+      } finally {
+        setBusy(space.repo_id, false);
+      }
+    },
+    [reload, setBusy, toast],
+  );
+
+  // Folder-first: point at any folder; the CLI auto-detects which space it is
+  // from its git origin. Not tied to a row, so it has its own busy flag.
+  const [linking, setLinking] = useState(false);
+  const linkFolder = useCallback(async () => {
+    const picked = await open({
+      directory: true,
+      multiple: false,
+      title: "Link a folder you already have…",
+    });
+    if (typeof picked !== "string") return;
+    setLinking(true);
+    try {
+      const record = await linkClone(picked);
+      await reload();
+      toast(`Linked ${record.slug}`);
+    } catch (err) {
+      toast(errMessage(err), "error");
+    } finally {
+      setLinking(false);
+    }
+  }, [reload, toast]);
+
   const sync = useCallback(
     async (repoId: string, path: string, slug: string) => {
       setBusy(repoId, true);
@@ -82,5 +128,5 @@ export function useSpaceActions(reload: () => Promise<void> | void) {
     [reload, setBusy, toast],
   );
 
-  return { busyIds, clone, cloneTo, sync };
+  return { busyIds, linking, clone, cloneTo, linkExisting, linkFolder, sync };
 }
