@@ -278,7 +278,7 @@ function NoteList({
                 type="button"
                 disabled={disabled}
                 onClick={() => onSelect(note)}
-                aria-current={active}
+                aria-current={active ? "true" : undefined}
                 className={cn(
                   "flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left transition disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring",
                   active ? "bg-is-surface-alt" : "hover:bg-is-surface-alt",
