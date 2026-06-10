@@ -300,7 +300,7 @@ function NoteList({
                     ? "border-is-border bg-is-surface-alt"
                     : "border-transparent hover:border-is-border hover:bg-is-surface-alt",
                 )}
-                title={note.summary ? `${note.name} — ${note.summary}` : note.relPath}
+                title={note.summary ? `${note.relPath} — ${note.summary}` : note.relPath}
               >
                 <FileText size={15} strokeWidth={1.333} className="shrink-0 text-is-text-tertiary" aria-hidden="true" />
                 <span className="min-w-0 flex-1">
