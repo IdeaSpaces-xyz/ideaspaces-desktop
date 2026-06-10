@@ -15,8 +15,9 @@ export interface NoteFile {
   name: string;
 }
 
-// Directories we never descend into when listing notes.
-const SKIP_DIRS = new Set([".git", "node_modules", ".obsidian", "dist", "target", ".vite"]);
+// Non-hidden directories we never descend into when listing notes. Hidden dirs
+// (.git, .obsidian, …) are skipped separately by the leading-dot check below.
+const SKIP_DIRS = new Set(["node_modules", "dist", "target"]);
 
 function isMarkdown(name: string): boolean {
   return name.endsWith(".md") || name.endsWith(".markdown");
@@ -28,8 +29,11 @@ function baseName(relPath: string): string {
 }
 
 /**
- * List a clone's markdown notes, recursively (skipping `.git` and friends).
+ * List a clone's markdown notes, recursively (skipping hidden dirs and friends).
  * Returns them sorted by relative path so the tree reads top-down.
+ *
+ * Paths are joined with `/` — correct on the macOS/Linux desktop targets (v1
+ * ships macOS first). Windows back-slash normalisation is a follow-up.
  */
 export async function listNotes(cloneDir: string): Promise<NoteFile[]> {
   const out: NoteFile[] = [];

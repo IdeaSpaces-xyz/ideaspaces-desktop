@@ -3,6 +3,7 @@ import { ArrowLeft, FileText, RefreshCw, Save, UploadCloud } from "lucide-react"
 import { NoteEditor } from "../editor/NoteEditor";
 import { useNotes } from "../editor/useNotes";
 import { readNote, writeNote, type NoteFile } from "../lib/notes";
+import { ask } from "@tauri-apps/plugin-dialog";
 import { commitClone, syncClone, type CloneRecord } from "../lib/cli";
 import { useToast } from "../toast/toast-context";
 
@@ -75,11 +76,14 @@ function NotePane({
     try {
       if (dirty && !(await save())) return;
       try {
+        // Scoped commit: only this note's path, never other staged work.
         await commitClone(clone.path, `Edit ${note.relPath}`, [note.relPath]);
       } catch (err) {
         // Nothing new to commit for this note is fine — fall through and sync
-        // to push any already-committed history.
-        if (!/nothing to commit/i.test(errMessage(err))) throw err;
+        // to push any already-committed history. (Matches the CLI/git "nothing
+        // to commit" text; TODO: a machine-readable signal from the CLI would
+        // be more robust on non-English systems.)
+        if (!/nothing to commit|no changes/i.test(errMessage(err))) throw err;
       }
       const res = await syncClone(clone.path);
       toast(`Published ${note.name} — pushed ${res.pushed}`);
@@ -140,12 +144,17 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
   const [selected, setSelected] = useState<NoteFile | undefined>(undefined);
   const [dirty, setDirty] = useState(false);
 
-  // Guard navigation that would drop the open note's unsaved edits.
-  function confirmLeave(): boolean {
-    return !dirty || window.confirm("Discard unsaved changes to this note?");
+  // Guard navigation that would drop the open note's unsaved edits. Uses the
+  // native Tauri dialog (consistent across webview backends, unlike window.confirm).
+  async function confirmLeave(): Promise<boolean> {
+    if (!dirty) return true;
+    return ask("Discard unsaved changes to this note?", {
+      title: "Unsaved changes",
+      kind: "warning",
+    });
   }
-  function selectNote(note: NoteFile) {
-    if (note.relPath === selected?.relPath || confirmLeave()) setSelected(note);
+  async function selectNote(note: NoteFile) {
+    if (note.relPath === selected?.relPath || (await confirmLeave())) setSelected(note);
   }
 
   return (
@@ -153,7 +162,7 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
       <div className="flex items-center gap-3 border-b border-is-border px-4 py-2.5">
         <button
           type="button"
-          onClick={() => confirmLeave() && onClose()}
+          onClick={() => void confirmLeave().then((ok) => ok && onClose())}
           className="inline-flex items-center gap-1.5 text-xs text-is-text-tertiary transition hover:text-is-text"
         >
           <ArrowLeft size={14} strokeWidth={1.333} aria-hidden="true" />
@@ -186,7 +195,7 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
                   <li key={note.relPath}>
                     <button
                       type="button"
-                      onClick={() => selectNote(note)}
+                      onClick={() => void selectNote(note)}
                       aria-current={selected?.relPath === note.relPath}
                       className={`flex w-full items-center gap-2 truncate rounded-md px-2 py-1.5 text-left text-sm transition ${
                         selected?.relPath === note.relPath

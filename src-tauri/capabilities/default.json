@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Main window. Sidecar execution scoped to the ideaspaces CLI binary only. `args: true` is required: Tauri runs a sidecar with the matched scope entry's args (not the call's), so per-command arg allow-lists all resolve to the first entry. Verbs are passed at the call site instead. Filesystem access is read/write text + read-dir scoped to the home tree — clones may live anywhere the user picked (default `~/IdeaSpaces`, or Documents/Dropbox), and the editor reads/writes their note *content* only; git stays in the sidecar. macOS TCC gates protected folders on top of this scope.",
+  "description": "Main window. Sidecar execution scoped to the ideaspaces CLI binary only. `args: true` is required: Tauri runs a sidecar with the matched scope entry's args (not the call's), so per-command arg allow-lists all resolve to the first entry. Verbs are passed at the call site instead. Filesystem access is read/write text + read-dir scoped to the home tree — clones may live anywhere the user picked (default `~/IdeaSpaces`, or Documents/Dropbox), and the editor reads/writes their note *content* only; git stays in the sidecar. macOS TCC gates protected folders on top of this scope. TODO(security, post-v1): tighten `$HOME/**` to the clone dir by routing note read/write through the CLI sidecar (the sidecar already runs in any clone with no fs scope), removing webview home-tree access entirely.",
   "windows": ["main"],
   "permissions": [
     "core:default",
@@ -44,6 +44,7 @@
     },
     "shell:allow-kill",
     "dialog:allow-open",
+    "dialog:allow-ask",
     "store:default"
   ]
 }
