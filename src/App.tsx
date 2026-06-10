@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { lazy, Suspense, useMemo, useState, type ReactNode } from "react";
 import { RefreshCw } from "lucide-react";
 import { ConversationsView } from "./components/ConversationsView";
 import { Header } from "./components/Header";
@@ -13,6 +13,13 @@ import { useSpaceActions } from "./spaces/useSpaceActions";
 import { useCloneStatuses } from "./spaces/useCloneStatuses";
 import { useTheme, type ThemeMode } from "./theme/useTheme";
 import { deriveSpaceContexts, resolveContext, spacesForContext } from "./lib/space-context";
+import type { CloneRecord } from "./lib/cli";
+
+// Code-split: CodeMirror + the live-preview layer load only when a note opens,
+// keeping the initial bundle (login/browse) light.
+const EditorSurface = lazy(() =>
+  import("./components/EditorSurface").then((m) => ({ default: m.EditorSurface })),
+);
 
 type Auth = ReturnType<typeof useAuth>;
 
@@ -40,6 +47,7 @@ function SignedInView({
   const actions = useSpaceActions(spaces.reload);
   const [activeRef, setActiveRef] = useState<string | undefined>(undefined);
   const [view, setView] = useState<View>("repos");
+  const [editingClone, setEditingClone] = useState<CloneRecord | undefined>(undefined);
 
   const contexts = useMemo(
     () => deriveSpaceContexts(spaces.username, spaces.spaces),
@@ -68,6 +76,13 @@ function SignedInView({
         onSignOut={auth.signOut}
         signingOut={auth.status === "signing-out"}
       />
+      {editingClone ? (
+        <Suspense
+          fallback={<div className="flex flex-1 items-center justify-center text-sm text-is-text-tertiary">Loading editor…</div>}
+        >
+          <EditorSurface clone={editingClone} onClose={() => setEditingClone(undefined)} />
+        </Suspense>
+      ) : (
       <div className="flex min-h-0 flex-1">
         <Rail view={view} onSelect={setView} />
         <main className="flex-1 overflow-y-auto">
@@ -122,6 +137,7 @@ function SignedInView({
                   onClone={actions.clone}
                   onCloneTo={actions.cloneTo}
                   onSync={actions.sync}
+                  onOpen={setEditingClone}
                 />
               )}
               {auth.error && <p className="mt-3 text-sm text-is-danger-text">{auth.error}</p>}
@@ -131,6 +147,7 @@ function SignedInView({
           )}
         </main>
       </div>
+      )}
     </div>
   );
 }

@@ -1,0 +1,118 @@
+/*
+ * Note-editor typography — the is_web v2 "open note" look, layered over
+ * atomic-editor's structural live-preview CSS (imported first in extensions.ts).
+ * We only restyle fonts/sizes/colors here; the hide-markup / reveal-on-cursor
+ * mechanics stay as the package ships them.
+ *
+ * Two-font editorial system: Inter body, Sorts Mill Goudy serif headings,
+ * Fragment Mono code. Colors are the `--is-*` semantic tokens, so light/dark
+ * follows the app theme.
+ */
+
+.cm-note-host {
+  height: 100%;
+}
+
+.cm-note-host .cm-content {
+  padding-block: 0.5rem 4rem;
+}
+
+/* Headings — serif, editorial weights/spacing (matches .is-note-prose). */
+.cm-note-host .cm-atomic-h1,
+.cm-note-host .cm-atomic-h2,
+.cm-note-host .cm-atomic-h3 {
+  font-family: var(--font-prose);
+  font-weight: 400;
+  color: var(--is-text);
+}
+.cm-note-host .cm-atomic-h1 {
+  font-size: 2.5rem;
+  line-height: 1.1;
+  letter-spacing: -0.018em;
+}
+.cm-note-host .cm-atomic-h2 {
+  font-size: 1.75rem;
+  line-height: 1.2;
+  letter-spacing: -0.012em;
+}
+.cm-note-host .cm-atomic-h3 {
+  font-size: 1.375rem;
+  line-height: 1.25;
+  letter-spacing: -0.008em;
+}
+/* h4–h6 — Fragment Mono kicker (uppercase, tertiary), as in v2 prose. */
+.cm-note-host .cm-atomic-h4,
+.cm-note-host .cm-atomic-h5,
+.cm-note-host .cm-atomic-h6 {
+  font-family: var(--font-chrome);
+  font-size: 0.6875rem;
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--is-text-tertiary);
+}
+
+/* Inline emphasis. */
+.cm-note-host .cm-atomic-strong {
+  font-weight: 600;
+  color: inherit;
+}
+.cm-note-host .cm-atomic-em {
+  font-style: italic;
+  color: inherit;
+}
+.cm-note-host .cm-atomic-strike {
+  text-decoration: line-through;
+  color: var(--is-text-tertiary);
+}
+
+/* Links — accent text, soft underline, solid on hover. */
+.cm-note-host .cm-atomic-link {
+  color: var(--is-accent-text);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-decoration-color: color-mix(in srgb, var(--is-accent-text) 45%, transparent);
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.cm-note-host .cm-atomic-link:hover {
+  text-decoration-color: var(--is-accent-text);
+}
+
+/* Code. */
+.cm-note-host .cm-atomic-inline-code {
+  font-family: var(--font-chrome);
+  font-size: 0.85em;
+  background-color: var(--is-surface-alt);
+  color: var(--is-text);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.cm-note-host .cm-atomic-fenced-code {
+  font-family: var(--font-chrome);
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  background-color: var(--is-surface-alt);
+  border: 1px solid var(--is-border);
+  border-radius: 8px;
+}
+
+/* Blockquote — serif italic, left rule. */
+.cm-note-host .cm-atomic-blockquote {
+  font-family: var(--font-prose);
+  font-style: italic;
+  color: var(--is-text-secondary);
+  border-left: 1.5px solid var(--is-text-tertiary);
+}
+
+/* List markers + horizontal rule + task colors. */
+.cm-note-host .cm-atomic-list-marker,
+.cm-note-host .cm-atomic-bullet {
+  color: var(--is-text-tertiary);
+}
+.cm-note-host .cm-atomic-hr {
+  border-top: 1px solid var(--is-border);
+}
+.cm-note-host .cm-atomic-task-done {
+  color: var(--is-text-tertiary);
+}

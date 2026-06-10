@@ -1,4 +1,4 @@
-import { Download, FolderInput, RefreshCw } from "lucide-react";
+import { Download, FolderInput, PenLine, RefreshCw } from "lucide-react";
 import type { CloneRecord, CloneStatus, Space } from "../lib/cli";
 
 const actionBtn =
@@ -36,6 +36,7 @@ export function SpacesList({
   onClone,
   onCloneTo,
   onSync,
+  onOpen,
 }: {
   spaces: Space[];
   cloneIndex: Map<string, CloneRecord>;
@@ -46,6 +47,7 @@ export function SpacesList({
   onClone: (space: Space) => void;
   onCloneTo: (space: Space) => void;
   onSync: (repoId: string, path: string, slug: string) => void;
+  onOpen: (clone: CloneRecord) => void;
 }) {
   if (spaces.length === 0) {
     return <p className="text-sm text-is-text-secondary">{emptyMessage}</p>;
@@ -74,6 +76,15 @@ export function SpacesList({
               {clone ? (
                 <>
                   <StatusBadge status={status} failed={failedStatuses.has(space.repo_id)} />
+                  <button
+                    type="button"
+                    onClick={() => onOpen(clone)}
+                    aria-label={`Open ${space.slug} notes`}
+                    title="Open notes"
+                    className={iconBtn}
+                  >
+                    <PenLine size={14} strokeWidth={1.333} aria-hidden="true" />
+                  </button>
                   {needsSync(status) && (
                     <button
                       type="button"
