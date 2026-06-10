@@ -329,12 +329,15 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
 
   const navigate = useCallback(
     async (nextPath: string) => {
-      if (nextPath === path || (await confirmLeave())) {
+      if (nextPath === path && !selected) return; // already here, nothing open
+      // Always guard — a no-op `||` short-circuit here would silently discard an
+      // open dirty note (e.g. clicking the root crumb while already at root).
+      if (await confirmLeave()) {
         setSelected(undefined); // the open note belongs to the level you left
         setPath(nextPath);
       }
     },
-    [path, confirmLeave],
+    [path, selected, confirmLeave],
   );
 
   const selectNote = useCallback(
@@ -367,7 +370,7 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
         <Breadcrumb slug={clone.slug} segments={segments} onNavigate={(p) => void navigate(p)} />
       </div>
 
-      <div ref={containerRef} className="flex min-h-0 flex-1" style={{ "--pw": `${paneWidth}px` } as CSSProperties}>
+      <div ref={containerRef} className="flex min-h-0 flex-1" style={{ "--pane-width": `${paneWidth}px` } as CSSProperties}>
         <nav className="min-w-0 flex-1 overflow-y-auto">
           <div className="mx-auto w-full max-w-2xl px-5 py-6">
             {status === "loading" && <p className="text-sm text-is-text-tertiary">Loading…</p>}
@@ -409,7 +412,7 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
             <Resizer containerRef={containerRef} width={paneWidth} onResize={setPaneWidth} />
             <section
               aria-label="Note editor"
-              className="flex shrink-0 overflow-hidden border-l border-is-border md:w-[var(--pw)] max-md:fixed max-md:inset-0 max-md:z-40 max-md:w-full"
+              className="flex shrink-0 overflow-hidden border-l border-is-border md:w-[var(--pane-width)] max-md:fixed max-md:inset-0 max-md:z-40 max-md:w-full"
             >
               <NotePane
                 key={selected.path}

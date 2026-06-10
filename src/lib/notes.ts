@@ -81,21 +81,26 @@ export async function listDir(cloneDir: string, relPath: string): Promise<DirLis
   const absDir = relPath ? `${root}/${relPath}` : root;
   const entries: DirEntry[] = await readDir(absDir);
 
-  const folders: FolderEntry[] = [];
-  const files: NoteFile[] = [];
+  // Each entry's folder-count / summary read is independent — fan them out so a
+  // folder with N notes is one round of parallel I/O, not N serial reads.
+  const items = await Promise.all(
+    entries.map(async (entry): Promise<{ folder?: FolderEntry; file?: NoteFile }> => {
+      const rel = relPath ? `${relPath}/${entry.name}` : entry.name;
+      const abs = `${absDir}/${entry.name}`;
+      if (entry.isDirectory) {
+        if (isHiddenOrSkipped(entry.name)) return {};
+        return { folder: { name: entry.name, relPath: rel, fileCount: await countMarkdown(abs) } };
+      }
+      if (entry.isFile && isMarkdown(entry.name)) {
+        const content = await readTextFile(abs).catch(() => "");
+        return { file: { path: abs, relPath: rel, name: baseName(entry.name), summary: noteSummary(content) } };
+      }
+      return {};
+    }),
+  );
 
-  for (const entry of entries) {
-    const rel = relPath ? `${relPath}/${entry.name}` : entry.name;
-    const abs = `${absDir}/${entry.name}`;
-    if (entry.isDirectory) {
-      if (isHiddenOrSkipped(entry.name)) continue;
-      folders.push({ name: entry.name, relPath: rel, fileCount: await countMarkdown(abs) });
-    } else if (entry.isFile && isMarkdown(entry.name)) {
-      const content = await readTextFile(abs).catch(() => "");
-      files.push({ path: abs, relPath: rel, name: baseName(entry.name), summary: noteSummary(content) });
-    }
-  }
-
+  const folders = items.map((it) => it.folder).filter((f): f is FolderEntry => !!f);
+  const files = items.map((it) => it.file).filter((f): f is NoteFile => !!f);
   folders.sort((a, b) => a.name.localeCompare(b.name));
   files.sort((a, b) => a.name.localeCompare(b.name));
   return { folders, files };
