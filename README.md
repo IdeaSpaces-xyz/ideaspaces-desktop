@@ -49,11 +49,16 @@ npm run tauri build    # sidecar + frontend + Rust release, then bundles the app
 Output lands in `src-tauri/target/release/bundle/`:
 
 - **`macos/IdeaSpaces.app`** — double-click to launch (or `open` it).
-- **`dmg/IdeaSpaces_<version>_aarch64.dmg`** — drag-to-Applications installer.
+- **`dmg/IdeaSpaces_<version>_<arch>.dmg`** — drag-to-Applications installer.
+  (`<arch>` is `aarch64` on Apple Silicon, `x86_64` on Intel.)
 
 ```bash
 open src-tauri/target/release/bundle/macos/IdeaSpaces.app
 ```
+
+v1 targets **macOS** first. `tauri build` also produces Linux/Windows bundles
+under the same `bundle/` root (packaging steps differ; the Gatekeeper note below
+is macOS-only) — but those platforms aren't tested yet.
 
 > **Unsigned build — macOS Gatekeeper.** The app you just built runs directly
 > (a locally-built binary carries no quarantine flag). But once the `.app`/`.dmg`
