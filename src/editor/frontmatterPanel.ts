@@ -9,8 +9,14 @@
 // the platform's navigation metadata is a deliberate, raw-YAML action.
 
 import { EditorView, WidgetType, type DecorationSet, Decoration } from "@codemirror/view";
-import { StateEffect, StateField, Prec, type Extension, type EditorState } from "@codemirror/state";
+import { Facet, StateEffect, StateField, Prec, type Extension, type EditorState } from "@codemirror/state";
 import { parseFrontmatter, type FrontmatterField } from "./frontmatter";
+
+// Whether the panel offers an "Edit" affordance. False for the read-only
+// README preview, where revealing raw YAML to edit makes no sense.
+const editableFacet = Facet.define<boolean, boolean>({
+  combine: (values) => (values.length ? values[0] : true),
+});
 
 // Toggle between the rendered panel and the raw, editable YAML.
 const setReveal = StateEffect.define<boolean>();
@@ -51,14 +57,17 @@ function revealRaw(view: EditorView): void {
 }
 
 class FrontmatterWidget extends WidgetType {
-  constructor(readonly fields: FrontmatterField[]) {
+  constructor(
+    readonly fields: FrontmatterField[],
+    readonly editable: boolean,
+  ) {
     super();
   }
 
   // Reuse the DOM while the frontmatter is unchanged (the common case — the
   // user is editing the body), so the panel doesn't flicker on every keystroke.
   eq(other: FrontmatterWidget): boolean {
-    return serialize(this.fields) === serialize(other.fields);
+    return this.editable === other.editable && serialize(this.fields) === serialize(other.fields);
   }
 
   toDOM(view: EditorView): HTMLElement {
@@ -74,23 +83,26 @@ class FrontmatterWidget extends WidgetType {
     const note = document.createElement("span");
     note.className = "cm-fm-note";
     note.textContent = "Properties — used to organize this note in IdeaSpaces";
-    const edit = document.createElement("button");
-    edit.type = "button";
-    edit.className = "cm-fm-edit";
-    edit.textContent = "Edit";
-    // mousedown (not click) so we win before the editor moves the selection on
-    // pointer interaction; keydown covers native button activation (Enter/Space)
-    // for keyboard users, which fires `click`, not `mousedown`.
-    edit.addEventListener("mousedown", (e) => {
-      e.preventDefault();
-      revealRaw(view);
-    });
-    edit.addEventListener("keydown", (e) => {
-      if (e.key !== "Enter" && e.key !== " ") return;
-      e.preventDefault();
-      revealRaw(view);
-    });
-    head.append(icon, note, edit);
+    head.append(icon, note);
+    if (this.editable) {
+      const edit = document.createElement("button");
+      edit.type = "button";
+      edit.className = "cm-fm-edit";
+      edit.textContent = "Edit";
+      // mousedown (not click) so we win before the editor moves the selection on
+      // pointer interaction; keydown covers native button activation
+      // (Enter/Space) for keyboard users, which fires `click`, not `mousedown`.
+      edit.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        revealRaw(view);
+      });
+      edit.addEventListener("keydown", (e) => {
+        if (e.key !== "Enter" && e.key !== " ") return;
+        e.preventDefault();
+        revealRaw(view);
+      });
+      head.append(edit);
+    }
     root.append(head);
 
     if (this.fields.length > 0) {
@@ -149,9 +161,10 @@ function buildDecorations(state: EditorState): DecorationSet {
   if (state.field(revealField)) return Decoration.none; // editing raw YAML
   const fm = frontmatterRange(state);
   if (!fm) return Decoration.none;
+  const editable = state.facet(editableFacet);
   // Block-replace the whole frontmatter line range with the panel widget.
   return Decoration.set(
-    Decoration.replace({ widget: new FrontmatterWidget(fm.fields), block: true }).range(
+    Decoration.replace({ widget: new FrontmatterWidget(fm.fields, editable), block: true }).range(
       fm.from,
       fm.to,
     ),
@@ -183,9 +196,14 @@ const cursorGuard = EditorView.updateListener.of((u) => {
   }
 });
 
-/** Render leading YAML frontmatter as a Properties panel over the raw block. */
-export function frontmatterPanel(): Extension {
+/**
+ * Render leading YAML frontmatter as a Properties panel over the raw block.
+ * `editable` (default true) controls the inline "Edit" affordance — pass false
+ * for read-only renders (the README preview).
+ */
+export function frontmatterPanel(opts: { editable?: boolean } = {}): Extension {
   return [
+    editableFacet.of(opts.editable ?? true),
     revealField,
     // High precedence so the block-replace wins over the live-preview layer's
     // rendering of the `---` delimiters as thematic-break rules.

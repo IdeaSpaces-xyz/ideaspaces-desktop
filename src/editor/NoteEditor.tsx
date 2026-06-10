@@ -9,16 +9,26 @@ import "./editor.css";
 // Mount-per-note: the parent keys this by file path, so opening a different
 // note remounts with fresh content — no doc-diffing, and the dirty/draft state
 // resets cleanly. Callbacks are held in refs so the CM view is built once.
+//
+// Also serves the inline README preview via `readOnly` (no edits/save) +
+// `autoHeight` (grow to content, page scrolls) + `autoFocus={false}` (don't
+// steal focus when it's just a rendered guide).
 export function NoteEditor({
   initialContent,
   onChange,
   onSave,
   onLinkClick,
+  readOnly = false,
+  autoHeight = false,
+  autoFocus = true,
 }: {
   initialContent: string;
   onChange: (doc: string) => void;
   onSave: () => void;
   onLinkClick: (url: string) => void;
+  readOnly?: boolean;
+  autoHeight?: boolean;
+  autoFocus?: boolean;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const onChangeRef = useRef(onChange);
@@ -42,15 +52,18 @@ export function NoteEditor({
           // Links open in the OS browser; the host (NotePane) owns the opener
           // so it can surface failures via toast.
           onLinkClick: (url) => onLinkClickRef.current(url),
+          readOnly,
+          autoHeight,
         }),
       }),
     });
-    view.focus();
+    if (autoFocus) view.focus();
 
     return () => view.destroy();
     // initialContent is the mount-time seed only; the parent remounts per note.
+    // The mode flags are likewise fixed per mount (parent keys by path/role).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return <div ref={hostRef} className="cm-note-host h-full" />;
+  return <div ref={hostRef} className={autoHeight ? "cm-note-host" : "cm-note-host h-full"} />;
 }

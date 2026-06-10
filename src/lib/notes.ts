@@ -7,7 +7,7 @@
 // Listing is per-level (folders + files at one path), mirroring is_web v2's
 // repo tree browser — you drill into folders rather than seeing every note flat.
 
-import { readDir, readTextFile, writeTextFile, type DirEntry } from "@tauri-apps/plugin-fs";
+import { exists, mkdir, readDir, readTextFile, writeTextFile, type DirEntry } from "@tauri-apps/plugin-fs";
 import { parseFrontmatter } from "../editor/frontmatter";
 
 export interface NoteFile {
@@ -114,4 +114,41 @@ export function readNote(path: string): Promise<string> {
 /** Write a note's raw content to disk. */
 export function writeNote(path: string, content: string): Promise<void> {
   return writeTextFile(path, content);
+}
+
+// Validate a user-typed name for a new note/folder: a single path segment, no
+// separators / traversal / hidden-dotfiles. Keeps creation inside the folder
+// the user is looking at.
+function safeSegment(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error("Name can't be empty.");
+  if (/[/\\]/.test(trimmed) || trimmed.includes("..") || trimmed.startsWith(".")) {
+    throw new Error("Name can't contain slashes or '..', or start with a dot.");
+  }
+  return trimmed;
+}
+
+/** Create a new sub-folder under `relPath`. Returns the new folder's relPath. */
+export async function createFolder(cloneDir: string, relPath: string, name: string): Promise<string> {
+  const seg = safeSegment(name);
+  const rel = relPath ? `${relPath}/${seg}` : seg;
+  const abs = `${cloneDir.replace(/\/+$/, "")}/${rel}`;
+  if (await exists(abs)) throw new Error(`"${seg}" already exists.`);
+  await mkdir(abs);
+  return rel;
+}
+
+/**
+ * Create a new, blank markdown note under `relPath` (`.md` appended if the user
+ * didn't). Returns the new note so the caller can open it. Refuses to clobber
+ * an existing file.
+ */
+export async function createNote(cloneDir: string, relPath: string, name: string): Promise<NoteFile> {
+  let seg = safeSegment(name);
+  if (!isMarkdown(seg)) seg += ".md";
+  const rel = relPath ? `${relPath}/${seg}` : seg;
+  const abs = `${cloneDir.replace(/\/+$/, "")}/${rel}`;
+  if (await exists(abs)) throw new Error(`"${seg}" already exists.`);
+  await writeTextFile(abs, "");
+  return { path: abs, relPath: rel, name: baseName(seg) };
 }
