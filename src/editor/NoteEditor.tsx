@@ -1,8 +1,11 @@
 import { useEffect, useRef } from "react";
 import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
+import type { WikiLinkResolvedTarget } from "@atomic-editor/editor";
 import { noteEditorExtensions } from "./extensions";
 import "./editor.css";
+
+const noop = () => {};
 
 // Live-preview markdown editor over a single note's raw content.
 //
@@ -21,6 +24,8 @@ export function NoteEditor({
   readOnly = false,
   autoHeight = false,
   autoFocus = true,
+  onWikiOpen,
+  resolveWiki,
 }: {
   initialContent: string;
   onChange: (doc: string) => void;
@@ -29,14 +34,20 @@ export function NoteEditor({
   readOnly?: boolean;
   autoHeight?: boolean;
   autoFocus?: boolean;
+  onWikiOpen?: (target: string) => void;
+  resolveWiki?: (target: string) => WikiLinkResolvedTarget | null;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const onChangeRef = useRef(onChange);
   const onSaveRef = useRef(onSave);
   const onLinkClickRef = useRef(onLinkClick);
+  const onWikiOpenRef = useRef(onWikiOpen);
+  const resolveWikiRef = useRef(resolveWiki);
   onChangeRef.current = onChange;
   onSaveRef.current = onSave;
   onLinkClickRef.current = onLinkClick;
+  onWikiOpenRef.current = onWikiOpen;
+  resolveWikiRef.current = resolveWiki;
 
   useEffect(() => {
     const host = hostRef.current;
@@ -54,6 +65,10 @@ export function NoteEditor({
           onLinkClick: (url) => onLinkClickRef.current(url),
           readOnly,
           autoHeight,
+          // Wired only when the host provides them, so wiki-links light up only
+          // where there's a note index. Ref indirection keeps the view built once.
+          onWikiOpen: onWikiOpen ? (target) => (onWikiOpenRef.current ?? noop)(target) : undefined,
+          resolveWiki: resolveWiki ? (target) => resolveWikiRef.current?.(target) ?? null : undefined,
         }),
       }),
     });
