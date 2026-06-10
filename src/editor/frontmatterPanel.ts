@@ -114,9 +114,31 @@ class FrontmatterWidget extends WidgetType {
   }
 }
 
+// Frontmatter is always at the top, so scan a bounded document head rather than
+// materializing the whole document (doc.toString()) on every keystroke — for a
+// large note that would allocate and GC the full string per character typed.
+const SCAN_LIMIT = 4096; // generous; real frontmatter is well under 1 KB
+
+function frontmatterRange(
+  state: EditorState,
+): { from: number; to: number; fields: FrontmatterField[] } | null {
+  const head = state.doc.sliceString(0, Math.min(state.doc.length, SCAN_LIMIT));
+  const fm = parseFrontmatter(head);
+  if (!fm) return null;
+  const from = state.doc.line(fm.startLine).from;
+  // Resolve offsets via doc.line() (CRLF-safe). Extend to the start of the line
+  // after the closing fence so its trailing newline is consumed — otherwise an
+  // orphan blank line shows between the panel and the first body line.
+  const to =
+    fm.endLine < state.doc.lines
+      ? state.doc.line(fm.endLine + 1).from
+      : state.doc.line(fm.endLine).to;
+  return { from, to, fields: fm.fields };
+}
+
 function buildDecorations(state: EditorState): DecorationSet {
   if (state.field(revealField)) return Decoration.none; // editing raw YAML
-  const fm = parseFrontmatter(state.doc.toString());
+  const fm = frontmatterRange(state);
   if (!fm) return Decoration.none;
   // Block-replace the whole frontmatter line range with the panel widget.
   return Decoration.set(
@@ -143,7 +165,7 @@ const decorationField = StateField.define<DecorationSet>({
 const cursorGuard = EditorView.updateListener.of((u) => {
   if (!u.view.state.field(revealField)) return;
   if (!u.selectionSet && !u.docChanged) return;
-  const fm = parseFrontmatter(u.state.doc.toString());
+  const fm = frontmatterRange(u.state);
   const head = u.state.selection.main.head;
   if (!fm || head < fm.from || head > fm.to) {
     u.view.dispatch({ effects: setReveal.of(false) });

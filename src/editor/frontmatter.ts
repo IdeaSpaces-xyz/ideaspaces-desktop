@@ -19,10 +19,10 @@ export interface FrontmatterField {
 }
 
 export interface ParsedFrontmatter {
-  /** Document offset of the block start (always 0 — frontmatter must be first). */
-  from: number;
-  /** Document offset at the end of the closing `---` line (no trailing newline). */
-  to: number;
+  /** 1-based line of the opening `---` (always 1 — frontmatter must be first). */
+  startLine: number;
+  /** 1-based line of the closing `---`. */
+  endLine: number;
   fields: FrontmatterField[];
 }
 
@@ -50,6 +50,11 @@ function dequote(value: string): string {
  * `---` (a closing fence) — matching the SDK's `stripFrontmatter` contract. A
  * mid-document `---` is a thematic break and is left alone; an unterminated
  * opener is treated as no frontmatter so we never hijack the whole document.
+ *
+ * Returns 1-based line numbers (not byte offsets) so the caller resolves
+ * document positions via CodeMirror's `doc.line()` — CRLF-safe and free of
+ * manual offset arithmetic. Callers may pass a bounded document head (the
+ * block is always at the top); line numbers in the head match the full doc.
  */
 export function parseFrontmatter(doc: string): ParsedFrontmatter | null {
   if (!doc.startsWith("---\n") && !doc.startsWith("---\r\n")) return null;
@@ -91,11 +96,7 @@ export function parseFrontmatter(doc: string): ParsedFrontmatter | null {
   }
   flush();
 
-  // Offset at the end of the closing `---` line: sum of all preceding lines'
-  // lengths (+1 for each consumed `\n`) plus the closing line's own length.
-  let to = 0;
-  for (let i = 0; i < closeIdx; i++) to += lines[i].length + 1;
-  to += lines[closeIdx].length;
-
-  return { from: 0, to, fields };
+  // 1-based line numbers (CodeMirror convention): line 1 is the opening fence,
+  // line closeIdx+1 is the closing fence.
+  return { startLine: 1, endLine: closeIdx + 1, fields };
 }
