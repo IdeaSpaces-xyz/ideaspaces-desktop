@@ -269,7 +269,7 @@ function NoteList({
   return (
     <div>
       <SectionLabel>Notes</SectionLabel>
-      <ul className="flex flex-col gap-0.5">
+      <ul className="flex flex-col gap-1">
         {files.map((note) => {
           const active = selectedRel === note.relPath;
           return (
@@ -280,16 +280,18 @@ function NoteList({
                 onClick={() => onSelect(note)}
                 aria-current={active ? "true" : undefined}
                 className={cn(
-                  "flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left transition disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring",
-                  active ? "bg-is-surface-alt" : "hover:bg-is-surface-alt",
+                  "flex w-full items-start gap-3 rounded-lg border px-3 py-2.5 text-left transition disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring",
+                  active
+                    ? "border-is-border bg-is-surface-alt"
+                    : "border-transparent hover:border-is-border hover:bg-is-surface-alt",
                 )}
                 title={note.relPath}
               >
-                <FileText size={15} strokeWidth={1.333} className="mt-0.5 shrink-0 text-is-text-tertiary" aria-hidden="true" />
+                <FileText size={16} strokeWidth={1.333} className="mt-0.5 shrink-0 text-is-text-tertiary" aria-hidden="true" />
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm text-is-text">{note.name}</span>
+                  <span className="block truncate text-sm font-medium text-is-text">{note.name}</span>
                   {note.summary && (
-                    <span className="block truncate text-xs text-is-text-secondary">{note.summary}</span>
+                    <span className="mt-0.5 block line-clamp-2 text-xs text-is-text-secondary">{note.summary}</span>
                   )}
                 </span>
               </button>
@@ -352,6 +354,8 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
   }, [confirmLeave]);
 
   const segments = path ? path.split("/") : [];
+  // Title is the current folder name, or the repo itself at the root.
+  const title = segments.length ? segments[segments.length - 1] : clone.slug;
   const empty = folders.length === 0 && files.length === 0;
 
   return (
@@ -373,6 +377,7 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
       <div ref={containerRef} className="flex min-h-0 flex-1" style={{ "--pane-width": `${paneWidth}px` } as CSSProperties}>
         <nav className="min-w-0 flex-1 overflow-y-auto">
           <div className="mx-auto w-full max-w-2xl px-5 py-6">
+            <h1 className="mb-5 truncate text-xl font-medium text-is-text">{title}</h1>
             {status === "loading" && <p className="text-sm text-is-text-tertiary">Loading…</p>}
             {status === "error" && (
               <p className="text-sm text-is-danger-text">

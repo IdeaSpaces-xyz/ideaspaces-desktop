@@ -1,10 +1,14 @@
-import { Download, FolderInput, Link2, PenLine, RefreshCw } from "lucide-react";
+import { Download, FolderInput, Link2, RefreshCw } from "lucide-react";
 import type { CloneRecord, CloneStatus, Space } from "../lib/cli";
+import { cn } from "../lib/cn";
 
 const actionBtn =
   "inline-flex items-center gap-1.5 rounded-md border border-is-border bg-is-surface px-2.5 py-1.5 text-xs text-is-text-secondary transition hover:border-is-accent hover:text-is-text disabled:cursor-not-allowed disabled:opacity-50";
 const iconBtn =
   "inline-flex items-center justify-center rounded-md border border-is-border bg-is-surface p-1.5 text-is-text-secondary transition hover:border-is-accent hover:text-is-text disabled:cursor-not-allowed disabled:opacity-50";
+// Secondary actions stay out of the way until the row is hovered or a control
+// in it is focused (keyboard-reachable).
+const onHover = "opacity-0 transition group-hover:opacity-100 focus-within:opacity-100";
 
 function needsSync(status: CloneStatus | undefined): boolean {
   return !!status && (!!status.ahead || !!status.behind);
@@ -62,81 +66,87 @@ export function SpacesList({
         const status = statuses[space.repo_id];
         const busy = busyIds.has(space.repo_id);
 
+        // Cloned: the whole row opens the repo (overlay button covers it, so the
+        // info text passes clicks through while the action buttons sit above).
+        if (clone) {
+          return (
+            <li
+              key={space.repo_id}
+              className="group relative flex items-center justify-between gap-3 rounded-lg border border-is-border bg-is-surface px-4 py-3 transition hover:border-is-accent"
+            >
+              <button
+                type="button"
+                onClick={() => onOpen(clone)}
+                aria-label={`Open ${space.slug}`}
+                className="absolute inset-0 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
+              />
+              <div className="pointer-events-none min-w-0">
+                <p className="truncate font-medium text-is-text">{space.slug}</p>
+                <p className="truncate text-xs text-is-text-tertiary">{clone.path}</p>
+              </div>
+              <div className="relative flex shrink-0 items-center gap-2">
+                <StatusBadge status={status} failed={failedStatuses.has(space.repo_id)} />
+                {needsSync(status) && (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => onSync(space.repo_id, clone.path, space.slug)}
+                    className={cn(actionBtn, busy ? "opacity-100" : onHover)}
+                  >
+                    <RefreshCw
+                      size={14}
+                      strokeWidth={1.333}
+                      className={busy ? "animate-spin" : undefined}
+                      aria-hidden="true"
+                    />
+                    {busy ? "Syncing…" : "Sync"}
+                  </button>
+                )}
+              </div>
+            </li>
+          );
+        }
+
+        // Remote-only: nothing to open. Clone stays visible (the primary action);
+        // the secondary actions reveal on hover.
         return (
           <li
             key={space.repo_id}
-            className="flex items-center justify-between gap-3 rounded-lg border border-is-border bg-is-surface px-4 py-3"
+            className="group flex items-center justify-between gap-3 rounded-lg border border-is-border bg-is-surface px-4 py-3"
           >
             <div className="min-w-0">
               <p className="truncate font-medium text-is-text">{space.slug}</p>
               <p className="truncate text-xs text-is-text-tertiary">
-                {clone ? clone.path : `${space.hostname ?? "Personal"} · ${space.role}`}
+                {space.hostname ?? "Personal"} · {space.role}
               </p>
             </div>
-
             <div className="flex shrink-0 items-center gap-2">
-              {clone ? (
-                <>
-                  <StatusBadge status={status} failed={failedStatuses.has(space.repo_id)} />
-                  <button
-                    type="button"
-                    onClick={() => onOpen(clone)}
-                    aria-label={`Open ${space.slug} notes`}
-                    title="Open notes"
-                    className={iconBtn}
-                  >
-                    <PenLine size={14} strokeWidth={1.333} aria-hidden="true" />
-                  </button>
-                  {needsSync(status) && (
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => onSync(space.repo_id, clone.path, space.slug)}
-                      className={actionBtn}
-                    >
-                      <RefreshCw
-                        size={14}
-                        strokeWidth={1.333}
-                        className={busy ? "animate-spin" : undefined}
-                        aria-hidden="true"
-                      />
-                      {busy ? "Syncing…" : "Sync"}
-                    </button>
-                  )}
-                </>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => onClone(space)}
-                    className={actionBtn}
-                  >
-                    <Download size={14} strokeWidth={1.333} aria-hidden="true" />
-                    {busy ? "Cloning…" : "Clone"}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => onCloneTo(space)}
-                    aria-label={`Clone ${space.slug} to a chosen folder`}
-                    title="Clone to…"
-                    className={iconBtn}
-                  >
-                    <FolderInput size={14} strokeWidth={1.333} aria-hidden="true" />
-                  </button>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => onLinkExisting(space)}
-                    aria-label={`Link an existing local folder to ${space.slug}`}
-                    title="Link an existing folder…"
-                    className={iconBtn}
-                  >
-                    <Link2 size={14} strokeWidth={1.333} aria-hidden="true" />
-                  </button>
-                </>
-              )}
+              <button type="button" disabled={busy} onClick={() => onClone(space)} className={actionBtn}>
+                <Download size={14} strokeWidth={1.333} aria-hidden="true" />
+                {busy ? "Cloning…" : "Clone"}
+              </button>
+              <div className={cn("flex items-center gap-2", onHover)}>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => onCloneTo(space)}
+                  aria-label={`Clone ${space.slug} to a chosen folder`}
+                  title="Clone to…"
+                  className={iconBtn}
+                >
+                  <FolderInput size={14} strokeWidth={1.333} aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => onLinkExisting(space)}
+                  aria-label={`Link an existing local folder to ${space.slug}`}
+                  title="Link an existing folder…"
+                  className={iconBtn}
+                >
+                  <Link2 size={14} strokeWidth={1.333} aria-hidden="true" />
+                </button>
+              </div>
             </div>
           </li>
         );
