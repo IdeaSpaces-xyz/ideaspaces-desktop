@@ -295,18 +295,18 @@ function NoteList({
                 onClick={() => onSelect(note)}
                 aria-current={active ? "true" : undefined}
                 className={cn(
-                  "flex w-full items-start gap-3 rounded-lg border px-3 py-2.5 text-left transition disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring",
+                  "flex w-full items-center gap-2.5 rounded-lg border px-3 py-2 text-left transition disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring",
                   active
                     ? "border-is-border bg-is-surface-alt"
                     : "border-transparent hover:border-is-border hover:bg-is-surface-alt",
                 )}
-                title={note.relPath}
+                title={note.summary ? `${note.relPath} — ${note.summary}` : note.relPath}
               >
-                <FileText size={16} strokeWidth={1.333} className="mt-0.5 shrink-0 text-is-text-tertiary" aria-hidden="true" />
+                <FileText size={15} strokeWidth={1.333} className="shrink-0 text-is-text-tertiary" aria-hidden="true" />
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-medium text-is-text">{note.name}</span>
+                  <span className="block truncate text-sm text-is-text">{note.name}</span>
                   {note.summary && (
-                    <span className="mt-0.5 block line-clamp-2 text-xs text-is-text-secondary">{note.summary}</span>
+                    <span className="block truncate text-xs text-is-text-tertiary">{note.summary}</span>
                   )}
                 </span>
               </button>
