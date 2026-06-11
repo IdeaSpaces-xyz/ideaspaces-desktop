@@ -142,8 +142,8 @@ function NotePane({
           <p className="truncate font-medium text-is-text">{note.name}</p>
           <p className="flex items-center gap-1 text-xs text-is-text-tertiary">
             <span className="truncate">{note.relPath}</span>
+            {dirty && <span className="shrink-0 text-is-text-secondary">• unsaved</span>}
             <CopyButton value={note.relPath} label="note path" />
-            {dirty && <span className="text-is-text-secondary">• unsaved</span>}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">

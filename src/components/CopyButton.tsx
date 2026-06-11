@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Check, Copy } from "lucide-react";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { useToast } from "../toast/toast-context";
@@ -19,12 +19,16 @@ export function CopyButton({
 }) {
   const toast = useToast();
   const [copied, setCopied] = useState(false);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  useEffect(() => () => clearTimeout(timeoutRef.current), []);
 
   async function copy() {
     try {
       await writeText(value);
       setCopied(true);
-      setTimeout(() => setCopied(false), 1200);
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = setTimeout(() => setCopied(false), 1200);
     } catch (err) {
       toast(`Couldn't copy: ${err instanceof Error ? err.message : String(err)}`, "error");
     }
