@@ -744,7 +744,7 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
               </button>
               <div className="flex min-w-0 flex-1 items-center gap-1.5">
                 <h1 className="min-w-0 truncate text-xl font-medium text-is-text">{title}</h1>
-                <CopyButton value={path || clone.slug} label="path" size={14} />
+                <CopyButton value={path || clone.slug} label="folder path" size={14} />
               </div>
             </div>
             {status === "loading" && <p className="text-sm text-is-text-tertiary">Loading…</p>}
