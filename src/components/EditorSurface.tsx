@@ -26,6 +26,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { commitClone, syncClone, type CloneRecord } from "../lib/cli";
 import { useToast } from "../toast/toast-context";
 import { Resizer } from "./Resizer";
+import { CopyButton } from "./CopyButton";
 import { cn } from "../lib/cn";
 
 const barBtn =
@@ -139,9 +140,10 @@ function NotePane({
       <div className="flex items-center justify-between gap-3 border-b border-is-border px-5 py-2.5">
         <div className="min-w-0">
           <p className="truncate font-medium text-is-text">{note.name}</p>
-          <p className="truncate text-xs text-is-text-tertiary">
-            {note.relPath}
-            {dirty && <span className="ml-2 text-is-text-secondary">• unsaved</span>}
+          <p className="flex items-center gap-1 text-xs text-is-text-tertiary">
+            <span className="truncate">{note.relPath}</span>
+            {dirty && <span className="shrink-0 text-is-text-secondary">• unsaved</span>}
+            <CopyButton value={note.relPath} label="note path" />
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -299,18 +301,21 @@ function NoteList({
         {files.map((note) => {
           const active = selectedRel === note.relPath;
           return (
-            <li key={note.relPath}>
+            <li
+              key={note.relPath}
+              className={cn(
+                "group flex items-center gap-1 rounded-lg border pr-2 transition",
+                active
+                  ? "border-is-border bg-is-surface-alt"
+                  : "border-transparent hover:border-is-border hover:bg-is-surface-alt",
+              )}
+            >
               <button
                 type="button"
                 disabled={disabled}
                 onClick={() => onSelect(note)}
                 aria-current={active ? "true" : undefined}
-                className={cn(
-                  "flex w-full items-center gap-3 rounded-lg border px-3.5 py-3 text-left transition disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring",
-                  active
-                    ? "border-is-border bg-is-surface-alt"
-                    : "border-transparent hover:border-is-border hover:bg-is-surface-alt",
-                )}
+                className="flex min-w-0 flex-1 items-center gap-3 rounded-l-lg px-3.5 py-3 text-left transition disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
                 title={note.summary ? `${note.relPath} — ${note.summary}` : note.relPath}
               >
                 <FileText size={16} strokeWidth={1.333} className="shrink-0 text-is-text-tertiary" aria-hidden="true" />
@@ -321,6 +326,11 @@ function NoteList({
                   )}
                 </span>
               </button>
+              <CopyButton
+                value={note.relPath}
+                label="note path"
+                className="opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100"
+              />
             </li>
           );
         })}
@@ -732,7 +742,10 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
                 <ArrowLeft size={14} strokeWidth={1.333} aria-hidden="true" />
                 Back
               </button>
-              <h1 className="min-w-0 flex-1 truncate text-xl font-medium text-is-text">{title}</h1>
+              <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                <h1 className="min-w-0 truncate text-xl font-medium text-is-text">{title}</h1>
+                <CopyButton value={path || clone.slug} label="folder path" size={14} />
+              </div>
             </div>
             {status === "loading" && <p className="text-sm text-is-text-tertiary">Loading…</p>}
             {status === "error" && (
