@@ -1,8 +1,8 @@
 import { Fragment, useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import {
   ArrowLeft,
+  ArrowRight,
   BookText,
-  ChevronDown,
   ChevronRight,
   FilePlus,
   FileText,
@@ -295,7 +295,7 @@ function NoteList({
   return (
     <div>
       <SectionLabel>Notes</SectionLabel>
-      <ul className="flex flex-col gap-1">
+      <ul className="flex flex-col gap-1.5">
         {files.map((note) => {
           const active = selectedRel === note.relPath;
           return (
@@ -306,18 +306,18 @@ function NoteList({
                 onClick={() => onSelect(note)}
                 aria-current={active ? "true" : undefined}
                 className={cn(
-                  "flex w-full items-center gap-2.5 rounded-lg border px-3 py-2 text-left transition disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring",
+                  "flex w-full items-center gap-3 rounded-lg border px-3.5 py-3 text-left transition disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring",
                   active
                     ? "border-is-border bg-is-surface-alt"
                     : "border-transparent hover:border-is-border hover:bg-is-surface-alt",
                 )}
                 title={note.summary ? `${note.relPath} — ${note.summary}` : note.relPath}
               >
-                <FileText size={15} strokeWidth={1.333} className="shrink-0 text-is-text-tertiary" aria-hidden="true" />
+                <FileText size={16} strokeWidth={1.333} className="shrink-0 text-is-text-tertiary" aria-hidden="true" />
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm text-is-text">{note.name}</span>
+                  <span className="block truncate text-[15px] text-is-text">{note.name}</span>
                   {note.summary && (
-                    <span className="block truncate text-xs text-is-text-tertiary">{note.summary}</span>
+                    <span className="mt-0.5 block truncate text-xs text-is-text-tertiary">{note.summary}</span>
                   )}
                 </span>
               </button>
@@ -329,74 +329,92 @@ function NoteList({
   );
 }
 
-// The folder's README, rendered inline as a collapsible guide (read-only
-// live-preview). Open by default — it's the folder's orientation. Keyed by path
-// so navigating folders remounts with the new README. CodeMirror only mounts
-// when expanded, so a collapsed README costs nothing.
+// The folder's README at the top as a compact, read-only teaser — a clamped
+// live-preview with a fade and a "Read more" that opens the full note in the
+// editor pane. Keyed by path so navigating folders remounts with the new README.
 function ReadmeCard({
   note,
+  onOpen,
   onLinkClick,
   onWikiOpen,
   resolveWiki,
 }: {
   note: NoteFile;
+  onOpen: () => void;
   onLinkClick: (url: string) => void;
   onWikiOpen: (target: string) => void;
   resolveWiki: (target: string) => WikiLinkResolvedTarget | null;
 }) {
-  const [open, setOpen] = useState(true);
   const [content, setContent] = useState<string | null>(null);
   const [error, setError] = useState<string | undefined>(undefined);
+  // Whether the rendered README is taller than the clamp — drives the fade and
+  // the "Read more" vs "Open" affordance, so a short README isn't a false teaser.
+  const [overflowing, setOverflowing] = useState(false);
+  const innerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!open || content !== null) return;
     let alive = true;
-    setError(undefined); // clear any prior error before re-fetching
+    setError(undefined);
     readNote(note.path)
       .then((text) => alive && setContent(text))
       .catch((err) => alive && setError(errMessage(err)));
     return () => {
       alive = false;
     };
-  }, [open, note.path, content]);
+  }, [note.path]);
+
+  // The live-preview mounts/grows asynchronously, so observe the rendered height
+  // rather than measuring once. 176px = the max-h-44 clamp below.
+  useEffect(() => {
+    const el = innerRef.current;
+    if (content === null || !el) return;
+    const check = () => setOverflowing(el.scrollHeight > 176 + 8);
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [content]);
 
   return (
     <div className="mb-6 overflow-hidden rounded-lg border border-is-border bg-is-surface">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        aria-expanded={open}
-        className="flex w-full items-center gap-2 px-4 py-2.5 text-left transition hover:bg-is-surface-alt focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
-      >
+      <div className="flex items-center gap-2 border-b border-is-border px-4 py-2.5">
         <BookText size={15} strokeWidth={1.333} className="shrink-0 text-is-text-tertiary" aria-hidden="true" />
         <span className="flex-1 text-sm font-medium text-is-text">README</span>
-        <ChevronDown
-          size={16}
-          strokeWidth={1.5}
-          className={cn("shrink-0 text-is-text-tertiary transition-transform", !open && "-rotate-90")}
-          aria-hidden="true"
-        />
-      </button>
-      {open && (
-        <div className="border-t border-is-border px-4 py-3">
-          {error ? (
-            <p className="text-sm text-is-danger-text">{error}</p>
-          ) : content === null ? (
-            <p className="text-sm text-is-text-tertiary">Loading…</p>
-          ) : (
-            <NoteEditor
-              initialContent={content}
-              readOnly
-              autoHeight
-              autoFocus={false}
-              onChange={() => {}}
-              onSave={() => {}}
-              onLinkClick={onLinkClick}
-              onWikiOpen={onWikiOpen}
-              resolveWiki={resolveWiki}
-            />
-          )}
-        </div>
+      </div>
+      {error ? (
+        <p className="px-4 py-3 text-sm text-is-danger-text">{error}</p>
+      ) : content === null ? (
+        <p className="px-4 py-3 text-sm text-is-text-tertiary">Loading…</p>
+      ) : (
+        <>
+          {/* Clamped teaser; the fade only shows when there's more below. */}
+          <div className="relative max-h-44 overflow-hidden px-4 py-3">
+            <div ref={innerRef}>
+              <NoteEditor
+                initialContent={content}
+                readOnly
+                autoHeight
+                autoFocus={false}
+                onChange={() => {}}
+                onSave={() => {}}
+                onLinkClick={onLinkClick}
+                onWikiOpen={onWikiOpen}
+                resolveWiki={resolveWiki}
+              />
+            </div>
+            {overflowing && (
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-is-surface to-transparent" />
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={onOpen}
+            className="flex w-full items-center justify-center gap-1 border-t border-is-border px-4 py-2 text-xs text-is-accent-text transition hover:bg-is-surface-alt focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
+          >
+            {overflowing ? "Read more" : "Open in editor"}
+            <ArrowRight size={13} strokeWidth={1.5} aria-hidden="true" />
+          </button>
+        </>
       )}
     </div>
   );
@@ -641,28 +659,54 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
     [openWiki, toast],
   );
 
+  // Back: close the open note → up one folder → out to Repos. One predictable
+  // step at a time (the breadcrumb still jumps to any ancestor).
+  const goBack = useCallback(async () => {
+    if (busy) return; // mid commit/sync — match the Back button's disabled state
+    if (selected) {
+      await closeNote();
+    } else if (path) {
+      await navigate(path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "");
+    } else if (await confirmLeave()) {
+      onClose();
+    }
+  }, [busy, selected, path, closeNote, navigate, confirmLeave, onClose]);
+
+  // Hardware/keyboard "back": the mouse back button (X1) and ⌘/Ctrl+[.
+  useEffect(() => {
+    const onMouseUp = (e: MouseEvent) => {
+      if (e.button === 3) {
+        e.preventDefault();
+        void goBack();
+      }
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "[") {
+        // Let the editor keep ⌘[ for outdent when it has focus.
+        if (document.activeElement?.closest(".cm-editor")) return;
+        e.preventDefault();
+        void goBack();
+      }
+    };
+    window.addEventListener("mouseup", onMouseUp);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("mouseup", onMouseUp);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [goBack]);
+
   const segments = path ? path.split("/") : [];
   // Title is the current folder name, or the repo itself at the root.
   const title = segments.length ? segments[segments.length - 1] : clone.slug;
   // README is pulled out of the notes list and shown as the folder's guide.
   const readme = files.find((f) => /^readme$/i.test(f.name));
   const noteFiles = readme ? files.filter((f) => f.relPath !== readme.relPath) : files;
-  const hasTree = folders.length > 0 || noteFiles.length > 0;
   const empty = folders.length === 0 && files.length === 0;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center gap-3 border-b border-is-border px-4 py-2.5">
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => void confirmLeave().then((ok) => ok && onClose())}
-          className="inline-flex shrink-0 items-center gap-1.5 text-xs text-is-text-tertiary transition hover:text-is-text disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <ArrowLeft size={14} strokeWidth={1.333} aria-hidden="true" />
-          Repos
-        </button>
-        <span className="h-3.5 w-px shrink-0 bg-is-border" aria-hidden="true" />
         <div className="min-w-0 flex-1">
           <Breadcrumb slug={clone.slug} segments={segments} onNavigate={(p) => void navigate(p)} />
         </div>
@@ -677,8 +721,19 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
 
       <div ref={containerRef} className="flex min-h-0 flex-1" style={{ "--pane-width": `${paneWidth}px` } as CSSProperties}>
         <nav className="min-w-0 flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-2xl px-5 py-6">
-            <h1 className="mb-5 truncate text-xl font-medium text-is-text">{title}</h1>
+          <div className="mx-auto w-full max-w-3xl px-6 py-6">
+            <div className="mb-5 flex items-center gap-3">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void goBack()}
+                className="inline-flex shrink-0 items-center gap-1 rounded-md text-xs text-is-text-tertiary transition hover:text-is-text disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
+              >
+                <ArrowLeft size={14} strokeWidth={1.333} aria-hidden="true" />
+                Back
+              </button>
+              <h1 className="min-w-0 flex-1 truncate text-xl font-medium text-is-text">{title}</h1>
+            </div>
             {status === "loading" && <p className="text-sm text-is-text-tertiary">Loading…</p>}
             {status === "error" && (
               <p className="text-sm text-is-danger-text">
@@ -705,6 +760,7 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
                   <ReadmeCard
                     key={readme.path}
                     note={readme}
+                    onOpen={() => void selectNote(readme)}
                     onLinkClick={handleLink}
                     onWikiOpen={(t) => void openWiki(t)}
                     resolveWiki={resolveWiki}
@@ -712,23 +768,30 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
                 )}
                 {empty && !readme && !creating ? (
                   <p className="text-sm text-is-text-tertiary">This folder has no notes or sub-folders.</p>
+                ) : folders.length > 0 ? (
+                  // Folders present → two columns (folder rail + notes).
+                  <div className="grid gap-x-8 gap-y-6 sm:grid-cols-[12rem_minmax(0,1fr)]">
+                    <FolderList folders={folders} onOpen={(f) => void navigate(f.relPath)} />
+                    {noteFiles.length > 0 ? (
+                      <NoteList
+                        files={noteFiles}
+                        selectedRel={selected?.relPath}
+                        onSelect={(n) => void selectNote(n)}
+                        disabled={busy}
+                      />
+                    ) : (
+                      <p className="text-sm text-is-text-tertiary">No notes in this folder.</p>
+                    )}
+                  </div>
                 ) : (
-                  hasTree && (
-                    <div className="grid gap-x-8 gap-y-6 sm:grid-cols-[11rem_minmax(0,1fr)]">
-                      {folders.length > 0 && (
-                        <FolderList folders={folders} onOpen={(f) => void navigate(f.relPath)} />
-                      )}
-                      {noteFiles.length > 0 ? (
-                        <NoteList
-                          files={noteFiles}
-                          selectedRel={selected?.relPath}
-                          onSelect={(n) => void selectNote(n)}
-                          disabled={busy}
-                        />
-                      ) : (
-                        <p className="text-sm text-is-text-tertiary">No notes in this folder.</p>
-                      )}
-                    </div>
+                  // No folders → the notes list gets the full width.
+                  noteFiles.length > 0 && (
+                    <NoteList
+                      files={noteFiles}
+                      selectedRel={selected?.relPath}
+                      onSelect={(n) => void selectNote(n)}
+                      disabled={busy}
+                    />
                   )
                 )}
               </>
