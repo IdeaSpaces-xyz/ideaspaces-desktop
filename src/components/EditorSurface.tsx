@@ -347,6 +347,10 @@ function ReadmeCard({
 }) {
   const [content, setContent] = useState<string | null>(null);
   const [error, setError] = useState<string | undefined>(undefined);
+  // Whether the rendered README is taller than the clamp — drives the fade and
+  // the "Read more" vs "Open" affordance, so a short README isn't a false teaser.
+  const [overflowing, setOverflowing] = useState(false);
+  const innerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let alive = true;
@@ -358,6 +362,18 @@ function ReadmeCard({
       alive = false;
     };
   }, [note.path]);
+
+  // The live-preview mounts/grows asynchronously, so observe the rendered height
+  // rather than measuring once. 176px = the max-h-44 clamp below.
+  useEffect(() => {
+    const el = innerRef.current;
+    if (content === null || !el) return;
+    const check = () => setOverflowing(el.scrollHeight > 176 + 8);
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [content]);
 
   return (
     <div className="mb-6 overflow-hidden rounded-lg border border-is-border bg-is-surface">
@@ -371,27 +387,31 @@ function ReadmeCard({
         <p className="px-4 py-3 text-sm text-is-text-tertiary">Loading…</p>
       ) : (
         <>
-          {/* Clamped teaser with a fade into the card background. */}
+          {/* Clamped teaser; the fade only shows when there's more below. */}
           <div className="relative max-h-44 overflow-hidden px-4 py-3">
-            <NoteEditor
-              initialContent={content}
-              readOnly
-              autoHeight
-              autoFocus={false}
-              onChange={() => {}}
-              onSave={() => {}}
-              onLinkClick={onLinkClick}
-              onWikiOpen={onWikiOpen}
-              resolveWiki={resolveWiki}
-            />
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-is-surface to-transparent" />
+            <div ref={innerRef}>
+              <NoteEditor
+                initialContent={content}
+                readOnly
+                autoHeight
+                autoFocus={false}
+                onChange={() => {}}
+                onSave={() => {}}
+                onLinkClick={onLinkClick}
+                onWikiOpen={onWikiOpen}
+                resolveWiki={resolveWiki}
+              />
+            </div>
+            {overflowing && (
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-is-surface to-transparent" />
+            )}
           </div>
           <button
             type="button"
             onClick={onOpen}
             className="flex w-full items-center justify-center gap-1 border-t border-is-border px-4 py-2 text-xs text-is-accent-text transition hover:bg-is-surface-alt focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
           >
-            Read more
+            {overflowing ? "Read more" : "Open in editor"}
             <ArrowRight size={13} strokeWidth={1.5} aria-hidden="true" />
           </button>
         </>
@@ -642,6 +662,7 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
   // Back: close the open note → up one folder → out to Repos. One predictable
   // step at a time (the breadcrumb still jumps to any ancestor).
   const goBack = useCallback(async () => {
+    if (busy) return; // mid commit/sync — match the Back button's disabled state
     if (selected) {
       await closeNote();
     } else if (path) {
@@ -649,7 +670,7 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
     } else if (await confirmLeave()) {
       onClose();
     }
-  }, [selected, path, closeNote, navigate, confirmLeave, onClose]);
+  }, [busy, selected, path, closeNote, navigate, confirmLeave, onClose]);
 
   // Hardware/keyboard "back": the mouse back button (X1) and ⌘/Ctrl+[.
   useEffect(() => {
@@ -661,6 +682,8 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
     };
     const onKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "[") {
+        // Let the editor keep ⌘[ for outdent when it has focus.
+        if (document.activeElement?.closest(".cm-editor")) return;
         e.preventDefault();
         void goBack();
       }
