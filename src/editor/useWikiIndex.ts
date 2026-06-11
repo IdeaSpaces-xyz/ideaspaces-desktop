@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { listAllNotes } from "../lib/notes";
 import { buildWikiIndex, type WikiIndex } from "./wikiIndex";
 
-const EMPTY: WikiIndex = { resolve: () => null };
+const EMPTY: WikiIndex = { resolve: () => null, resolvePath: () => null };
 
 /**
  * Clone-wide wiki-link index, built once per clone (and on `reload()` after
