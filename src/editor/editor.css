@@ -13,6 +13,29 @@
   height: 100%;
 }
 
+/* The atomic-editor table widget renders its own DOM keyed off
+   `--atomic-editor-*` variables, which default to dark values. Map them to our
+   `--is-*` tokens so tables theme correctly in both light and dark. */
+.cm-note-host {
+  --atomic-editor-accent: var(--is-accent);
+  --atomic-editor-accent-soft: color-mix(in srgb, var(--is-accent) 18%, transparent);
+  --atomic-editor-bg-panel: var(--is-surface);
+  --atomic-editor-bg-surface: var(--is-surface-alt);
+  --atomic-editor-border: var(--is-border);
+  --atomic-editor-code-bg: var(--is-surface-alt);
+  --atomic-editor-code-rail: var(--is-border);
+  --atomic-editor-fg: var(--is-text);
+  --atomic-editor-fg-faint: var(--is-text-tertiary);
+  --atomic-editor-fg-muted: var(--is-text-secondary);
+  --atomic-editor-font: var(--font-sans);
+  --atomic-editor-font-mono: var(--font-chrome);
+  --atomic-editor-link: var(--is-accent-text);
+  --atomic-editor-link-hover: var(--is-accent-text);
+  --atomic-editor-search-bg: var(--is-surface);
+  --atomic-editor-search-bg-active: var(--is-surface-alt);
+  --atomic-editor-radius: 8px;
+}
+
 .cm-note-host .cm-content {
   padding-block: 0.5rem 4rem;
 }

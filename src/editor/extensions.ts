@@ -12,6 +12,7 @@ import {
   extendEmphasisPair,
   imageBlocks,
   inlinePreview,
+  tables,
   wikiLinks,
   type WikiLinkResolvedTarget,
 } from "@atomic-editor/editor";
@@ -124,6 +125,9 @@ export function noteEditorExtensions(opts: {
     // UI navigation/accessibility, and markdownKeymap handles list continuation.
     keymap.of([...closeBracketsKeymap, ...historyKeymap, ...markdownKeymap, ...defaultKeymap]),
     imageBlocks(),
+    // Render GFM tables as real tables (without this they show as raw `| … |`
+    // source). Cell links route through the same handler as body links.
+    tables({ onLinkClick: opts.onLinkClick }),
     inlinePreview({ onLinkClick: opts.onLinkClick }),
     // `[[wiki-links]]` — render + resolve (resolved/missing styling) + open on
     // click. Only wired when the host supplies handlers (the clone's note index).
