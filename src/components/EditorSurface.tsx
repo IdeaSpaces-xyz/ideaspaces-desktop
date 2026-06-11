@@ -628,12 +628,13 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
           void openUrl(action.url).catch((err) => toast(errMessage(err), "error"));
           return;
         case "anchor":
-          return; // in-document anchor — nothing to navigate to yet
+          // TODO: scroll to the heading once the editor supports in-doc navigation.
+          return;
         case "outside":
-          toast("That link points outside this space.");
+          toast(`"${action.target}" links outside this space — can't open it here.`);
           return;
         case "decline":
-          toast(`Can't open ${action.target} here.`);
+          toast(`Can't open ${action.target} — not a note file.`);
           return;
         case "open":
           await openNote(action.note);

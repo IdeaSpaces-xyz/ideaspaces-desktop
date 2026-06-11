@@ -12,7 +12,7 @@ import type { WikiIndex } from "./wikiIndex";
 export type LinkAction =
   | { kind: "external"; url: string } // http(s)/mailto/… → OS browser
   | { kind: "anchor" } // pure `#fragment` → in-document, nothing to navigate yet
-  | { kind: "outside" } // escapes the clone root
+  | { kind: "outside"; target: string } // escapes the clone root
   | { kind: "open"; note: NoteFile } // resolved to an existing note
   | { kind: "create"; relPath: string } // missing note inside the clone
   | { kind: "decline"; target: string }; // a non-note file we can't open
@@ -35,6 +35,7 @@ function decode(s: string): string {
  * it escapes the clone root.
  */
 export function normalizeRelative(baseDir: string, target: string): string | null {
+  // A leading `/` is treated as clone-root-relative (not OS-absolute).
   const parts = target.startsWith("/") ? [] : baseDir.split("/").filter(Boolean);
   for (const seg of target.split("/")) {
     if (seg === "" || seg === ".") continue;
@@ -62,7 +63,7 @@ export function classifyLink(url: string, fromRelPath: string, index: WikiIndex)
 
   const baseDir = fromRelPath.includes("/") ? fromRelPath.slice(0, fromRelPath.lastIndexOf("/")) : "";
   const rel = normalizeRelative(baseDir, target);
-  if (!rel) return { kind: "outside" };
+  if (!rel) return { kind: "outside", target };
 
   const note = index.resolvePath(rel);
   if (note) return { kind: "open", note };
