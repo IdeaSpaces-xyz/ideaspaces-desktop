@@ -5,8 +5,10 @@
 import type { NoteFile } from "../lib/notes";
 
 export interface WikiIndex {
-  /** The note a target points at, or null when nothing matches. */
+  /** A note matched by bare filename (Obsidian-style `[[name]]`), or null. */
   resolve(target: string): NoteFile | null;
+  /** A note matched by clone-relative path (folder → its README), or null. */
+  resolvePath(relPath: string): NoteFile | null;
 }
 
 // Strip a `[[target|alias]]` alias and a `#heading`, a leading `./`, and the
@@ -42,6 +44,11 @@ export function buildWikiIndex(notes: NoteFile[]): WikiIndex {
       // A slash means a path from the clone root; otherwise match by name.
       if (t.includes("/")) return byPath.get(t) ?? null;
       return byName.get(t) ?? byPath.get(t) ?? null;
+    },
+    resolvePath(relPath) {
+      const key = relPath.toLowerCase().replace(/\.(md|markdown)$/i, "");
+      // Exact path, or a folder resolving to its README.
+      return byPath.get(key) ?? byPath.get(`${key}/readme`) ?? null;
     },
   };
 }

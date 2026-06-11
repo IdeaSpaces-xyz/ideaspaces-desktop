@@ -19,7 +19,7 @@ import type { WikiLinkResolvedTarget } from "@atomic-editor/editor";
 import { NoteEditor } from "../editor/NoteEditor";
 import { useDir } from "../editor/useDir";
 import { useWikiIndex } from "../editor/useWikiIndex";
-import { wikiTargetName } from "../editor/wikiIndex";
+import { classifyLink } from "../editor/linkResolve";
 import { createFolder, createNote, readNote, writeNote, type FolderEntry, type NoteFile } from "../lib/notes";
 import { ask } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -44,8 +44,7 @@ function NotePane({
   onDirtyChange,
   onBusyChange,
   onClose,
-  onLinkClick,
-  onWikiOpen,
+  onLink,
   resolveWiki,
 }: {
   note: NoteFile;
@@ -53,8 +52,8 @@ function NotePane({
   onDirtyChange: (dirty: boolean) => void;
   onBusyChange: (busy: boolean) => void;
   onClose: () => void;
-  onLinkClick: (url: string) => void;
-  onWikiOpen: (target: string) => void;
+  // Open a link/wiki-target, resolved relative to the note it was clicked in.
+  onLink: (target: string, fromRelPath: string) => void;
   resolveWiki: (target: string) => WikiLinkResolvedTarget | null;
 }) {
   const toast = useToast();
@@ -187,8 +186,8 @@ function NotePane({
               setDirty(doc !== savedRef.current);
             }}
             onSave={() => void save()}
-            onLinkClick={onLinkClick}
-            onWikiOpen={onWikiOpen}
+            onLinkClick={(url) => onLink(url, note.relPath)}
+            onWikiOpen={(t) => onLink(t, note.relPath)}
             resolveWiki={resolveWiki}
           />
         )}
@@ -335,14 +334,12 @@ function NoteList({
 function ReadmeCard({
   note,
   onOpen,
-  onLinkClick,
-  onWikiOpen,
+  onLink,
   resolveWiki,
 }: {
   note: NoteFile;
   onOpen: () => void;
-  onLinkClick: (url: string) => void;
-  onWikiOpen: (target: string) => void;
+  onLink: (target: string, fromRelPath: string) => void;
   resolveWiki: (target: string) => WikiLinkResolvedTarget | null;
 }) {
   const [content, setContent] = useState<string | null>(null);
@@ -397,8 +394,8 @@ function ReadmeCard({
                 autoFocus={false}
                 onChange={() => {}}
                 onSave={() => {}}
-                onLinkClick={onLinkClick}
-                onWikiOpen={onWikiOpen}
+                onLinkClick={(url) => onLink(url, note.relPath)}
+                onWikiOpen={(t) => onLink(t, note.relPath)}
                 resolveWiki={resolveWiki}
               />
             </div>
@@ -605,58 +602,68 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
     [wikiIndex],
   );
 
-  // Click a `[[wiki-link]]`: open the matching note, or offer to create it
-  // (Obsidian-style). A new note is created in the current folder, blank.
-  const openWiki = useCallback(
-    async (target: string) => {
-      const note = wikiIndex.resolve(target);
-      if (note) {
-        if (!(await confirmLeave())) return;
-        const dir = note.relPath.includes("/")
-          ? note.relPath.slice(0, note.relPath.lastIndexOf("/"))
-          : "";
-        setCreating(null);
-        setPath(dir);
-        setSelected(note);
-        return;
-      }
-      const name = wikiTargetName(target);
-      if (!name) {
-        toast("That link has no note name to create.", "error");
-        return;
-      }
-      const create = await ask(`"${name}" doesn't exist yet. Create it?`, {
-        title: "Create note",
-        kind: "info",
-      });
-      if (!create) return;
+  // Open a note for a resolved link/wiki target: navigate to its folder + select.
+  const openNote = useCallback(
+    async (note: NoteFile) => {
       if (!(await confirmLeave())) return;
-      try {
-        const created = await createNote(clone.path, path, name);
-        await Promise.all([reload(), reloadWiki()]);
-        setCreating(null);
-        setSelected(created);
-        toast(`Created ${created.name}`);
-      } catch (err) {
-        toast(errMessage(err), "error");
-      }
+      const dir = note.relPath.includes("/")
+        ? note.relPath.slice(0, note.relPath.lastIndexOf("/"))
+        : "";
+      setCreating(null);
+      setPath(dir);
+      setSelected(note);
     },
-    [wikiIndex, reloadWiki, confirmLeave, clone.path, path, reload, toast],
+    [confirmLeave],
   );
 
-  // A clicked link: external schemes (http:, https:, mailto:, …) open in the OS
-  // browser; everything else is a link to a note in the clone (`[[wiki]]` or a
-  // relative `note.md`), so route it through the same resolve-or-create path —
-  // never `openUrl`, which rejects non-web URLs.
+  // A clicked link or `[[wiki-link]]`, classified relative to the note it sits
+  // in (`fromRelPath`). External → browser; an in-clone note → open; a missing
+  // in-clone note → offer to create at that path; a target that escapes the
+  // clone or isn't a note → decline (never a bogus "create").
   const handleLink = useCallback(
-    (url: string) => {
-      if (/^[a-z][a-z\d+.-]*:/i.test(url)) {
-        void openUrl(url).catch((err) => toast(errMessage(err), "error"));
-      } else {
-        void openWiki(url);
+    async (target: string, fromRelPath: string) => {
+      const action = classifyLink(target, fromRelPath, wikiIndex);
+      switch (action.kind) {
+        case "external":
+          void openUrl(action.url).catch((err) => toast(errMessage(err), "error"));
+          return;
+        case "anchor":
+          return; // in-document anchor — nothing to navigate to yet
+        case "outside":
+          toast("That link points outside this space.");
+          return;
+        case "decline":
+          toast(`Can't open ${action.target} here.`);
+          return;
+        case "open":
+          await openNote(action.note);
+          return;
+        case "create": {
+          const rel = action.relPath;
+          const slash = rel.lastIndexOf("/");
+          const dir = slash === -1 ? "" : rel.slice(0, slash);
+          const base = rel.slice(slash + 1).replace(/\.(md|markdown)$/i, "");
+          const create = await ask(`"${base}" doesn't exist yet. Create it?`, {
+            title: "Create note",
+            kind: "info",
+          });
+          if (!create) return;
+          if (!(await confirmLeave())) return;
+          try {
+            const created = await createNote(clone.path, dir, base);
+            await Promise.all([reload(), reloadWiki()]);
+            setCreating(null);
+            setPath(dir);
+            setSelected(created);
+            toast(`Created ${created.name}`);
+          } catch (err) {
+            toast(errMessage(err), "error");
+          }
+          return;
+        }
       }
     },
-    [openWiki, toast],
+    [wikiIndex, openNote, confirmLeave, clone.path, reload, reloadWiki, toast],
   );
 
   // Back: close the open note → up one folder → out to Repos. One predictable
@@ -761,8 +768,7 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
                     key={readme.path}
                     note={readme}
                     onOpen={() => void selectNote(readme)}
-                    onLinkClick={handleLink}
-                    onWikiOpen={(t) => void openWiki(t)}
+                    onLink={(t, from) => void handleLink(t, from)}
                     resolveWiki={resolveWiki}
                   />
                 )}
@@ -813,8 +819,7 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
                 onDirtyChange={setDirty}
                 onBusyChange={setBusy}
                 onClose={() => void closeNote()}
-                onLinkClick={handleLink}
-                onWikiOpen={(t) => void openWiki(t)}
+                onLink={(t, from) => void handleLink(t, from)}
                 resolveWiki={resolveWiki}
               />
             </section>
