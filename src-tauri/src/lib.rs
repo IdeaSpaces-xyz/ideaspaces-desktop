@@ -15,6 +15,8 @@ pub fn run() {
         // file *content*. Scoped to the home tree in capabilities; macOS TCC
         // gates protected folders (Documents/Desktop/Downloads/Dropbox) on top.
         .plugin(tauri_plugin_fs::init())
+        // Copy a doc/path to the clipboard (the copy-path buttons).
+        .plugin(tauri_plugin_clipboard_manager::init())
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

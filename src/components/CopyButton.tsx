@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Check, Copy } from "lucide-react";
+import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { useToast } from "../toast/toast-context";
 import { cn } from "../lib/cn";
 
@@ -21,9 +22,9 @@ export function CopyButton({
 
   async function copy() {
     try {
-      await navigator.clipboard.writeText(value);
+      await writeText(value);
       setCopied(true);
-      window.setTimeout(() => setCopied(false), 1200);
+      setTimeout(() => setCopied(false), 1200);
     } catch (err) {
       toast(`Couldn't copy: ${err instanceof Error ? err.message : String(err)}`, "error");
     }

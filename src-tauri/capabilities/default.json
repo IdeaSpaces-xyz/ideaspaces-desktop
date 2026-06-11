@@ -49,6 +49,7 @@
     "shell:allow-kill",
     "dialog:allow-open",
     "dialog:allow-ask",
-    "store:default"
+    "store:default",
+    "clipboard-manager:allow-write-text"
   ]
 }

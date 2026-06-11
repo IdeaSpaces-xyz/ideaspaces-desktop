@@ -315,7 +315,7 @@ function NoteList({
                 disabled={disabled}
                 onClick={() => onSelect(note)}
                 aria-current={active ? "true" : undefined}
-                className="flex min-w-0 flex-1 items-center gap-3 px-3.5 py-3 text-left transition disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
+                className="flex min-w-0 flex-1 items-center gap-3 rounded-l-lg px-3.5 py-3 text-left transition disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
                 title={note.summary ? `${note.relPath} — ${note.summary}` : note.relPath}
               >
                 <FileText size={16} strokeWidth={1.333} className="shrink-0 text-is-text-tertiary" aria-hidden="true" />
