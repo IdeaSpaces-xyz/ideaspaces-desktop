@@ -282,28 +282,33 @@ function FolderList({ folders, onOpen }: { folders: FolderEntry[]; onOpen: (f: F
   );
 }
 
+// Notes at one level. `compact` is the slim Focus-mode rail: tighter rows,
+// single-line, no summary/copy — just quick switching between sibling notes.
 function NoteList({
   files,
   selectedRel,
   onSelect,
   disabled,
+  compact = false,
 }: {
   files: NoteFile[];
   selectedRel: string | undefined;
   onSelect: (note: NoteFile) => void;
   disabled: boolean;
+  compact?: boolean;
 }) {
   return (
     <div>
-      <SectionLabel>Notes</SectionLabel>
-      <ul className="flex flex-col gap-1.5">
+      {!compact && <SectionLabel>Notes</SectionLabel>}
+      <ul className={cn("flex flex-col", compact ? "gap-0.5" : "gap-1.5")}>
         {files.map((note) => {
           const active = selectedRel === note.relPath;
           return (
             <li
               key={note.relPath}
               className={cn(
-                "group flex items-center gap-1 rounded-lg border pr-2 transition",
+                "group flex items-center rounded-lg border transition",
+                compact ? "gap-0" : "gap-1 pr-2",
                 active
                   ? "border-is-border bg-is-surface-alt"
                   : "border-transparent hover:border-is-border hover:bg-is-surface-alt",
@@ -314,22 +319,34 @@ function NoteList({
                 disabled={disabled}
                 onClick={() => onSelect(note)}
                 aria-current={active ? "true" : undefined}
-                className="flex min-w-0 flex-1 items-center gap-3 rounded-l-lg px-3.5 py-3 text-left transition disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
+                className={cn(
+                  "flex min-w-0 flex-1 items-center rounded-l-lg text-left transition disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring",
+                  compact ? "gap-2 rounded-lg px-2.5 py-1.5" : "gap-3 px-3.5 py-3",
+                )}
                 title={note.summary ? `${note.relPath} — ${note.summary}` : note.relPath}
               >
-                <FileText size={16} strokeWidth={1.333} className="shrink-0 text-is-text-tertiary" aria-hidden="true" />
+                <FileText
+                  size={compact ? 14 : 16}
+                  strokeWidth={1.333}
+                  className="shrink-0 text-is-text-tertiary"
+                  aria-hidden="true"
+                />
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[15px] text-is-text">{note.name}</span>
-                  {note.summary && (
+                  <span className={cn("block truncate text-is-text", compact ? "text-sm" : "text-[15px]")}>
+                    {note.name}
+                  </span>
+                  {!compact && note.summary && (
                     <span className="mt-0.5 block truncate text-xs text-is-text-tertiary">{note.summary}</span>
                   )}
                 </span>
               </button>
-              <CopyButton
-                value={note.relPath}
-                label="note path"
-                className="opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100"
-              />
+              {!compact && (
+                <CopyButton
+                  value={note.relPath}
+                  label="note path"
+                  className="opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100"
+                />
+              )}
             </li>
           );
         })}
@@ -533,7 +550,9 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
   const toast = useToast();
   const [path, setPath] = useState("");
   const [selected, setSelected] = useState<NoteFile | undefined>(undefined);
-  const [paneWidth, setPaneWidth] = useState(540);
+  // Width of the slim note rail in Focus mode (a note is open). The editor takes
+  // the rest of the width.
+  const [railWidth, setRailWidth] = useState(256);
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
   const [creating, setCreating] = useState<null | "note" | "folder">(null);
@@ -599,6 +618,17 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
       }
     },
     [creating, clone.path, path, reload, reloadWiki, confirmLeave, toast],
+  );
+
+  // Add+ → create in the current folder. The create row lives in the browse
+  // tree, so close any open note first (returns to Browse), guarded.
+  const startCreate = useCallback(
+    async (kind: "note" | "folder") => {
+      if (selected && !(await confirmLeave())) return;
+      setSelected(undefined);
+      setCreating(kind);
+    },
+    [selected, confirmLeave],
   );
 
   // `[[wiki-link]]` styling: resolved (points at a note) vs. missing.
@@ -729,102 +759,66 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
           <Breadcrumb slug={clone.slug} segments={segments} onNavigate={(p) => void navigate(p)} />
         </div>
         <AddMenu
-          onNewNote={() => setCreating("note")}
-          onNewFolder={() => setCreating("folder")}
+          onNewNote={() => void startCreate("note")}
+          onNewFolder={() => void startCreate("folder")}
           // Block creation until the listing is ready — reload() after creating
           // wouldn't surface the new item while loading/errored.
           disabled={busy || status !== "loaded"}
         />
       </div>
 
-      <div ref={containerRef} className="flex min-h-0 flex-1" style={{ "--pane-width": `${paneWidth}px` } as CSSProperties}>
-        <nav className="min-w-0 flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-3xl px-6 py-6">
-            <div className="mb-5 flex items-center gap-3">
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => void goBack()}
-                className="inline-flex shrink-0 items-center gap-1 rounded-md text-xs text-is-text-tertiary transition hover:text-is-text disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
-              >
-                <ArrowLeft size={14} strokeWidth={1.333} aria-hidden="true" />
-                Back
-              </button>
-              <div className="flex min-w-0 flex-1 items-center gap-1.5">
-                <h1 className="min-w-0 truncate text-xl font-medium text-is-text">{title}</h1>
-                <CopyButton value={path || clone.slug} label="folder path" size={14} />
-              </div>
-            </div>
-            {status === "loading" && <p className="text-sm text-is-text-tertiary">Loading…</p>}
-            {status === "error" && (
-              <p className="text-sm text-is-danger-text">
-                {error}{" "}
+      <div
+        ref={containerRef}
+        className="flex min-h-0 flex-1"
+        style={{ "--rail-width": `${railWidth}px` } as CSSProperties}
+      >
+        {selected ? (
+          // FOCUS: a note is open — slim active-branch rail + a dominant editor.
+          <>
+            <nav
+              aria-label="Notes in this folder"
+              className="flex shrink-0 flex-col overflow-hidden border-r border-is-border md:w-[var(--rail-width)] max-md:hidden"
+            >
+              <div className="flex items-center gap-2 border-b border-is-border px-3 py-2.5">
                 <button
                   type="button"
-                  className="underline underline-offset-2 hover:text-is-text"
-                  onClick={() => void reload()}
+                  disabled={busy}
+                  onClick={() => void goBack()}
+                  className="inline-flex shrink-0 items-center gap-1 rounded-md text-xs text-is-text-tertiary transition hover:text-is-text disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
                 >
-                  Retry
+                  <ArrowLeft size={14} strokeWidth={1.333} aria-hidden="true" />
+                  Back
                 </button>
-              </p>
-            )}
-            {status === "loaded" && (
-              <>
-                {creating && (
-                  <CreateRow
-                    kind={creating}
-                    onSubmit={(n) => void submitCreate(n)}
-                    onCancel={() => setCreating(null)}
+                <span className="min-w-0 flex-1 truncate text-xs font-medium text-is-text-secondary">
+                  {title}
+                </span>
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto p-2">
+                {noteFiles.length > 0 ? (
+                  <NoteList
+                    files={noteFiles}
+                    selectedRel={selected.relPath}
+                    onSelect={(n) => void selectNote(n)}
+                    disabled={busy}
+                    compact
                   />
-                )}
-                {readme && (
-                  <ReadmeCard
-                    key={readme.path}
-                    note={readme}
-                    onOpen={() => void selectNote(readme)}
-                    onLink={(t, from) => void handleLink(t, from)}
-                    resolveWiki={resolveWiki}
-                  />
-                )}
-                {empty && !readme && !creating ? (
-                  <p className="text-sm text-is-text-tertiary">This folder has no notes or sub-folders.</p>
-                ) : folders.length > 0 ? (
-                  // Folders present → two columns (folder rail + notes).
-                  <div className="grid gap-x-8 gap-y-6 sm:grid-cols-[12rem_minmax(0,1fr)]">
-                    <FolderList folders={folders} onOpen={(f) => void navigate(f.relPath)} />
-                    {noteFiles.length > 0 ? (
-                      <NoteList
-                        files={noteFiles}
-                        selectedRel={selected?.relPath}
-                        onSelect={(n) => void selectNote(n)}
-                        disabled={busy}
-                      />
-                    ) : (
-                      <p className="text-sm text-is-text-tertiary">No notes in this folder.</p>
-                    )}
-                  </div>
                 ) : (
-                  // No folders → the notes list gets the full width.
-                  noteFiles.length > 0 && (
-                    <NoteList
-                      files={noteFiles}
-                      selectedRel={selected?.relPath}
-                      onSelect={(n) => void selectNote(n)}
-                      disabled={busy}
-                    />
-                  )
+                  <p className="px-2 py-1 text-xs text-is-text-tertiary">No other notes here.</p>
                 )}
-              </>
-            )}
-          </div>
-        </nav>
-
-        {selected && (
-          <>
-            <Resizer containerRef={containerRef} width={paneWidth} onResize={setPaneWidth} />
+              </div>
+            </nav>
+            <Resizer
+              side="left"
+              min={200}
+              max={420}
+              label="Note list width"
+              containerRef={containerRef}
+              width={railWidth}
+              onResize={setRailWidth}
+            />
             <section
               aria-label="Note editor"
-              className="flex shrink-0 overflow-hidden border-l border-is-border md:w-[var(--pane-width)] max-md:fixed max-md:inset-0 max-md:z-40 max-md:w-full"
+              className="flex min-w-0 flex-1 overflow-hidden max-md:fixed max-md:inset-0 max-md:z-40"
             >
               <NotePane
                 key={selected.path}
@@ -838,6 +832,86 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
               />
             </section>
           </>
+        ) : (
+          // BROWSE: no note open — the full folder tree.
+          <nav className="min-w-0 flex-1 overflow-y-auto">
+            <div className="mx-auto w-full max-w-3xl px-6 py-6">
+              <div className="mb-5 flex items-center gap-3">
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void goBack()}
+                  className="inline-flex shrink-0 items-center gap-1 rounded-md text-xs text-is-text-tertiary transition hover:text-is-text disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
+                >
+                  <ArrowLeft size={14} strokeWidth={1.333} aria-hidden="true" />
+                  Back
+                </button>
+                <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                  <h1 className="min-w-0 truncate text-xl font-medium text-is-text">{title}</h1>
+                  <CopyButton value={path || clone.slug} label="folder path" size={14} />
+                </div>
+              </div>
+              {status === "loading" && <p className="text-sm text-is-text-tertiary">Loading…</p>}
+              {status === "error" && (
+                <p className="text-sm text-is-danger-text">
+                  {error}{" "}
+                  <button
+                    type="button"
+                    className="underline underline-offset-2 hover:text-is-text"
+                    onClick={() => void reload()}
+                  >
+                    Retry
+                  </button>
+                </p>
+              )}
+              {status === "loaded" && (
+                <>
+                  {creating && (
+                    <CreateRow
+                      kind={creating}
+                      onSubmit={(n) => void submitCreate(n)}
+                      onCancel={() => setCreating(null)}
+                    />
+                  )}
+                  {readme && (
+                    <ReadmeCard
+                      key={readme.path}
+                      note={readme}
+                      onOpen={() => void selectNote(readme)}
+                      onLink={(t, from) => void handleLink(t, from)}
+                      resolveWiki={resolveWiki}
+                    />
+                  )}
+                  {empty && !readme && !creating ? (
+                    <p className="text-sm text-is-text-tertiary">This folder has no notes or sub-folders.</p>
+                  ) : folders.length > 0 ? (
+                    <div className="grid gap-x-8 gap-y-6 sm:grid-cols-[12rem_minmax(0,1fr)]">
+                      <FolderList folders={folders} onOpen={(f) => void navigate(f.relPath)} />
+                      {noteFiles.length > 0 ? (
+                        <NoteList
+                          files={noteFiles}
+                          selectedRel={undefined}
+                          onSelect={(n) => void selectNote(n)}
+                          disabled={busy}
+                        />
+                      ) : (
+                        <p className="text-sm text-is-text-tertiary">No notes in this folder.</p>
+                      )}
+                    </div>
+                  ) : (
+                    noteFiles.length > 0 && (
+                      <NoteList
+                        files={noteFiles}
+                        selectedRel={undefined}
+                        onSelect={(n) => void selectNote(n)}
+                        disabled={busy}
+                      />
+                    )
+                  )}
+                </>
+              )}
+            </div>
+          </nav>
         )}
       </div>
     </div>
