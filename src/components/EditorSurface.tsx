@@ -794,17 +794,24 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
                 </span>
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto p-2">
-                {noteFiles.length > 0 ? (
-                  <NoteList
-                    files={noteFiles}
-                    selectedRel={selected.relPath}
-                    onSelect={(n) => void selectNote(n)}
-                    disabled={busy}
-                    compact
-                  />
-                ) : (
-                  <p className="px-2 py-1 text-xs text-is-text-tertiary">No other notes here.</p>
+                {status === "loading" && (
+                  <p className="px-2 py-1 text-xs text-is-text-tertiary">Loading…</p>
                 )}
+                {status === "error" && (
+                  <p className="px-2 py-1 text-xs text-is-danger-text">Couldn't load notes.</p>
+                )}
+                {status === "loaded" &&
+                  (noteFiles.length > 0 ? (
+                    <NoteList
+                      files={noteFiles}
+                      selectedRel={selected.relPath}
+                      onSelect={(n) => void selectNote(n)}
+                      disabled={busy}
+                      compact
+                    />
+                  ) : (
+                    <p className="px-2 py-1 text-xs text-is-text-tertiary">No other notes here.</p>
+                  ))}
               </div>
             </nav>
             <Resizer
