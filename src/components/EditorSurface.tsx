@@ -556,16 +556,9 @@ function AddMenu({
   );
 }
 
-// Inline name input for creating a note/folder in the current path.
-function CreateRow({
-  kind,
-  onSubmit,
-  onCancel,
-}: {
-  kind: "note" | "folder";
-  onSubmit: (name: string) => void;
-  onCancel: () => void;
-}) {
+// Inline name input for creating a folder in the current path. (Notes are
+// created blank and titled in the editor — see createNewNote.)
+function CreateRow({ onSubmit, onCancel }: { onSubmit: (name: string) => void; onCancel: () => void }) {
   const [name, setName] = useState("");
   return (
     <form
@@ -575,18 +568,14 @@ function CreateRow({
       }}
       className="mb-4 flex items-center gap-2"
     >
-      {kind === "folder" ? (
-        <FolderPlus size={16} strokeWidth={1.333} className="shrink-0 text-is-text-tertiary" aria-hidden="true" />
-      ) : (
-        <FilePlus size={16} strokeWidth={1.333} className="shrink-0 text-is-text-tertiary" aria-hidden="true" />
-      )}
+      <FolderPlus size={16} strokeWidth={1.333} className="shrink-0 text-is-text-tertiary" aria-hidden="true" />
       <input
         autoFocus
         value={name}
         onChange={(e) => setName(e.target.value)}
         onKeyDown={(e) => e.key === "Escape" && onCancel()}
-        placeholder={kind === "folder" ? "New folder name" : "New note name"}
-        aria-label={kind === "folder" ? "New folder name" : "New note name"}
+        placeholder="New folder name"
+        aria-label="New folder name"
         className="min-w-0 flex-1 rounded-md border border-is-border bg-is-bg px-2.5 py-1.5 text-sm text-is-text outline-none focus-visible:border-is-accent"
       />
       <button
@@ -624,7 +613,8 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
   const [editorKey, setEditorKey] = useState(0);
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [creating, setCreating] = useState<null | "note" | "folder">(null);
+  // Only folders use the inline create row now; new notes open blank + titled.
+  const [creating, setCreating] = useState<"folder" | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const { status, folders, files, error, reload } = useDir(clone.path, path);
   const { index: wikiIndex, reload: reloadWiki } = useWikiIndex(clone.path);
@@ -668,37 +658,24 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
 
   const submitCreate = useCallback(
     async (name: string) => {
-      const kind = creating;
-      if (!kind) return;
       try {
-        if (kind === "folder") {
-          await createFolder(clone.path, path, name);
-          await reload();
-        } else {
-          // Opening the new note replaces any open one — guard unsaved edits.
-          if (!(await confirmLeave())) return;
-          const note = await createNote(clone.path, path, name);
-          await Promise.all([reload(), reloadWiki()]);
-          setSelected(note);
-        }
+        await createFolder(clone.path, path, name);
+        await reload();
         setCreating(null);
       } catch (err) {
         toast(errMessage(err), "error");
       }
     },
-    [creating, clone.path, path, reload, reloadWiki, confirmLeave, toast],
+    [clone.path, path, reload, toast],
   );
 
   // Add+ → New folder uses the inline create row in the browse tree, so close
   // any open note first (returns to Browse), guarded.
-  const startCreate = useCallback(
-    async (kind: "note" | "folder") => {
-      if (selected && !(await confirmLeave())) return;
-      setSelected(undefined);
-      setCreating(kind);
-    },
-    [selected, confirmLeave],
-  );
+  const startCreateFolder = useCallback(async () => {
+    if (selected && !(await confirmLeave())) return;
+    setSelected(undefined);
+    setCreating("folder");
+  }, [selected, confirmLeave]);
 
   // Add+ → New note: create a blank "Untitled" note and open it in Focus,
   // Obsidian-style — the title field focuses so you type the title (= filename).
@@ -857,7 +834,7 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
         </div>
         <AddMenu
           onNewNote={() => void createNewNote()}
-          onNewFolder={() => void startCreate("folder")}
+          onNewFolder={() => void startCreateFolder()}
           // Block creation until the listing is ready — reload() after creating
           // wouldn't surface the new item while loading/errored.
           disabled={busy || status !== "loaded"}
@@ -972,11 +949,7 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
               {status === "loaded" && (
                 <>
                   {creating && (
-                    <CreateRow
-                      kind={creating}
-                      onSubmit={(n) => void submitCreate(n)}
-                      onCancel={() => setCreating(null)}
-                    />
+                    <CreateRow onSubmit={(n) => void submitCreate(n)} onCancel={() => setCreating(null)} />
                   )}
                   {readme && (
                     <ReadmeCard

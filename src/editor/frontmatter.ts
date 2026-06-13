@@ -101,10 +101,16 @@ export function parseFrontmatter(doc: string): ParsedFrontmatter | null {
   return { startLine: 1, endLine: closeIdx + 1, fields };
 }
 
-// Quote a YAML scalar only when it needs it (colons, leading/trailing space or
-// quote, leading dash). Single-quote style, doubling embedded single quotes.
+// Quote a YAML scalar only when it needs it: empty, leading/trailing space, a
+// `:`/`#` anywhere, or a leading YAML indicator char (including flow markers
+// `[`/`{`). Single-quote style, doubling embedded single quotes.
 function yamlScalar(value: string): string {
-  if (/^\s|\s$|[:#]|^['">|&*!?-]/.test(value) || value === "") {
+  if (
+    value === "" ||
+    /^\s|\s$/.test(value) ||
+    /[:#]/.test(value) ||
+    /^[-?:,[\]{}#&*!|>'"%@`]/.test(value)
+  ) {
     return `'${value.replace(/'/g, "''")}'`;
   }
   return value;

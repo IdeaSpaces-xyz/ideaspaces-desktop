@@ -61,10 +61,13 @@ function isHiddenOrSkipped(name: string): boolean {
   return name.startsWith(".") || SKIP_DIRS.has(name);
 }
 
-/** A frontmatter field value for a note's content, or undefined when absent. */
-function frontmatterField(content: string, key: string): string | undefined {
+/** The `name` (title) and `summary` from a note's frontmatter, parsed once. */
+function noteMeta(content: string): { title?: string; summary?: string } {
   const fm = parseFrontmatter(content);
-  return fm?.fields.find((f) => f.key === key)?.value || undefined;
+  if (!fm) return {};
+  const field = (key: string) =>
+    fm.fields.find((f) => f.key.toLowerCase() === key)?.value || undefined;
+  return { title: field("name"), summary: field("summary") };
 }
 
 /** Slug for a title — lowercase, alphanumeric, hyphen-joined; never empty. */
@@ -112,15 +115,7 @@ export async function listDir(cloneDir: string, relPath: string): Promise<DirLis
       }
       if (entry.isFile && isMarkdown(entry.name)) {
         const content = await readTextFile(abs).catch(() => "");
-        return {
-          file: {
-            path: abs,
-            relPath: rel,
-            name: baseName(entry.name),
-            title: frontmatterField(content, "name"),
-            summary: frontmatterField(content, "summary"),
-          },
-        };
+        return { file: { path: abs, relPath: rel, name: baseName(entry.name), ...noteMeta(content) } };
       }
       return {};
     }),
