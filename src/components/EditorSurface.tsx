@@ -105,6 +105,7 @@ function NotePane({
       await onRetitle(setFrontmatterName(draftRef.current, trimmed), trimmed);
     } catch (err) {
       toast(errMessage(err), "error");
+      setTitleDraft(note.title ?? ""); // revert — the title wasn't saved
       setBusy(false); // on success the pane remounts at the new path
     }
   }, [titleDraft, busy, note.title, onRetitle, toast]);
@@ -705,6 +706,7 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
       if (!selected) return;
       const newNote = await renameNote(clone.path, selected.relPath, title, content);
       await Promise.all([reload(), reloadWiki()]);
+      setNewNotePath(undefined); // titled now → its pane should focus the body
       setSelected(newNote);
       setEditorKey((k) => k + 1);
     },
