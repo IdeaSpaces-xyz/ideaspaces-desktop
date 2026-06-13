@@ -2,7 +2,6 @@ import { Fragment, useCallback, useEffect, useRef, useState, type CSSProperties 
 import {
   ArrowLeft,
   ArrowRight,
-  BookText,
   ChevronRight,
   FilePlus,
   FileText,
@@ -20,7 +19,7 @@ import { NoteEditor } from "../editor/NoteEditor";
 import { useDir } from "../editor/useDir";
 import { useWikiIndex } from "../editor/useWikiIndex";
 import { classifyLink } from "../editor/linkResolve";
-import { setFrontmatterName } from "../editor/frontmatter";
+import { parseFrontmatter, setFrontmatterName } from "../editor/frontmatter";
 import {
   createFolder,
   createNote,
@@ -39,11 +38,21 @@ import { Resizer } from "./Resizer";
 import { CopyButton } from "./CopyButton";
 import { cn } from "../lib/cn";
 
+// Ghost toolbar button — no border/fill, just text that lifts on hover. Keeps
+// the open note feeling like a document, not a form.
 const barBtn =
-  "inline-flex items-center gap-1.5 rounded-md border border-is-border bg-is-surface px-2.5 py-1.5 text-xs text-is-text-secondary transition hover:border-is-accent hover:text-is-text disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs text-is-text-tertiary transition hover:bg-is-surface-alt hover:text-is-text disabled:cursor-not-allowed disabled:opacity-50";
 
 function errMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+// README renders as plain prose — drop the leading YAML so the folder guide
+// reads as content, not a Properties panel.
+function stripFrontmatter(content: string): string {
+  const fm = parseFrontmatter(content);
+  if (!fm) return content;
+  return content.split("\n").slice(fm.endLine).join("\n").replace(/^\n+/, "");
 }
 
 // One opened note: loads its content, holds the draft + dirty state, saves to
@@ -178,7 +187,7 @@ function NotePane({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-is-surface">
-      <div className="flex items-center justify-between gap-3 border-b border-is-border px-5 py-2.5">
+      <div className="flex items-center justify-between gap-3 px-5 py-2.5">
         <p className="flex min-w-0 items-center gap-1 text-xs text-is-text-tertiary">
           <span className="truncate">{note.relPath}</span>
           {dirty && <span className="shrink-0 text-is-text-secondary">• unsaved</span>}
@@ -424,9 +433,10 @@ function NoteList({
   );
 }
 
-// The folder's README at the top as a compact, read-only teaser — a clamped
-// live-preview with a fade and a "Read more" that opens the full note in the
-// editor pane. Keyed by path so navigating folders remounts with the new README.
+// The folder's README at the top as a folded teaser — borderless prose (no
+// card, no frontmatter), clamped with a fade, and a "Read more" that opens the
+// full note in the right editor pane. Keyed by path so navigating folders
+// remounts with the new README.
 function ReadmeCard({
   note,
   onOpen,
@@ -440,8 +450,8 @@ function ReadmeCard({
 }) {
   const [content, setContent] = useState<string | null>(null);
   const [error, setError] = useState<string | undefined>(undefined);
-  // Whether the rendered README is taller than the clamp — drives the fade and
-  // the "Read more" vs "Open" affordance, so a short README isn't a false teaser.
+  // Whether the rendered README exceeds the clamp — drives the fade and the
+  // "Read more" vs "Open" label, so a short README isn't a false teaser.
   const [overflowing, setOverflowing] = useState(false);
   const innerRef = useRef<HTMLDivElement>(null);
 
@@ -468,47 +478,38 @@ function ReadmeCard({
     return () => ro.disconnect();
   }, [content]);
 
+  if (error) return <p className="mb-8 text-sm text-is-danger-text">{error}</p>;
+  if (content === null) return <p className="mb-8 text-sm text-is-text-tertiary">Loading…</p>;
+
   return (
-    <div className="mb-6 overflow-hidden rounded-lg border border-is-border bg-is-surface">
-      <div className="flex items-center gap-2 border-b border-is-border px-4 py-2.5">
-        <BookText size={15} strokeWidth={1.333} className="shrink-0 text-is-text-tertiary" aria-hidden="true" />
-        <span className="flex-1 text-sm font-medium text-is-text">README</span>
+    <div className="mb-8">
+      {/* Clamped teaser; the fade only shows when there's more below. */}
+      <div className="relative max-h-44 overflow-hidden">
+        <div ref={innerRef}>
+          <NoteEditor
+            initialContent={stripFrontmatter(content)}
+            readOnly
+            autoHeight
+            autoFocus={false}
+            onChange={() => {}}
+            onSave={() => {}}
+            onLinkClick={(url) => onLink(url, note.relPath)}
+            onWikiOpen={(t) => onLink(t, note.relPath)}
+            resolveWiki={resolveWiki}
+          />
+        </div>
+        {overflowing && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-is-bg to-transparent" />
+        )}
       </div>
-      {error ? (
-        <p className="px-4 py-3 text-sm text-is-danger-text">{error}</p>
-      ) : content === null ? (
-        <p className="px-4 py-3 text-sm text-is-text-tertiary">Loading…</p>
-      ) : (
-        <>
-          {/* Clamped teaser; the fade only shows when there's more below. */}
-          <div className="relative max-h-44 overflow-hidden px-4 py-3">
-            <div ref={innerRef}>
-              <NoteEditor
-                initialContent={content}
-                readOnly
-                autoHeight
-                autoFocus={false}
-                onChange={() => {}}
-                onSave={() => {}}
-                onLinkClick={(url) => onLink(url, note.relPath)}
-                onWikiOpen={(t) => onLink(t, note.relPath)}
-                resolveWiki={resolveWiki}
-              />
-            </div>
-            {overflowing && (
-              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-is-surface to-transparent" />
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={onOpen}
-            className="flex w-full items-center justify-center gap-1 border-t border-is-border px-4 py-2 text-xs text-is-accent-text transition hover:bg-is-surface-alt focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
-          >
-            {overflowing ? "Read more" : "Open in editor"}
-            <ArrowRight size={13} strokeWidth={1.5} aria-hidden="true" />
-          </button>
-        </>
-      )}
+      <button
+        type="button"
+        onClick={onOpen}
+        className="mt-1 inline-flex items-center gap-1 rounded-md text-xs text-is-accent-text transition hover:text-is-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
+      >
+        {overflowing ? "Read more" : "Open in editor"}
+        <ArrowRight size={13} strokeWidth={1.5} aria-hidden="true" />
+      </button>
     </div>
   );
 }
