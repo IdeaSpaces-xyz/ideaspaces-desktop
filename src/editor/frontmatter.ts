@@ -104,12 +104,16 @@ export function parseFrontmatter(doc: string): ParsedFrontmatter | null {
 // Quote a YAML scalar only when it needs it: empty, leading/trailing space, a
 // `:`/`#` anywhere, or a leading YAML indicator char (including flow markers
 // `[`/`{`). Single-quote style, doubling embedded single quotes.
+// YAML 1.1 booleans/nulls a strict parser would coerce ("Yes" → true).
+const YAML_RESERVED = /^(y|n|yes|no|true|false|on|off|null|~)$/i;
+
 function yamlScalar(value: string): string {
   if (
     value === "" ||
     /^\s|\s$/.test(value) ||
     /[:#]/.test(value) ||
-    /^[-?:,[\]{}#&*!|>'"%@`]/.test(value)
+    /^[-?:,[\]{}#&*!|>'"%@`]/.test(value) ||
+    YAML_RESERVED.test(value)
   ) {
     return `'${value.replace(/'/g, "''")}'`;
   }

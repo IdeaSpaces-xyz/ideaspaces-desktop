@@ -57,6 +57,7 @@ function NotePane({
   onClose,
   onLink,
   onRetitle,
+  autoFocusTitle,
   resolveWiki,
 }: {
   note: NoteFile;
@@ -68,6 +69,8 @@ function NotePane({
   onLink: (target: string, fromRelPath: string) => void;
   // Retitle: write `content` (with the new frontmatter name) and reselect.
   onRetitle: (content: string, title: string) => Promise<void> | void;
+  // Freshly created note — focus the title field rather than the body.
+  autoFocusTitle: boolean;
   resolveWiki: (target: string) => WikiLinkResolvedTarget | null;
 }) {
   const toast = useToast();
@@ -82,15 +85,14 @@ function NotePane({
   const [busy, setBusy] = useState(false);
 
   // Title (= frontmatter `name`, = the filename slug). README is structural, so
-  // it's shown read-only. A fresh "untitled" note focuses the title field.
+  // it's shown read-only.
   const isReadme = /^readme$/i.test(note.name);
-  const isNew = !note.title && /^untitled(-\d+)?$/.test(note.name);
   const [titleDraft, setTitleDraft] = useState(note.title ?? "");
   const titleRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (isNew && content !== null) titleRef.current?.focus();
-  }, [isNew, content]);
+    if (autoFocusTitle && content !== null) titleRef.current?.focus();
+  }, [autoFocusTitle, content]);
 
   const commitTitle = useCallback(async () => {
     const trimmed = titleDraft.trim();
@@ -247,7 +249,7 @@ function NotePane({
           <div className="min-h-0 flex-1 px-6">
             <NoteEditor
               initialContent={content}
-              autoFocus={!isNew}
+              autoFocus={!autoFocusTitle}
               onChange={(doc) => {
                 draftRef.current = doc;
                 setDirty(doc !== savedRef.current);
@@ -611,6 +613,9 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
   // Bumped on retitle to force the editor to remount even when the path is
   // unchanged (a title edit that slugs to the same filename).
   const [editorKey, setEditorKey] = useState(0);
+  // The just-created note's path — its pane focuses the title field instead of
+  // the body (a precise signal, vs. guessing from an "untitled" filename).
+  const [newNotePath, setNewNotePath] = useState<string | undefined>(undefined);
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
   // Only folders use the inline create row now; new notes open blank + titled.
@@ -685,6 +690,7 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
       const note = await createUntitledNote(clone.path, path);
       await Promise.all([reload(), reloadWiki()]);
       setCreating(null);
+      setNewNotePath(note.path);
       setSelected(note);
     } catch (err) {
       toast(errMessage(err), "error");
@@ -910,6 +916,7 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
                 onClose={() => void closeNote()}
                 onLink={(t, from) => void handleLink(t, from)}
                 onRetitle={retitleNote}
+                autoFocusTitle={selected.path === newNotePath}
                 resolveWiki={resolveWiki}
               />
             </section>
