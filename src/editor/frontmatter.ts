@@ -100,3 +100,50 @@ export function parseFrontmatter(doc: string): ParsedFrontmatter | null {
   // line closeIdx+1 is the closing fence.
   return { startLine: 1, endLine: closeIdx + 1, fields };
 }
+
+// Quote a YAML scalar only when it needs it: empty, leading/trailing space, a
+// `:`/`#` anywhere, or a leading YAML indicator char (including flow markers
+// `[`/`{`). Single-quote style, doubling embedded single quotes.
+// YAML 1.1 booleans/nulls a strict parser would coerce ("Yes" → true).
+const YAML_RESERVED = /^(y|n|yes|no|true|false|on|off|null|~)$/i;
+
+function yamlScalar(value: string): string {
+  if (
+    value === "" ||
+    /^\s|\s$/.test(value) ||
+    /[:#]/.test(value) ||
+    /^[-?:,[\]{}#&*!|>'"%@`]/.test(value) ||
+    YAML_RESERVED.test(value)
+  ) {
+    return `'${value.replace(/'/g, "''")}'`;
+  }
+  return value;
+}
+
+/**
+ * Set the frontmatter `name` field to `name`, preserving the rest of the block
+ * (and the body). Creates a frontmatter block if there isn't one. Pure string
+ * transform — the caller writes the result to disk.
+ */
+export function setFrontmatterName(content: string, name: string): string {
+  const line = `name: ${yamlScalar(name)}`;
+  const fm = parseFrontmatter(content);
+  if (!fm) {
+    const sep = content === "" || content.startsWith("\n") ? "" : "\n";
+    return `---\n${line}\n---\n${sep}${content}`;
+  }
+  const lines = content.split("\n");
+  // Inner lines are 0-based indices [startLine, endLine-2] (after the opening
+  // fence, before the closing one). Replace an existing top-level `name:`, else
+  // insert right after the opening fence.
+  let nameIdx = -1;
+  for (let i = fm.startLine; i <= fm.endLine - 2; i++) {
+    if (/^name\s*:/.test(lines[i] ?? "")) {
+      nameIdx = i;
+      break;
+    }
+  }
+  if (nameIdx !== -1) lines[nameIdx] = line;
+  else lines.splice(fm.startLine, 0, line);
+  return lines.join("\n");
+}

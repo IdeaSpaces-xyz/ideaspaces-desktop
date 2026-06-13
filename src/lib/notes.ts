@@ -7,7 +7,15 @@
 // Listing is per-level (folders + files at one path), mirroring is_web v2's
 // repo tree browser — you drill into folders rather than seeing every note flat.
 
-import { exists, mkdir, readDir, readTextFile, writeTextFile, type DirEntry } from "@tauri-apps/plugin-fs";
+import {
+  exists,
+  mkdir,
+  readDir,
+  readTextFile,
+  remove,
+  writeTextFile,
+  type DirEntry,
+} from "@tauri-apps/plugin-fs";
 import { parseFrontmatter } from "../editor/frontmatter";
 
 export interface NoteFile {
@@ -15,8 +23,10 @@ export interface NoteFile {
   path: string;
   /** Path relative to the clone root (the git pathspec, POSIX separators). */
   relPath: string;
-  /** Display name — the filename without extension. */
+  /** Filename without extension (a slug). */
   name: string;
+  /** Frontmatter `name` — the display title (verbatim), when present. */
+  title?: string;
   /** Frontmatter `summary`, surfaced as the list subtitle (when present). */
   summary?: string;
 }
@@ -51,11 +61,23 @@ function isHiddenOrSkipped(name: string): boolean {
   return name.startsWith(".") || SKIP_DIRS.has(name);
 }
 
-/** Frontmatter `summary` for a note's content, or undefined when absent. */
-function noteSummary(content: string): string | undefined {
+/** The `name` (title) and `summary` from a note's frontmatter, parsed once. */
+function noteMeta(content: string): { title?: string; summary?: string } {
   const fm = parseFrontmatter(content);
-  const summary = fm?.fields.find((f) => f.key === "summary")?.value;
-  return summary || undefined;
+  if (!fm) return {};
+  const field = (key: string) =>
+    fm.fields.find((f) => f.key.toLowerCase() === key)?.value || undefined;
+  return { title: field("name"), summary: field("summary") };
+}
+
+/** Slug for a title — lowercase, alphanumeric, hyphen-joined; never empty. */
+export function slugify(title: string): string {
+  const s = title
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return s || "untitled";
 }
 
 /** Count markdown files directly inside a folder (shallow; best-effort). */
@@ -93,7 +115,7 @@ export async function listDir(cloneDir: string, relPath: string): Promise<DirLis
       }
       if (entry.isFile && isMarkdown(entry.name)) {
         const content = await readTextFile(abs).catch(() => "");
-        return { file: { path: abs, relPath: rel, name: baseName(entry.name), summary: noteSummary(content) } };
+        return { file: { path: abs, relPath: rel, name: baseName(entry.name), ...noteMeta(content) } };
       }
       return {};
     }),
@@ -184,4 +206,56 @@ export async function createNote(cloneDir: string, relPath: string, name: string
   if (await exists(abs)) throw new Error(`"${seg}" already exists.`);
   await writeTextFile(abs, "");
   return { path: abs, relPath: rel, name: baseName(seg) };
+}
+
+/** Find a free `<relDir>/<slug>.md` (…-2, …-3 on collision); `exclude` is the
+ *  note's own current path, so renaming to the same slug is allowed. */
+async function freeRelPath(
+  cloneDir: string,
+  relDir: string,
+  slug: string,
+  exclude?: string,
+): Promise<string> {
+  const root = cloneDir.replace(/\/+$/, "");
+  const make = (s: string) => (relDir ? `${relDir}/${s}.md` : `${s}.md`);
+  let candidate = make(slug);
+  let n = 2;
+  while (candidate !== exclude && (await exists(`${root}/${candidate}`))) {
+    candidate = make(`${slug}-${n++}`);
+  }
+  return candidate;
+}
+
+/** Create a blank "Untitled" note (deduped) under `relDir`, ready to be titled. */
+export async function createUntitledNote(cloneDir: string, relDir: string): Promise<NoteFile> {
+  const rel = await freeRelPath(cloneDir, relDir, "untitled");
+  const abs = `${cloneDir.replace(/\/+$/, "")}/${rel}`;
+  await writeTextFile(abs, "");
+  return { path: abs, relPath: rel, name: baseName(rel.slice(rel.lastIndexOf("/") + 1)) };
+}
+
+/**
+ * Retitle a note: write `newContent` to a slugified filename in the same folder
+ * and remove the old file if the path changed. `title` is the verbatim display
+ * name (frontmatter `name`); the filename is its slug. Returns the new note.
+ */
+export async function renameNote(
+  cloneDir: string,
+  oldRelPath: string,
+  title: string,
+  newContent: string,
+): Promise<NoteFile> {
+  const root = cloneDir.replace(/\/+$/, "");
+  const slash = oldRelPath.lastIndexOf("/");
+  const relDir = slash === -1 ? "" : oldRelPath.slice(0, slash);
+  const newRel = await freeRelPath(cloneDir, relDir, slugify(title), oldRelPath);
+  const newAbs = `${root}/${newRel}`;
+  await writeTextFile(newAbs, newContent);
+  if (newRel !== oldRelPath) await remove(`${root}/${oldRelPath}`);
+  return {
+    path: newAbs,
+    relPath: newRel,
+    name: baseName(newRel.slice(newRel.lastIndexOf("/") + 1)),
+    title,
+  };
 }
