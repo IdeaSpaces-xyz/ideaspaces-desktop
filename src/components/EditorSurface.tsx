@@ -155,7 +155,9 @@ function NotePane({
         if (alive) setSyncState((s.ahead ?? 0) > 0 || s.dirty ? "unsynced" : "synced");
       })
       .catch(() => {
-        /* status unavailable — leave the optimistic "synced" default */
+        // Status unavailable — err toward showing Sync rather than hiding it, so
+        // genuinely unsynced work is never silently masked as "synced".
+        if (alive) setSyncState("unsynced");
       });
     return () => {
       alive = false;
