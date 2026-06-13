@@ -58,7 +58,7 @@ function stripFrontmatter(content: string): string {
   return content.split("\n").slice(fm.endLine).join("\n").replace(/^\n+/, "");
 }
 
-type SyncState = "synced" | "unsynced" | "syncing";
+type SyncState = "loading" | "synced" | "unsynced" | "syncing";
 
 // One opened note: loads its content, autosaves edits to disk (debounced), and
 // syncs (commit + push, commit hidden) via the CLI. No Save button — it's 2026.
@@ -93,9 +93,10 @@ function NotePane({
   const savedRef = useRef("");
   const saveTimer = useRef<number | null>(null);
   const [saving, setSaving] = useState(false);
-  // Sync = whether local edits have reached the remote. Seeded from git on open
-  // (the clone may already have unsynced work); an edit flips it to "unsynced".
-  const [syncState, setSyncState] = useState<SyncState>("synced");
+  // Sync = whether local edits have reached the remote. Starts "loading" (the
+  // pill renders nothing) until seeded from git on open — the clone may already
+  // carry unsynced work; an edit flips it to "unsynced".
+  const [syncState, setSyncState] = useState<SyncState>("loading");
   // An operation (retitle or sync) is in flight — blocks navigation + inputs.
   const [busy, setBusy] = useState(false);
 
@@ -152,12 +153,16 @@ function NotePane({
     let alive = true;
     cloneStatus(clone.path)
       .then((s) => {
-        if (alive) setSyncState((s.ahead ?? 0) > 0 || s.dirty ? "unsynced" : "synced");
+        if (!alive) return;
+        const seeded: SyncState = (s.ahead ?? 0) > 0 || s.dirty ? "unsynced" : "synced";
+        // Only resolve the initial "loading" — never clobber a state the user
+        // already drove (e.g. typed while the status call was in flight).
+        setSyncState((cur) => (cur === "loading" ? seeded : cur));
       })
       .catch(() => {
         // Status unavailable — err toward showing Sync rather than hiding it, so
         // genuinely unsynced work is never silently masked as "synced".
-        if (alive) setSyncState("unsynced");
+        if (alive) setSyncState((cur) => (cur === "loading" ? "unsynced" : cur));
       });
     return () => {
       alive = false;
@@ -190,9 +195,15 @@ function NotePane({
   }, [flushSave]);
 
   // Flush any pending edit when the note unmounts (switch note / close), so the
-  // debounce timer never strands the last keystrokes. Fire-and-forget — the
-  // local write is fast and we've already left.
-  useEffect(() => () => void flushSave(), [flushSave]);
+  // debounce timer never strands the last keystrokes. flushSave toasts its own
+  // write errors; the extra catch logs anything unexpected on the way out so an
+  // unmount-time failure isn't swallowed.
+  useEffect(
+    () => () => {
+      flushSave().catch((err) => console.error("autosave on unmount failed", err));
+    },
+    [flushSave],
+  );
 
   // Sync = make local and remote match. Commit (auto-message) is plumbing; the
   // user only sees "Sync". Flushes the latest edit first, then commit + push.
@@ -247,12 +258,12 @@ function NotePane({
               <UploadCloud size={14} strokeWidth={1.333} aria-hidden="true" />
               Sync
             </button>
-          ) : (
+          ) : syncState === "synced" ? (
             <span className="inline-flex items-center gap-1.5 px-2 py-1.5 text-xs text-is-text-tertiary">
               <Check size={14} strokeWidth={1.5} aria-hidden="true" />
               Synced
             </span>
-          )}
+          ) : null /* loading — render nothing until git status resolves */}
           <button
             type="button"
             onClick={onClose}
