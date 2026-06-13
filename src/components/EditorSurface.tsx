@@ -1,12 +1,12 @@
 import { Fragment, useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import {
   ArrowLeft,
+  ArrowRight,
   ChevronRight,
   FilePlus,
   FileText,
   Folder,
   FolderPlus,
-  Pencil,
   Plus,
   RefreshCw,
   Save,
@@ -433,10 +433,10 @@ function NoteList({
   );
 }
 
-// The folder's README, rendered as plain prose at the top of the folder — the
-// natural guide above the tree and note list. No card, no frontmatter: just the
-// content. A subtle hover "Edit" opens it in the editor pane. Keyed by path so
-// navigating folders remounts with the new README.
+// The folder's README at the top as a folded teaser — borderless prose (no
+// card, no frontmatter), clamped with a fade, and a "Read more" that opens the
+// full note in the right editor pane. Keyed by path so navigating folders
+// remounts with the new README.
 function ReadmeCard({
   note,
   onOpen,
@@ -450,6 +450,10 @@ function ReadmeCard({
 }) {
   const [content, setContent] = useState<string | null>(null);
   const [error, setError] = useState<string | undefined>(undefined);
+  // Whether the rendered README exceeds the clamp — drives the fade and the
+  // "Read more" vs "Open" label, so a short README isn't a false teaser.
+  const [overflowing, setOverflowing] = useState(false);
+  const innerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let alive = true;
@@ -462,32 +466,50 @@ function ReadmeCard({
     };
   }, [note.path]);
 
+  // The live-preview mounts/grows asynchronously, so observe the rendered height
+  // rather than measuring once. 176px = the max-h-44 clamp below.
+  useEffect(() => {
+    const el = innerRef.current;
+    if (content === null || !el) return;
+    const check = () => setOverflowing(el.scrollHeight > 176 + 8);
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [content]);
+
   if (error) return <p className="mb-8 text-sm text-is-danger-text">{error}</p>;
   if (content === null) return <p className="mb-8 text-sm text-is-text-tertiary">Loading…</p>;
 
   return (
-    <div className="group relative mb-8">
+    <div className="mb-8">
+      {/* Clamped teaser; the fade only shows when there's more below. */}
+      <div className="relative max-h-44 overflow-hidden">
+        <div ref={innerRef}>
+          <NoteEditor
+            initialContent={stripFrontmatter(content)}
+            readOnly
+            autoHeight
+            autoFocus={false}
+            onChange={() => {}}
+            onSave={() => {}}
+            onLinkClick={(url) => onLink(url, note.relPath)}
+            onWikiOpen={(t) => onLink(t, note.relPath)}
+            resolveWiki={resolveWiki}
+          />
+        </div>
+        {overflowing && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-is-bg to-transparent" />
+        )}
+      </div>
       <button
         type="button"
         onClick={onOpen}
-        aria-label="Open README to edit"
-        title="Open to edit"
-        className="absolute right-0 top-0 z-10 inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-is-text-tertiary opacity-0 transition hover:text-is-text group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none"
+        className="mt-1 inline-flex items-center gap-1 rounded-md text-xs text-is-accent-text transition hover:text-is-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
       >
-        <Pencil size={13} strokeWidth={1.5} aria-hidden="true" />
-        Edit
+        {overflowing ? "Read more" : "Open"}
+        <ArrowRight size={13} strokeWidth={1.5} aria-hidden="true" />
       </button>
-      <NoteEditor
-        initialContent={stripFrontmatter(content)}
-        readOnly
-        autoHeight
-        autoFocus={false}
-        onChange={() => {}}
-        onSave={() => {}}
-        onLinkClick={(url) => onLink(url, note.relPath)}
-        onWikiOpen={(t) => onLink(t, note.relPath)}
-        resolveWiki={resolveWiki}
-      />
     </div>
   );
 }
