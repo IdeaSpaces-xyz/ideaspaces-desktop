@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -17,6 +17,7 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import type { WikiLinkResolvedTarget } from "@atomic-editor/editor";
 import { NoteEditor } from "../editor/NoteEditor";
 import { useDir } from "../editor/useDir";
+import { useRecentNotes } from "../editor/useRecentNotes";
 import { useWikiIndex } from "../editor/useWikiIndex";
 import { classifyLink } from "../editor/linkResolve";
 import { parseFrontmatter, setFrontmatterName } from "../editor/frontmatter";
@@ -29,7 +30,9 @@ import {
   writeNote,
   type FolderEntry,
   type NoteFile,
+  type RecentNote,
 } from "../lib/notes";
+import { bucketByTime, relativeTime } from "../lib/time";
 import { ask } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { commitClone, syncClone, type CloneRecord } from "../lib/cli";
@@ -600,6 +603,94 @@ function CreateRow({ onSubmit, onCancel }: { onSubmit: (name: string) => void; o
   );
 }
 
+// The Recent timeline — every note in the clone, grouped by last-saved time
+// (Today / Yesterday / This week / …, is_web v2 parity) newest first. The
+// cross-folder "what changed when" feed; a row opens the note in the editor.
+function RecentTimeline({
+  notes,
+  status,
+  error,
+  disabled,
+  onSelect,
+  onReload,
+}: {
+  notes: RecentNote[];
+  status: "idle" | "loading" | "loaded" | "error";
+  error?: string;
+  disabled: boolean;
+  onSelect: (note: RecentNote) => void;
+  onReload: () => void;
+}) {
+  const buckets = useMemo(() => bucketByTime(notes, (n) => n.updatedAt), [notes]);
+
+  if (status === "idle" || status === "loading") {
+    return <p className="text-sm text-is-text-tertiary">Loading…</p>;
+  }
+  if (status === "error") {
+    return (
+      <p className="text-sm text-is-danger-text">
+        {error}{" "}
+        <button
+          type="button"
+          className="underline underline-offset-2 hover:text-is-text"
+          onClick={onReload}
+        >
+          Retry
+        </button>
+      </p>
+    );
+  }
+  if (notes.length === 0) {
+    return <p className="text-sm text-is-text-tertiary">No notes in this space yet.</p>;
+  }
+
+  return (
+    <div className="flex flex-col gap-8">
+      {buckets.map((bucket) => (
+        <section key={bucket.key}>
+          <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.08em] text-is-text-tertiary">
+            {bucket.label}
+          </p>
+          <ul className="flex flex-col gap-1.5">
+            {bucket.items.map((note) => {
+              const slash = note.relPath.lastIndexOf("/");
+              const dir = slash === -1 ? "" : note.relPath.slice(0, slash);
+              return (
+                <li key={note.relPath}>
+                  <button
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => onSelect(note)}
+                    className="flex w-full items-center gap-3 rounded-lg border border-transparent px-3.5 py-2.5 text-left transition hover:border-is-border hover:bg-is-surface-alt disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
+                  >
+                    <FileText
+                      size={16}
+                      strokeWidth={1.333}
+                      className="shrink-0 text-is-text-tertiary"
+                      aria-hidden="true"
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[15px] text-is-text">
+                        {note.title || note.name}
+                      </span>
+                      {dir && (
+                        <span className="mt-0.5 block truncate text-xs text-is-text-tertiary">{dir}</span>
+                      )}
+                    </span>
+                    <span className="shrink-0 text-xs text-is-text-tertiary">
+                      {relativeTime(note.updatedAt)}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ))}
+    </div>
+  );
+}
+
 // The editor surface for one local clone: a folder-drill-in tree on the left
 // (breadcrumb + Folders + Notes), and the selected note open in a resizable
 // live-preview editor pane on the right. Mirrors is_web v2's repo browser, with
@@ -622,9 +713,13 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
   const [busy, setBusy] = useState(false);
   // Only folders use the inline create row now; new notes open blank + titled.
   const [creating, setCreating] = useState<"folder" | null>(null);
+  // Browse the folder tree, or the Recent timeline (all notes by last-saved).
+  const [browseMode, setBrowseMode] = useState<"tree" | "recent">("tree");
   const containerRef = useRef<HTMLDivElement>(null);
   const { status, folders, files, error, reload } = useDir(clone.path, path);
   const { index: wikiIndex, reload: reloadWiki } = useWikiIndex(clone.path);
+  // Loaded lazily — only while Recent is the active browse view and no note is open.
+  const recent = useRecentNotes(clone.path, !selected && browseMode === "recent");
 
   // Guard navigation: never leave mid-publish, and confirm before dropping the
   // open note's unsaved edits. Native Tauri dialog (consistent across webview
@@ -796,12 +891,14 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
     if (busy) return; // mid commit/sync — match the Back button's disabled state
     if (selected) {
       await closeNote();
+    } else if (browseMode === "recent") {
+      setBrowseMode("tree"); // Recent → back to the folder tree
     } else if (path) {
       await navigate(path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "");
     } else if (await confirmLeave()) {
       onClose();
     }
-  }, [busy, selected, path, closeNote, navigate, confirmLeave, onClose]);
+  }, [busy, selected, browseMode, path, closeNote, navigate, confirmLeave, onClose]);
 
   // Hardware/keyboard "back": the mouse back button (X1) and ⌘/Ctrl+[.
   useEffect(() => {
@@ -841,6 +938,26 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
         <div className="min-w-0 flex-1">
           <Breadcrumb slug={clone.slug} segments={segments} onNavigate={(p) => void navigate(p)} />
         </div>
+        {!selected && (
+          <div className="flex shrink-0 items-center rounded-md border border-is-border p-0.5 text-xs">
+            {(["tree", "recent"] as const).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setBrowseMode(mode)}
+                aria-pressed={browseMode === mode}
+                className={cn(
+                  "rounded px-2 py-1 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring",
+                  browseMode === mode
+                    ? "bg-is-surface-alt text-is-text"
+                    : "text-is-text-tertiary hover:text-is-text",
+                )}
+              >
+                {mode === "tree" ? "Browse" : "Recent"}
+              </button>
+            ))}
+          </div>
+        )}
         <AddMenu
           onNewNote={() => void createNewNote()}
           onNewFolder={() => void startCreateFolder()}
@@ -925,7 +1042,7 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
             </section>
           </>
         ) : (
-          // BROWSE: no note open — the full folder tree.
+          // BROWSE: no note open — the folder tree, or the Recent timeline.
           <nav className="min-w-0 flex-1 overflow-y-auto">
             <div className="mx-auto w-full max-w-3xl px-6 py-6">
               <div className="mb-5 flex items-center gap-3">
@@ -939,62 +1056,79 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
                   Back
                 </button>
                 <div className="flex min-w-0 flex-1 items-center gap-1.5">
-                  <h1 className="min-w-0 truncate text-xl font-medium text-is-text">{title}</h1>
-                  <CopyButton value={path || clone.slug} label="folder path" size={14} />
+                  <h1 className="min-w-0 truncate text-xl font-medium text-is-text">
+                    {browseMode === "recent" ? "Recent" : title}
+                  </h1>
+                  {browseMode === "tree" && (
+                    <CopyButton value={path || clone.slug} label="folder path" size={14} />
+                  )}
                 </div>
               </div>
-              {status === "loading" && <p className="text-sm text-is-text-tertiary">Loading…</p>}
-              {status === "error" && (
-                <p className="text-sm text-is-danger-text">
-                  {error}{" "}
-                  <button
-                    type="button"
-                    className="underline underline-offset-2 hover:text-is-text"
-                    onClick={() => void reload()}
-                  >
-                    Retry
-                  </button>
-                </p>
-              )}
-              {status === "loaded" && (
+              {browseMode === "recent" ? (
+                <RecentTimeline
+                  notes={recent.notes}
+                  status={recent.status}
+                  error={recent.error}
+                  disabled={busy}
+                  onSelect={(n) => void openNote(n)}
+                  onReload={() => void recent.reload()}
+                />
+              ) : (
                 <>
-                  {creating && (
-                    <CreateRow onSubmit={(n) => void submitCreate(n)} onCancel={() => setCreating(null)} />
+                  {status === "loading" && <p className="text-sm text-is-text-tertiary">Loading…</p>}
+                  {status === "error" && (
+                    <p className="text-sm text-is-danger-text">
+                      {error}{" "}
+                      <button
+                        type="button"
+                        className="underline underline-offset-2 hover:text-is-text"
+                        onClick={() => void reload()}
+                      >
+                        Retry
+                      </button>
+                    </p>
                   )}
-                  {readme && (
-                    <ReadmeCard
-                      key={readme.path}
-                      note={readme}
-                      onOpen={() => void selectNote(readme)}
-                      onLink={(t, from) => void handleLink(t, from)}
-                      resolveWiki={resolveWiki}
-                    />
-                  )}
-                  {empty && !readme && !creating ? (
-                    <p className="text-sm text-is-text-tertiary">This folder has no notes or sub-folders.</p>
-                  ) : folders.length > 0 ? (
-                    <div className="grid gap-x-8 gap-y-6 sm:grid-cols-[12rem_minmax(0,1fr)]">
-                      <FolderList folders={folders} onOpen={(f) => void navigate(f.relPath)} />
-                      {noteFiles.length > 0 ? (
-                        <NoteList
-                          files={noteFiles}
-                          selectedRel={undefined}
-                          onSelect={(n) => void selectNote(n)}
-                          disabled={busy}
-                        />
-                      ) : (
-                        <p className="text-sm text-is-text-tertiary">No notes in this folder.</p>
+                  {status === "loaded" && (
+                    <>
+                      {creating && (
+                        <CreateRow onSubmit={(n) => void submitCreate(n)} onCancel={() => setCreating(null)} />
                       )}
-                    </div>
-                  ) : (
-                    noteFiles.length > 0 && (
-                      <NoteList
-                        files={noteFiles}
-                        selectedRel={undefined}
-                        onSelect={(n) => void selectNote(n)}
-                        disabled={busy}
-                      />
-                    )
+                      {readme && (
+                        <ReadmeCard
+                          key={readme.path}
+                          note={readme}
+                          onOpen={() => void selectNote(readme)}
+                          onLink={(t, from) => void handleLink(t, from)}
+                          resolveWiki={resolveWiki}
+                        />
+                      )}
+                      {empty && !readme && !creating ? (
+                        <p className="text-sm text-is-text-tertiary">This folder has no notes or sub-folders.</p>
+                      ) : folders.length > 0 ? (
+                        <div className="grid gap-x-8 gap-y-6 sm:grid-cols-[12rem_minmax(0,1fr)]">
+                          <FolderList folders={folders} onOpen={(f) => void navigate(f.relPath)} />
+                          {noteFiles.length > 0 ? (
+                            <NoteList
+                              files={noteFiles}
+                              selectedRel={undefined}
+                              onSelect={(n) => void selectNote(n)}
+                              disabled={busy}
+                            />
+                          ) : (
+                            <p className="text-sm text-is-text-tertiary">No notes in this folder.</p>
+                          )}
+                        </div>
+                      ) : (
+                        noteFiles.length > 0 && (
+                          <NoteList
+                            files={noteFiles}
+                            selectedRel={undefined}
+                            onSelect={(n) => void selectNote(n)}
+                            disabled={busy}
+                          />
+                        )
+                      )}
+                    </>
                   )}
                 </>
               )}
