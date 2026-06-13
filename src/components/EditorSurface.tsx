@@ -220,7 +220,9 @@ function NotePane({
         await commitClone(clone.path, `Edit ${note.relPath}`, [note.relPath]);
       } catch (err) {
         // Nothing new to commit is fine — fall through and push any committed
-        // history. (Matches the CLI/git "nothing to commit" text.)
+        // history. TODO(i18n): this matches the English "nothing to commit"
+        // text; a machine-readable signal from the CLI `commit` verb would be
+        // locale-robust. Tracked in roadmap/plans/desktop/_agent/now.md.
         if (!/nothing to commit|no changes/i.test(errMessage(err))) throw err;
       }
       const res = await syncClone(clone.path);
