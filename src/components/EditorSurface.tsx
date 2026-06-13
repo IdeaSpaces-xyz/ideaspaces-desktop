@@ -20,7 +20,17 @@ import { NoteEditor } from "../editor/NoteEditor";
 import { useDir } from "../editor/useDir";
 import { useWikiIndex } from "../editor/useWikiIndex";
 import { classifyLink } from "../editor/linkResolve";
-import { createFolder, createNote, readNote, writeNote, type FolderEntry, type NoteFile } from "../lib/notes";
+import { setFrontmatterName } from "../editor/frontmatter";
+import {
+  createFolder,
+  createNote,
+  createUntitledNote,
+  readNote,
+  renameNote,
+  writeNote,
+  type FolderEntry,
+  type NoteFile,
+} from "../lib/notes";
 import { ask } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { commitClone, syncClone, type CloneRecord } from "../lib/cli";
@@ -46,6 +56,7 @@ function NotePane({
   onBusyChange,
   onClose,
   onLink,
+  onRetitle,
   resolveWiki,
 }: {
   note: NoteFile;
@@ -55,6 +66,8 @@ function NotePane({
   onClose: () => void;
   // Open a link/wiki-target, resolved relative to the note it was clicked in.
   onLink: (target: string, fromRelPath: string) => void;
+  // Retitle: write `content` (with the new frontmatter name) and reselect.
+  onRetitle: (content: string, title: string) => Promise<void> | void;
   resolveWiki: (target: string) => WikiLinkResolvedTarget | null;
 }) {
   const toast = useToast();
@@ -67,6 +80,32 @@ function NotePane({
   const savedRef = useRef("");
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  // Title (= frontmatter `name`, = the filename slug). README is structural, so
+  // it's shown read-only. A fresh "untitled" note focuses the title field.
+  const isReadme = /^readme$/i.test(note.name);
+  const isNew = !note.title && /^untitled(-\d+)?$/.test(note.name);
+  const [titleDraft, setTitleDraft] = useState(note.title ?? "");
+  const titleRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isNew && content !== null) titleRef.current?.focus();
+  }, [isNew, content]);
+
+  const commitTitle = useCallback(async () => {
+    const trimmed = titleDraft.trim();
+    if (busy || !trimmed || trimmed === (note.title ?? "")) {
+      setTitleDraft(note.title ?? ""); // revert empty / unchanged
+      return;
+    }
+    setBusy(true);
+    try {
+      await onRetitle(setFrontmatterName(draftRef.current, trimmed), trimmed);
+    } catch (err) {
+      toast(errMessage(err), "error");
+      setBusy(false); // on success the pane remounts at the new path
+    }
+  }, [titleDraft, busy, note.title, onRetitle, toast]);
 
   // Report dirty up so the surface can guard navigation; clear it on unmount
   // (note switch) so the next note starts clean.
@@ -137,14 +176,11 @@ function NotePane({
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-is-surface">
       <div className="flex items-center justify-between gap-3 border-b border-is-border px-5 py-2.5">
-        <div className="min-w-0">
-          <p className="truncate font-medium text-is-text">{note.name}</p>
-          <p className="flex items-center gap-1 text-xs text-is-text-tertiary">
-            <span className="truncate">{note.relPath}</span>
-            {dirty && <span className="shrink-0 text-is-text-secondary">• unsaved</span>}
-            <CopyButton value={note.relPath} label="note path" />
-          </p>
-        </div>
+        <p className="flex min-w-0 items-center gap-1 text-xs text-is-text-tertiary">
+          <span className="truncate">{note.relPath}</span>
+          {dirty && <span className="shrink-0 text-is-text-secondary">• unsaved</span>}
+          <CopyButton value={note.relPath} label="note path" />
+        </p>
         <div className="flex shrink-0 items-center gap-2">
           <button
             type="button"
@@ -175,25 +211,55 @@ function NotePane({
           </button>
         </div>
       </div>
-      <div className="min-h-0 flex-1 px-6">
-        {loadError ? (
-          <p className="p-6 text-sm text-is-danger-text">{loadError}</p>
-        ) : content === null ? (
-          <p className="p-6 text-sm text-is-text-tertiary">Loading note…</p>
-        ) : (
-          <NoteEditor
-            initialContent={content}
-            onChange={(doc) => {
-              draftRef.current = doc;
-              setDirty(doc !== savedRef.current);
-            }}
-            onSave={() => void save()}
-            onLinkClick={(url) => onLink(url, note.relPath)}
-            onWikiOpen={(t) => onLink(t, note.relPath)}
-            resolveWiki={resolveWiki}
-          />
-        )}
-      </div>
+      {loadError ? (
+        <p className="p-6 text-sm text-is-danger-text">{loadError}</p>
+      ) : content === null ? (
+        <p className="p-6 text-sm text-is-text-tertiary">Loading note…</p>
+      ) : (
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="px-6 pt-5">
+            <div className="mx-auto max-w-[640px]">
+              {isReadme ? (
+                <h1 className="font-prose text-3xl text-is-text">{note.title || note.name}</h1>
+              ) : (
+                <input
+                  ref={titleRef}
+                  value={titleDraft}
+                  onChange={(e) => setTitleDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      titleRef.current?.blur(); // commit, then focus moves to body
+                    } else if (e.key === "Escape") {
+                      setTitleDraft(note.title ?? "");
+                      titleRef.current?.blur();
+                    }
+                  }}
+                  onBlur={() => void commitTitle()}
+                  placeholder="Untitled"
+                  aria-label="Note title"
+                  disabled={busy}
+                  className="w-full bg-transparent font-prose text-3xl text-is-text outline-none placeholder:text-is-text-tertiary disabled:opacity-60"
+                />
+              )}
+            </div>
+          </div>
+          <div className="min-h-0 flex-1 px-6">
+            <NoteEditor
+              initialContent={content}
+              autoFocus={!isNew}
+              onChange={(doc) => {
+                draftRef.current = doc;
+                setDirty(doc !== savedRef.current);
+              }}
+              onSave={() => void save()}
+              onLinkClick={(url) => onLink(url, note.relPath)}
+              onWikiOpen={(t) => onLink(t, note.relPath)}
+              resolveWiki={resolveWiki}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -333,7 +399,7 @@ function NoteList({
                 />
                 <span className="min-w-0 flex-1">
                   <span className={cn("block truncate text-is-text", compact ? "text-sm" : "text-[15px]")}>
-                    {note.name}
+                    {note.title || note.name}
                   </span>
                   {!compact && note.summary && (
                     <span className="mt-0.5 block truncate text-xs text-is-text-tertiary">{note.summary}</span>
@@ -553,6 +619,9 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
   // Width of the slim note rail in Focus mode (a note is open). The editor takes
   // the rest of the width.
   const [railWidth, setRailWidth] = useState(256);
+  // Bumped on retitle to force the editor to remount even when the path is
+  // unchanged (a title edit that slugs to the same filename).
+  const [editorKey, setEditorKey] = useState(0);
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
   const [creating, setCreating] = useState<null | "note" | "folder">(null);
@@ -620,8 +689,8 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
     [creating, clone.path, path, reload, reloadWiki, confirmLeave, toast],
   );
 
-  // Add+ → create in the current folder. The create row lives in the browse
-  // tree, so close any open note first (returns to Browse), guarded.
+  // Add+ → New folder uses the inline create row in the browse tree, so close
+  // any open note first (returns to Browse), guarded.
   const startCreate = useCallback(
     async (kind: "note" | "folder") => {
       if (selected && !(await confirmLeave())) return;
@@ -629,6 +698,34 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
       setCreating(kind);
     },
     [selected, confirmLeave],
+  );
+
+  // Add+ → New note: create a blank "Untitled" note and open it in Focus,
+  // Obsidian-style — the title field focuses so you type the title (= filename).
+  const createNewNote = useCallback(async () => {
+    if (selected && !(await confirmLeave())) return;
+    try {
+      const note = await createUntitledNote(clone.path, path);
+      await Promise.all([reload(), reloadWiki()]);
+      setCreating(null);
+      setSelected(note);
+    } catch (err) {
+      toast(errMessage(err), "error");
+    }
+  }, [selected, confirmLeave, clone.path, path, reload, reloadWiki, toast]);
+
+  // Retitle the open note: write its content (new frontmatter `name`) to a
+  // slugified filename, then reselect. The editorKey bump forces a remount even
+  // when the slug is unchanged, so the editor reloads the updated frontmatter.
+  const retitleNote = useCallback(
+    async (content: string, title: string) => {
+      if (!selected) return;
+      const newNote = await renameNote(clone.path, selected.relPath, title, content);
+      await Promise.all([reload(), reloadWiki()]);
+      setSelected(newNote);
+      setEditorKey((k) => k + 1);
+    },
+    [selected, clone.path, reload, reloadWiki],
   );
 
   // `[[wiki-link]]` styling: resolved (points at a note) vs. missing.
@@ -759,7 +856,7 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
           <Breadcrumb slug={clone.slug} segments={segments} onNavigate={(p) => void navigate(p)} />
         </div>
         <AddMenu
-          onNewNote={() => void startCreate("note")}
+          onNewNote={() => void createNewNote()}
           onNewFolder={() => void startCreate("folder")}
           // Block creation until the listing is ready — reload() after creating
           // wouldn't surface the new item while loading/errored.
@@ -828,13 +925,14 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
               className="flex min-w-0 flex-1 overflow-hidden max-md:fixed max-md:inset-0 max-md:z-40"
             >
               <NotePane
-                key={selected.path}
+                key={`${selected.path}:${editorKey}`}
                 note={selected}
                 clone={clone}
                 onDirtyChange={setDirty}
                 onBusyChange={setBusy}
                 onClose={() => void closeNote()}
                 onLink={(t, from) => void handleLink(t, from)}
+                onRetitle={retitleNote}
                 resolveWiki={resolveWiki}
               />
             </section>

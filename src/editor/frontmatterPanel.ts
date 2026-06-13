@@ -162,9 +162,11 @@ function buildDecorations(state: EditorState): DecorationSet {
   const fm = frontmatterRange(state);
   if (!fm) return Decoration.none;
   const editable = state.facet(editableFacet);
+  // `name` is surfaced as the editable title above the body, not in the panel.
+  const fields = fm.fields.filter((f) => f.key.toLowerCase() !== "name");
   // Block-replace the whole frontmatter line range with the panel widget.
   return Decoration.set(
-    Decoration.replace({ widget: new FrontmatterWidget(fm.fields, editable), block: true }).range(
+    Decoration.replace({ widget: new FrontmatterWidget(fields, editable), block: true }).range(
       fm.from,
       fm.to,
     ),
