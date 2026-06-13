@@ -15,7 +15,7 @@
     "postinstall": "patch-package"
   },
   "dependencies": {
-    "@atomic-editor/editor": "^0.4.3",
+    "@atomic-editor/editor": "0.4.3",
     "@codemirror/autocomplete": "^6.20.3",
     "@codemirror/commands": "^6.10.3",
     "@codemirror/lang-markdown": "^6.5.0",
