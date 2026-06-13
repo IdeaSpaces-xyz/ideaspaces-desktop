@@ -176,6 +176,10 @@ export interface RecentNote extends NoteFile {
  * reflects local edits instantly and survives offline work. Reads each note's
  * full content for its title/summary (like listDir) — fine for typical spaces;
  * a head-only read is the follow-up if repos grow large.
+ *
+ * Notes whose mtime can't be read (permissions/TCC) are omitted — there's no
+ * meaningful time to place them on a timeline, and they stay reachable via the
+ * folder tree. Avoids a bogus "January 1970" (epoch-0) bucket.
  */
 export async function listRecentNotes(cloneDir: string): Promise<RecentNote[]> {
   const notes = await listAllNotes(cloneDir);
@@ -192,13 +196,12 @@ export async function listRecentNotes(cloneDir: string): Promise<RecentNote[]> {
         const info = await stat(n.path);
         updatedAt = info.mtime ? info.mtime.getTime() : 0;
       } catch {
-        // No mtime (permissions/TCC) — sorts to the bottom.
+        // No mtime (permissions/TCC) — filtered out below.
       }
       return { ...n, ...meta, updatedAt };
     }),
   );
-  enriched.sort((a, b) => b.updatedAt - a.updatedAt);
-  return enriched;
+  return enriched.filter((n) => n.updatedAt > 0).sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
 /** Read a note's raw content from disk. */
