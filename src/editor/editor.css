@@ -40,6 +40,30 @@
   padding-block: 0.5rem 4rem;
 }
 
+/* The open note shows a real vertical scrollbar (the rest of the app hides
+   them) — it gives a sense of document length and where you are. Thin and
+   theme-aligned; the read-only README render doesn't scroll, so none appears. */
+.cm-note-host .cm-scroller {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--is-text) 22%, transparent) transparent;
+}
+.cm-note-host .cm-scroller::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.cm-note-host .cm-scroller::-webkit-scrollbar-track {
+  background: transparent;
+}
+.cm-note-host .cm-scroller::-webkit-scrollbar-thumb {
+  background-color: color-mix(in srgb, var(--is-text) 20%, transparent);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  border-radius: 6px;
+}
+.cm-note-host .cm-scroller::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in srgb, var(--is-text) 34%, transparent);
+}
+
 /* Headings — serif, editorial weights/spacing (matches .is-note-prose). */
 .cm-note-host .cm-atomic-h1,
 .cm-note-host .cm-atomic-h2,

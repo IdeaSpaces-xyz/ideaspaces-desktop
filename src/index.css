@@ -27,6 +27,10 @@
   --is-danger-text: #dc2626;
   --is-overlay: rgba(0, 0, 0, 0.4);
 
+  /* Text selection — accent-tinted, clearly visible in both themes. Resolves
+     `--is-accent` at use, so it follows the theme without a per-mode override. */
+  --is-selection: color-mix(in srgb, var(--is-accent) 35%, transparent);
+
   /* Brand dusk gradient — sparse, signature accent surface. */
   --grad-dusk: linear-gradient(
     to bottom,

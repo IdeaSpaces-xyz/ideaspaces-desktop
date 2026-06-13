@@ -1,0 +1,21 @@
+diff --git a/node_modules/@atomic-editor/editor/dist/inline-preview.js b/node_modules/@atomic-editor/editor/dist/inline-preview.js
+index 94d48d1..e037ef0 100644
+--- a/node_modules/@atomic-editor/editor/dist/inline-preview.js
++++ b/node_modules/@atomic-editor/editor/dist/inline-preview.js
+@@ -291,10 +291,12 @@ function buildInlineDecorations(view) {
+     const activeLines = new Set();
+     if (view.hasFocus) {
+         for (const r of state.selection.ranges) {
+-            const firstLine = doc.lineAt(r.from).number;
+-            const lastLine = doc.lineAt(r.to).number;
+-            for (let n = firstLine; n <= lastLine; n++)
+-                activeLines.add(n);
++            // Only reveal markup under a collapsed caret. A non-empty selection
++            // (range) keeps rendered text so it reads as plain text and doesn't
++            // flicker the source on/off while dragging. [is_desktop patch]
++            if (!r.empty)
++                continue;
++            activeLines.add(doc.lineAt(r.head).number);
+         }
+     }
+     // Decorate the whole parsed tree — not the current viewport — so
