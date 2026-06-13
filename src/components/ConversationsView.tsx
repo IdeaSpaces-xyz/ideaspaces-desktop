@@ -1,6 +1,7 @@
+import { useMemo } from "react";
 import { MessageSquare } from "lucide-react";
 import { useConversations } from "../spaces/useConversations";
-import { relativeTime } from "../lib/time";
+import { bucketByTime, relativeTime } from "../lib/time";
 import type { Space } from "../lib/cli";
 
 // The connected Conversations surface — conversations across the active context's
@@ -16,6 +17,9 @@ export function ConversationsView({
   // Repos still loading → repos is [] and conversations resolve to a false
   // "empty"; show loading until the repo set is known.
   const effectiveStatus = reposLoading ? "loading" : status;
+  // Timeline split — Today / Yesterday / This week / … (is_web v2 parity). rows
+  // arrive newest-first, which the bucketer preserves within each section.
+  const buckets = useMemo(() => bucketByTime(rows, (c) => c.updated_at), [rows]);
 
   return (
     <div className="mx-auto w-full max-w-2xl px-6 py-8">
@@ -61,27 +65,36 @@ export function ConversationsView({
               </p>
             </div>
           ) : (
-            <ul className="flex flex-col gap-2">
-              {rows.map((c) => (
-                <li
-                  key={c.conversation_id}
-                  className="rounded-lg border border-is-border bg-is-surface px-4 py-3"
-                >
-                  <div className="flex items-baseline justify-between gap-3">
-                    <p className="truncate font-medium text-is-text">{c.name || "Untitled"}</p>
-                    <span className="shrink-0 text-xs text-is-text-tertiary">
-                      {relativeTime(c.updated_at)}
-                    </span>
-                  </div>
-                  {c.summary && (
-                    <p className="mt-0.5 line-clamp-2 text-xs text-is-text-secondary">{c.summary}</p>
-                  )}
-                  <p className="mt-1 text-xs text-is-text-tertiary">
-                    {c.repoSlug} · {c.message_count} message{c.message_count === 1 ? "" : "s"}
+            <div className="flex flex-col gap-8">
+              {buckets.map((bucket) => (
+                <section key={bucket.key}>
+                  <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.08em] text-is-text-tertiary">
+                    {bucket.label}
                   </p>
-                </li>
+                  <ul className="flex flex-col gap-2">
+                    {bucket.items.map((c) => (
+                      <li
+                        key={c.conversation_id}
+                        className="rounded-lg border border-is-border bg-is-surface px-4 py-3"
+                      >
+                        <div className="flex items-baseline justify-between gap-3">
+                          <p className="truncate font-medium text-is-text">{c.name || "Untitled"}</p>
+                          <span className="shrink-0 text-xs text-is-text-tertiary">
+                            {relativeTime(c.updated_at)}
+                          </span>
+                        </div>
+                        {c.summary && (
+                          <p className="mt-0.5 line-clamp-2 text-xs text-is-text-secondary">{c.summary}</p>
+                        )}
+                        <p className="mt-1 text-xs text-is-text-tertiary">
+                          {c.repoSlug} · {c.message_count} message{c.message_count === 1 ? "" : "s"}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
               ))}
-            </ul>
+            </div>
           )}
           {rows.length > 0 && truncated && (
             <p className="mt-3 text-center text-xs text-is-text-tertiary">
