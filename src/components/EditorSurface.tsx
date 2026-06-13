@@ -2,6 +2,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type CSSPr
 import {
   ArrowLeft,
   ArrowRight,
+  Check,
   ChevronRight,
   FilePlus,
   FileText,
@@ -9,7 +10,6 @@ import {
   FolderPlus,
   Plus,
   RefreshCw,
-  Save,
   UploadCloud,
   X,
 } from "lucide-react";
@@ -35,7 +35,7 @@ import {
 import { bucketByTime, relativeTime } from "../lib/time";
 import { ask } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { commitClone, syncClone, type CloneRecord } from "../lib/cli";
+import { cloneStatus, commitClone, syncClone, type CloneRecord } from "../lib/cli";
 import { useToast } from "../toast/toast-context";
 import { Resizer } from "./Resizer";
 import { CopyButton } from "./CopyButton";
@@ -58,13 +58,14 @@ function stripFrontmatter(content: string): string {
   return content.split("\n").slice(fm.endLine).join("\n").replace(/^\n+/, "");
 }
 
-// One opened note: loads its content, holds the draft + dirty state, saves to
-// disk, and commits+pushes via the CLI. Keyed by path so each note gets fresh
-// state (NoteEditor mounts per note). Rendered in the resizable right pane.
+type SyncState = "loading" | "synced" | "unsynced" | "syncing";
+
+// One opened note: loads its content, autosaves edits to disk (debounced), and
+// syncs (commit + push, commit hidden) via the CLI. No Save button — it's 2026.
+// Keyed by path so each note gets fresh state (NoteEditor mounts per note).
 function NotePane({
   note,
   clone,
-  onDirtyChange,
   onBusyChange,
   onClose,
   onLink,
@@ -74,7 +75,6 @@ function NotePane({
 }: {
   note: NoteFile;
   clone: CloneRecord;
-  onDirtyChange: (dirty: boolean) => void;
   onBusyChange: (busy: boolean) => void;
   onClose: () => void;
   // Open a link/wiki-target, resolved relative to the note it was clicked in.
@@ -89,11 +89,15 @@ function NotePane({
   const [content, setContent] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | undefined>(undefined);
   const draftRef = useRef("");
-  // Baseline the dirty check tracks: the last text written to disk (initially
-  // the loaded text). Without this, an edit-then-save-then-edit cycle compares
-  // against the original load and shows false "unsaved".
+  // The last text written to disk — what autosave diffs against.
   const savedRef = useRef("");
-  const [dirty, setDirty] = useState(false);
+  const saveTimer = useRef<number | null>(null);
+  const [saving, setSaving] = useState(false);
+  // Sync = whether local edits have reached the remote. Starts "loading" (the
+  // pill renders nothing) until seeded from git on open — the clone may already
+  // carry unsynced work; an edit flips it to "unsynced".
+  const [syncState, setSyncState] = useState<SyncState>("loading");
+  // An operation (retitle or sync) is in flight — blocks navigation + inputs.
   const [busy, setBusy] = useState(false);
 
   // Title (= frontmatter `name`, = the filename slug). README is structural, so
@@ -122,13 +126,7 @@ function NotePane({
     }
   }, [titleDraft, busy, note.title, onRetitle, toast]);
 
-  // Report dirty up so the surface can guard navigation; clear it on unmount
-  // (note switch) so the next note starts clean.
-  useEffect(() => {
-    onDirtyChange(dirty);
-  }, [dirty, onDirtyChange]);
-  useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
-  // Report publish-in-flight up so the surface blocks navigation mid-commit/sync.
+  // Report sync-in-flight up so the surface blocks navigation mid-sync/retitle.
   useEffect(() => {
     onBusyChange(busy);
   }, [busy, onBusyChange]);
@@ -149,72 +147,125 @@ function NotePane({
     };
   }, [note.path]);
 
-  const save = useCallback(async (): Promise<boolean> => {
+  // Seed the sync indicator from the clone's git state — it may carry prior
+  // unsynced work (uncommitted, or committed-not-pushed) from before this open.
+  useEffect(() => {
+    let alive = true;
+    cloneStatus(clone.path)
+      .then((s) => {
+        if (!alive) return;
+        const seeded: SyncState = (s.ahead ?? 0) > 0 || s.dirty ? "unsynced" : "synced";
+        // Only resolve the initial "loading" — never clobber a state the user
+        // already drove (e.g. typed while the status call was in flight).
+        setSyncState((cur) => (cur === "loading" ? seeded : cur));
+      })
+      .catch(() => {
+        // Status unavailable — err toward showing Sync rather than hiding it, so
+        // genuinely unsynced work is never silently masked as "synced".
+        if (alive) setSyncState((cur) => (cur === "loading" ? "unsynced" : cur));
+      });
+    return () => {
+      alive = false;
+    };
+  }, [clone.path]);
+
+  // Write the draft to disk if it changed. The silent half of the loop — the
+  // user never asks for it.
+  const flushSave = useCallback(async () => {
+    if (saveTimer.current !== null) {
+      clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
+    if (draftRef.current === savedRef.current) return;
+    setSaving(true);
     try {
       await writeNote(note.path, draftRef.current);
       savedRef.current = draftRef.current;
-      setDirty(false);
-      return true;
     } catch (err) {
       toast(errMessage(err), "error");
-      return false;
+    } finally {
+      setSaving(false);
     }
   }, [note.path, toast]);
 
-  const commitAndSync = useCallback(async () => {
+  // Debounced autosave — settle ~800ms after the last keystroke.
+  const scheduleSave = useCallback(() => {
+    if (saveTimer.current !== null) clearTimeout(saveTimer.current);
+    saveTimer.current = window.setTimeout(() => void flushSave(), 800);
+  }, [flushSave]);
+
+  // Flush any pending edit when the note unmounts (switch note / close), so the
+  // debounce timer never strands the last keystrokes. flushSave toasts its own
+  // write errors; the extra catch logs anything unexpected on the way out so an
+  // unmount-time failure isn't swallowed.
+  useEffect(
+    () => () => {
+      flushSave().catch((err) => console.error("autosave on unmount failed", err));
+    },
+    [flushSave],
+  );
+
+  // Sync = make local and remote match. Commit (auto-message) is plumbing; the
+  // user only sees "Sync". Flushes the latest edit first, then commit + push.
+  const sync = useCallback(async () => {
     setBusy(true);
+    setSyncState("syncing");
     try {
-      if (dirty && !(await save())) return;
+      await flushSave();
+      // The content this sync publishes. If the user keeps typing mid-sync, the
+      // draft moves past this, so we must not claim "synced" for the new edits.
+      const syncedContent = draftRef.current;
       try {
         // Scoped commit: only this note's path, never other staged work.
         await commitClone(clone.path, `Edit ${note.relPath}`, [note.relPath]);
       } catch (err) {
-        // Nothing new to commit for this note is fine — fall through and sync
-        // to push any already-committed history. (Matches the CLI/git "nothing
-        // to commit" text; TODO: a machine-readable signal from the CLI would
-        // be more robust on non-English systems.)
+        // Nothing new to commit is fine — fall through and push any committed
+        // history. TODO(i18n): this matches the English "nothing to commit"
+        // text; a machine-readable signal from the CLI `commit` verb would be
+        // locale-robust. Tracked in roadmap/plans/desktop/_agent/now.md.
         if (!/nothing to commit|no changes/i.test(errMessage(err))) throw err;
       }
       const res = await syncClone(clone.path);
+      // Edits that landed during the sync leave the note unsynced again.
+      setSyncState(draftRef.current === syncedContent ? "synced" : "unsynced");
       toast(
         res.pushed
-          ? `Published ${note.name} — pushed ${res.pushed} commit${res.pushed === 1 ? "" : "s"}`
-          : `Synced ${note.name} — already up to date`,
+          ? `Synced — pushed ${res.pushed} change${res.pushed === 1 ? "" : "s"}`
+          : "Synced — up to date",
       );
     } catch (err) {
       toast(errMessage(err), "error");
+      setSyncState("unsynced");
     } finally {
       setBusy(false);
     }
-  }, [clone.path, note.relPath, note.name, dirty, save, toast]);
+  }, [clone.path, note.relPath, flushSave, toast]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-is-surface">
       <div className="flex items-center justify-between gap-3 px-5 py-2.5">
-        <p className="flex min-w-0 items-center gap-1 text-xs text-is-text-tertiary">
+        <p className="flex min-w-0 items-center gap-1.5 text-xs text-is-text-tertiary">
           <span className="truncate">{note.relPath}</span>
-          {dirty && <span className="shrink-0 text-is-text-secondary">• unsaved</span>}
+          {saving && <span className="shrink-0">· saving…</span>}
           <CopyButton value={note.relPath} label="note path" />
         </p>
         <div className="flex shrink-0 items-center gap-2">
-          <button
-            type="button"
-            className={barBtn}
-            disabled={!dirty || busy}
-            onClick={() => void save()}
-            title="Save (⌘S)"
-          >
-            <Save size={14} strokeWidth={1.333} aria-hidden="true" />
-            Save
-          </button>
-          <button type="button" className={barBtn} disabled={busy} onClick={() => void commitAndSync()}>
-            {busy ? (
+          {syncState === "syncing" ? (
+            <span className="inline-flex items-center gap-1.5 px-2 py-1.5 text-xs text-is-text-tertiary">
               <RefreshCw size={14} strokeWidth={1.333} className="animate-spin" aria-hidden="true" />
-            ) : (
+              Syncing…
+            </span>
+          ) : syncState === "unsynced" ? (
+            <button type="button" className={barBtn} disabled={busy} onClick={() => void sync()}>
               <UploadCloud size={14} strokeWidth={1.333} aria-hidden="true" />
-            )}
-            {busy ? "Publishing…" : "Commit & sync"}
-          </button>
+              Sync
+            </button>
+          ) : syncState === "synced" ? (
+            <span className="inline-flex items-center gap-1.5 px-2 py-1.5 text-xs text-is-text-tertiary">
+              <Check size={14} strokeWidth={1.5} aria-hidden="true" />
+              Synced
+            </span>
+          ) : null /* loading — render nothing until git status resolves */}
           <button
             type="button"
             onClick={onClose}
@@ -265,9 +316,13 @@ function NotePane({
               autoFocus={!autoFocusTitle}
               onChange={(doc) => {
                 draftRef.current = doc;
-                setDirty(doc !== savedRef.current);
+                if (doc !== savedRef.current) {
+                  // An edit means local is ahead of remote until the next Sync.
+                  setSyncState((s) => (s === "syncing" ? s : "unsynced"));
+                  scheduleSave();
+                }
               }}
-              onSave={() => void save()}
+              onSave={() => void flushSave()}
               onLinkClick={(url) => onLink(url, note.relPath)}
               onWikiOpen={(t) => onLink(t, note.relPath)}
               resolveWiki={resolveWiki}
@@ -709,7 +764,8 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
   // The just-created note's path — its pane focuses the title field instead of
   // the body (a precise signal, vs. guessing from an "untitled" filename).
   const [newNotePath, setNewNotePath] = useState<string | undefined>(undefined);
-  const [dirty, setDirty] = useState(false);
+  // The open note is mid-sync/retitle — the only thing that blocks navigation
+  // now that autosave persists edits continuously (no "discard unsaved" prompt).
   const [busy, setBusy] = useState(false);
   // Only folders use the inline create row now; new notes open blank + titled.
   const [creating, setCreating] = useState<"folder" | null>(null);
@@ -721,17 +777,9 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
   // Loaded lazily — only while Recent is the active browse view and no note is open.
   const recent = useRecentNotes(clone.path, !selected && browseMode === "recent");
 
-  // Guard navigation: never leave mid-publish, and confirm before dropping the
-  // open note's unsaved edits. Native Tauri dialog (consistent across webview
-  // backends, unlike window.confirm).
-  const confirmLeave = useCallback(async (): Promise<boolean> => {
-    if (busy) return false;
-    if (!dirty) return true;
-    return ask("Discard unsaved changes to this note?", {
-      title: "Unsaved changes",
-      kind: "warning",
-    });
-  }, [busy, dirty]);
+  // Guard navigation: never leave mid-sync/retitle. There's no unsaved-edits
+  // prompt anymore — autosave has already persisted the draft to disk.
+  const confirmLeave = useCallback(async (): Promise<boolean> => !busy, [busy]);
 
   const navigate = useCallback(
     async (nextPath: string) => {
@@ -1031,7 +1079,6 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
                 key={`${selected.path}:${editorKey}`}
                 note={selected}
                 clone={clone}
-                onDirtyChange={setDirty}
                 onBusyChange={setBusy}
                 onClose={() => void closeNote()}
                 onLink={(t, from) => void handleLink(t, from)}
