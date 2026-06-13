@@ -199,6 +199,9 @@ function NotePane({
     setSyncState("syncing");
     try {
       await flushSave();
+      // The content this sync publishes. If the user keeps typing mid-sync, the
+      // draft moves past this, so we must not claim "synced" for the new edits.
+      const syncedContent = draftRef.current;
       try {
         // Scoped commit: only this note's path, never other staged work.
         await commitClone(clone.path, `Edit ${note.relPath}`, [note.relPath]);
@@ -208,7 +211,8 @@ function NotePane({
         if (!/nothing to commit|no changes/i.test(errMessage(err))) throw err;
       }
       const res = await syncClone(clone.path);
-      setSyncState("synced");
+      // Edits that landed during the sync leave the note unsynced again.
+      setSyncState(draftRef.current === syncedContent ? "synced" : "unsynced");
       toast(
         res.pushed
           ? `Synced — pushed ${res.pushed} change${res.pushed === 1 ? "" : "s"}`
