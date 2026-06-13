@@ -507,7 +507,7 @@ function ReadmeCard({
         onClick={onOpen}
         className="mt-1 inline-flex items-center gap-1 rounded-md text-xs text-is-accent-text transition hover:text-is-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
       >
-        {overflowing ? "Read more" : "Open"}
+        {overflowing ? "Read more" : "Open in editor"}
         <ArrowRight size={13} strokeWidth={1.5} aria-hidden="true" />
       </button>
     </div>
