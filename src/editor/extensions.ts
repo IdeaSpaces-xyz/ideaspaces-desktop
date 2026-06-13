@@ -57,7 +57,7 @@ const isChromeTheme = EditorView.theme({
   "&.cm-focused": { outline: "none" },
   ".cm-cursor, .cm-dropCursor": { borderLeftColor: "var(--is-text)" },
   "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection": {
-    backgroundColor: "color-mix(in srgb, var(--is-accent) 22%, transparent)",
+    backgroundColor: "var(--is-selection)",
   },
   ".cm-activeLine": { backgroundColor: "transparent" },
   ".cm-gutters": { display: "none" },

@@ -11,7 +11,8 @@
     "lint": "eslint .",
     "build:sidecar": "node scripts/build-sidecar.mjs",
     "make-icon": "node scripts/make-icon.mjs && tauri icon icon-source.png",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "postinstall": "patch-package"
   },
   "dependencies": {
     "@atomic-editor/editor": "^0.4.3",
@@ -55,6 +56,7 @@
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.26",
     "globals": "^16.5.0",
+    "patch-package": "^8.0.1",
     "sharp": "^0.34.5",
     "typescript": "~5.8.3",
     "typescript-eslint": "^8.60.1",
