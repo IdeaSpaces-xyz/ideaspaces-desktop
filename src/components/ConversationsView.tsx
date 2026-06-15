@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Bot, MessageSquare, User } from "lucide-react";
+import { ArrowLeft, Bot, Lock, MessageSquare, User } from "lucide-react";
 import { useConversations, type ConversationRow } from "../spaces/useConversations";
 import { bucketByTime, relativeTime } from "../lib/time";
 import { listConversationParticipants, type Participant, type Space } from "../lib/cli";
@@ -65,6 +65,12 @@ function ConversationDetail({
     };
   }, [conversation.repoId, conversation.conversation_id, reloadCount]);
 
+  // Reading a roster is participant-gated server-side: only the conversation's
+  // owner/participants may list it, and repo membership doesn't count. The
+  // repo-scoped conversation list can surface a conversation you're not in (or a
+  // legacy one with no owner row), so a 403 here is "private", not a failure.
+  const forbidden = status === "error" && /\b403\b|Only Process participants/i.test(error ?? "");
+
   // Split agents out; everyone else is a person. The branch is only on `agent:`
   // on purpose: in Tier 0 a `node:` principal is the owner's *person*-node
   // (the server synthesizes the owner as `node:{person_node_id}`), so it belongs
@@ -92,7 +98,16 @@ function ConversationDetail({
       {status === "loading" && (
         <p className="mt-6 text-sm text-is-text-tertiary">Loading participants…</p>
       )}
-      {status === "error" && (
+      {status === "error" && forbidden && (
+        <div className="mt-6 flex flex-col items-center py-8 text-center">
+          <Lock size={24} strokeWidth={1.333} className="text-is-text-tertiary" aria-hidden="true" />
+          <p className="mt-3 max-w-sm text-sm text-is-text-tertiary">
+            This conversation's roster is private — you're not a participant, so its people aren't
+            visible here.
+          </p>
+        </div>
+      )}
+      {status === "error" && !forbidden && (
         <p className="mt-6 text-sm text-is-danger-text">
           {error}{" "}
           <button
