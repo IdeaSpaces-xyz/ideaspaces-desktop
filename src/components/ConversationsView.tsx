@@ -92,6 +92,7 @@ function ConversationDetail({
         <p className="mt-6 text-sm text-is-danger-text">
           {error}{" "}
           <button
+            type="button"
             className="underline underline-offset-2 hover:text-is-text"
             onClick={() => setReloadCount((n) => n + 1)}
           >
@@ -144,6 +145,11 @@ export function ConversationsView({
 }) {
   const { status, rows, error, truncated, reload } = useConversations(repos);
   const [selected, setSelected] = useState<ConversationRow | null>(null);
+  // An open roster belongs to the context it was opened in — drop it on a
+  // context/repo switch so we never show a conversation that's out of scope.
+  useEffect(() => {
+    setSelected(null);
+  }, [repos]);
   // Repos still loading → repos is [] and conversations resolve to a false
   // "empty"; show loading until the repo set is known.
   const effectiveStatus = reposLoading ? "loading" : status;
@@ -166,6 +172,7 @@ export function ConversationsView({
             <p className="text-sm text-is-danger-text">
               {error}{" "}
               <button
+                type="button"
                 className="underline underline-offset-2 hover:text-is-text"
                 onClick={() => void reload()}
               >
