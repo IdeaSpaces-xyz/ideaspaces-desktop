@@ -13,6 +13,7 @@ import {
   readDir,
   readTextFile,
   remove,
+  rename,
   stat,
   writeTextFile,
   type DirEntry,
@@ -233,6 +234,28 @@ function safeSegment(name: string): string {
     throw new Error("Name can't contain slashes or '..', or start with a dot.");
   }
   return trimmed;
+}
+
+/**
+ * Rename a sub-folder in place (same parent). Returns the new relPath. Moves the
+ * directory via fs `rename`, so git sees a clean rename of its contents (and
+ * their history) rather than a delete + re-add.
+ */
+export async function renameFolder(
+  cloneDir: string,
+  relPath: string,
+  newName: string,
+): Promise<string> {
+  const seg = safeSegment(newName);
+  const root = cloneDir.replace(/\/+$/, "");
+  const slash = relPath.lastIndexOf("/");
+  const parent = slash === -1 ? "" : relPath.slice(0, slash);
+  const newRel = parent ? `${parent}/${seg}` : seg;
+  if (newRel === relPath) return relPath; // unchanged
+  const newAbs = `${root}/${newRel}`;
+  if (await exists(newAbs)) throw new Error(`"${seg}" already exists.`);
+  await rename(`${root}/${relPath}`, newAbs);
+  return newRel;
 }
 
 /** Create a new sub-folder under `relPath`. Returns the new folder's relPath. */
