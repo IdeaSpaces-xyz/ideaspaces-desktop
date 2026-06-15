@@ -30,6 +30,8 @@ export interface NoteFile {
   title?: string;
   /** Frontmatter `summary`, surfaced as the list subtitle (when present). */
   summary?: string;
+  /** Last-saved time (file mtime) in epoch ms, when listed with `listDir`. */
+  updatedAt?: number;
 }
 
 export interface FolderEntry {
@@ -115,8 +117,15 @@ export async function listDir(cloneDir: string, relPath: string): Promise<DirLis
         return { folder: { name: entry.name, relPath: rel, fileCount: await countMarkdown(abs) } };
       }
       if (entry.isFile && isMarkdown(entry.name)) {
-        const content = await readTextFile(abs).catch(() => "");
-        return { file: { path: abs, relPath: rel, name: baseName(entry.name), ...noteMeta(content) } };
+        const [content, updatedAt] = await Promise.all([
+          readTextFile(abs).catch(() => ""),
+          stat(abs)
+            .then((s) => (s.mtime ? s.mtime.getTime() : 0))
+            .catch(() => 0),
+        ]);
+        return {
+          file: { path: abs, relPath: rel, name: baseName(entry.name), updatedAt, ...noteMeta(content) },
+        };
       }
       return {};
     }),

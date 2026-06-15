@@ -748,6 +748,50 @@ function RecentTimeline({
   );
 }
 
+// The folder's notes on the landing (no note open), newest-edited first — a
+// quick "what's here, what changed" overview beside the README. Rows carry the
+// title, summary, and last-saved time; clicking opens the note.
+function FolderNotes({
+  notes,
+  disabled,
+  onSelect,
+}: {
+  notes: NoteFile[];
+  disabled: boolean;
+  onSelect: (note: NoteFile) => void;
+}) {
+  return (
+    <ul className="flex flex-col gap-1.5">
+      {notes.map((note) => (
+        <li key={note.relPath}>
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() => onSelect(note)}
+            className="flex w-full items-center gap-3 rounded-lg border border-transparent px-3.5 py-3 text-left transition hover:border-is-border hover:bg-is-surface-alt disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
+          >
+            <FileText
+              size={16}
+              strokeWidth={1.333}
+              className="shrink-0 text-is-text-tertiary"
+              aria-hidden="true"
+            />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-[15px] text-is-text">{note.title || note.name}</span>
+              {note.summary && (
+                <span className="mt-0.5 block truncate text-xs text-is-text-tertiary">{note.summary}</span>
+              )}
+            </span>
+            {note.updatedAt ? (
+              <span className="shrink-0 text-xs text-is-text-tertiary">{relativeTime(note.updatedAt)}</span>
+            ) : null}
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 // The editor surface for one local clone: a folder-drill-in tree on the left
 // (breadcrumb + Folders + Notes), and the selected note open in a resizable
 // live-preview editor pane on the right. Mirrors is_web v2's repo browser, with
@@ -980,9 +1024,19 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
   // Title is the current folder name, or the repo itself at the root.
   const title = segments.length ? segments[segments.length - 1] : clone.slug;
   // README is pulled out of the notes list and shown as the folder's guide.
-  const readme = files.find((f) => /^readme$/i.test(f.name));
-  const noteFiles = readme ? files.filter((f) => f.relPath !== readme.relPath) : files;
+  const readme = useMemo(() => files.find((f) => /^readme$/i.test(f.name)), [files]);
+  const noteFiles = useMemo(
+    () => (readme ? files.filter((f) => f.relPath !== readme.relPath) : files),
+    [files, readme],
+  );
   const empty = folders.length === 0 && files.length === 0;
+  // Newest-edited first for the landing. `noteFiles` is memoized above, so this
+  // keys off a stable ref — no duplicated README filter (vs re-deriving here),
+  // and no re-sort on unrelated re-renders (busy / sync / rail toggles).
+  const notesByRecency = useMemo(
+    () => [...noteFiles].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0)),
+    [noteFiles],
+  );
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -1171,30 +1225,45 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
                     </button>
                   </p>
                 )}
-                {status === "loaded" &&
-                  (readme ? (
-                    <ReadmeCard
-                      key={readme.path}
-                      note={readme}
-                      onOpen={() => void selectNote(readme)}
-                      onLink={(t, from) => void handleLink(t, from)}
-                      resolveWiki={resolveWiki}
-                    />
-                  ) : (
-                    <div className="flex flex-col items-center py-20 text-center">
-                      <FileText
-                        size={28}
-                        strokeWidth={1.333}
-                        className="text-is-text-tertiary"
-                        aria-hidden="true"
+                {status === "loaded" && (
+                  <>
+                    {readme && (
+                      <ReadmeCard
+                        key={readme.path}
+                        note={readme}
+                        onOpen={() => void selectNote(readme)}
+                        onLink={(t, from) => void handleLink(t, from)}
+                        resolveWiki={resolveWiki}
                       />
-                      <p className="mt-3 max-w-sm text-sm text-is-text-tertiary">
-                        {empty
-                          ? "This folder is empty — add a note from the Add menu."
-                          : "Pick a file on the left, or open a note to start writing."}
-                      </p>
-                    </div>
-                  ))}
+                    )}
+                    {noteFiles.length > 0 ? (
+                      <>
+                        <SectionLabel>Notes</SectionLabel>
+                        <FolderNotes
+                          notes={notesByRecency}
+                          disabled={busy}
+                          onSelect={(n) => void selectNote(n)}
+                        />
+                      </>
+                    ) : (
+                      !readme && (
+                        <div className="flex flex-col items-center py-20 text-center">
+                          <FileText
+                            size={28}
+                            strokeWidth={1.333}
+                            className="text-is-text-tertiary"
+                            aria-hidden="true"
+                          />
+                          <p className="mt-3 max-w-sm text-sm text-is-text-tertiary">
+                            {empty
+                              ? "This folder is empty — add a note from the Add menu."
+                              : "Pick a file on the left, or open a note to start writing."}
+                          </p>
+                        </div>
+                      )
+                    )}
+                  </>
+                )}
               </div>
             </div>
           )}
