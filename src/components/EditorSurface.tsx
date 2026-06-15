@@ -71,6 +71,7 @@ function NotePane({
   note,
   clone,
   onBusyChange,
+  onRegisterFlush,
   onClose,
   onLink,
   onRetitle,
@@ -80,6 +81,9 @@ function NotePane({
   note: NoteFile;
   clone: CloneRecord;
   onBusyChange: (busy: boolean) => void;
+  // Expose this note's autosave-flush up so the surface can persist the draft
+  // before an external action (e.g. renaming the open note) reads it from disk.
+  onRegisterFlush: (flush: (() => Promise<void>) | null) => void;
   onClose: () => void;
   // Open a link/wiki-target, resolved relative to the note it was clicked in.
   onLink: (target: string, fromRelPath: string) => void;
@@ -208,6 +212,13 @@ function NotePane({
     },
     [flushSave],
   );
+
+  // Expose flush so the surface can persist the draft before an external rename
+  // of this note reads it from disk; deregister on unmount.
+  useEffect(() => {
+    onRegisterFlush(flushSave);
+    return () => onRegisterFlush(null);
+  }, [flushSave, onRegisterFlush]);
 
   // Sync = make local and remote match. Commit (auto-message) is plumbing; the
   // user only sees "Sync". Flushes the latest edit first, then commit + push.
@@ -933,6 +944,12 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
   // Browse the folder tree, or the Recent timeline (all notes by last-saved).
   const [browseMode, setBrowseMode] = useState<"tree" | "recent">("tree");
   const containerRef = useRef<HTMLDivElement>(null);
+  // The open note's autosave-flush, registered by NotePane — used to persist its
+  // draft before a rename reads the file from disk.
+  const flushOpenNoteRef = useRef<(() => Promise<void>) | null>(null);
+  const registerFlush = useCallback((fn: (() => Promise<void>) | null) => {
+    flushOpenNoteRef.current = fn;
+  }, []);
   const { status, folders, files, error, reload } = useDir(clone.path, path);
   const { index: wikiIndex, reload: reloadWiki } = useWikiIndex(clone.path);
   // Loaded lazily — only while Recent is the active browse view and no note is open.
@@ -1005,6 +1022,9 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
       const target = renaming;
       setRenaming(null); // optimistic — unmount the input immediately
       try {
+        // Persist the open note's draft first, so renaming it (or its folder)
+        // reads the latest content from disk rather than dropping live edits.
+        await flushOpenNoteRef.current?.();
         if (target.kind === "folder") {
           const newRel = await renameFolder(clone.path, target.relPath, newName);
           await Promise.all([reload(), reloadWiki()]);
@@ -1372,6 +1392,7 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
               note={selected}
               clone={clone}
               onBusyChange={setBusy}
+              onRegisterFlush={registerFlush}
               onClose={() => void closeNote()}
               onLink={(t, from) => void handleLink(t, from)}
               onRetitle={retitleNote}
