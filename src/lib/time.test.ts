@@ -76,12 +76,14 @@ describe("bucketByTime", () => {
     expect(out[0].label).toBe("Today");
   });
 
-  it("preserves input order within a bucket (no re-sort)", () => {
+  it("preserves input order within a bucket — never re-sorts (the caller owns order)", () => {
     const out = bucket([
-      { id: "a", date: new Date(2026, 5, 15, 8) },
-      { id: "b", date: new Date(2026, 5, 15, 11) },
+      { id: "b", date: new Date(2026, 5, 15, 11) }, // newer, but first in input
+      { id: "a", date: new Date(2026, 5, 15, 8) }, // older, second
     ]);
-    expect(out[0].items.map((i) => i.id)).toEqual(["a", "b"]);
+    // Input order, NOT time order — proves the function doesn't sort behind the
+    // caller (whose contract is to pass items already newest-first).
+    expect(out[0].items.map((i) => i.id)).toEqual(["b", "a"]);
   });
 
   it("skips items with an unparseable date", () => {

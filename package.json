@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
+    "test:watch": "vitest",
     "build:sidecar": "node scripts/build-sidecar.mjs",
     "make-icon": "node scripts/make-icon.mjs && tauri icon icon-source.png",
     "tauri": "tauri",
