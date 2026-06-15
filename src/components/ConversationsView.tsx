@@ -65,7 +65,11 @@ function ConversationDetail({
     };
   }, [conversation.repoId, conversation.conversation_id, reloadCount]);
 
-  // Agents speak as participants too (Tier 1); split them out so people read clean.
+  // Split agents out; everyone else is a person. The branch is only on `agent:`
+  // on purpose: in Tier 0 a `node:` principal is the owner's *person*-node
+  // (the server synthesizes the owner as `node:{person_node_id}`), so it belongs
+  // in People, not Agents. (Org-node participants don't exist in Tier 0; revisit
+  // the split if they ever do.)
   const people = useMemo(() => parts.filter((p) => !p.participant.startsWith("agent:")), [parts]);
   const agents = useMemo(() => parts.filter((p) => p.participant.startsWith("agent:")), [parts]);
 
@@ -186,6 +190,7 @@ export function ConversationsView({
                 <p className="mb-3 text-xs text-is-danger-text">
                   {error}{" "}
                   <button
+                    type="button"
                     className="underline underline-offset-2 hover:text-is-text"
                     onClick={() => void reload()}
                   >
