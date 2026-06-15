@@ -199,6 +199,42 @@ export async function listConversations(repoId: string): Promise<ConversationsRe
   return parseJson<ConversationsResult>(stdout, "conversations");
 }
 
+export type ParticipantRole = "owner" | "member" | "reader";
+
+export interface Participant {
+  id: string | null;
+  process_node_id: string;
+  /** Canonical principal: `person:{username}` / `agent:{node}` / `node:{id}`. */
+  participant: string;
+  role: ParticipantRole;
+  joined_at: string | null;
+  joined_via: string | null;
+  revoked_at: string | null;
+}
+
+/**
+ * A conversation's roster — its active participants (drives `ideaspaces
+ * conversation participants`). Membership is conversation-keyed on the server,
+ * so this works on any conversation without a Space. The owner is synthesized
+ * (role "owner"); revoked rows are excluded.
+ */
+export async function listConversationParticipants(
+  repoId: string,
+  conversationId: string,
+): Promise<Participant[]> {
+  const { code, stdout, stderr } = await runCli([
+    "conversation",
+    "participants",
+    repoId,
+    conversationId,
+    "--json",
+  ]);
+  if (code !== 0) {
+    throw new Error(stderr.trim() || `Could not load participants (exit ${code ?? "unknown"}).`);
+  }
+  return parseJson<{ participants: Participant[] }>(stdout, "conversation participants").participants;
+}
+
 export interface LoginHandle {
   /** Resolves when login completes or is cancelled; rejects on failure. */
   done: Promise<void>;
