@@ -64,6 +64,18 @@ function SignedInView({
   );
   const cloneStatuses = useCloneStatuses(spaces.clones);
 
+  // Cloned (editable) repos for the header's quick switcher — scoped to the
+  // active context, but always including whatever's open so you can jump away.
+  const switcherClones = useMemo(() => {
+    const inContext = spaces.clones.filter((c) =>
+      visibleSpaces.some((s) => s.repo_id === c.repo_id),
+    );
+    if (editingClone && !inContext.some((c) => c.repo_id === editingClone.repo_id)) {
+      return [editingClone, ...inContext];
+    }
+    return inContext;
+  }, [spaces.clones, visibleSpaces, editingClone]);
+
   return (
     // Fixed viewport height + overflow-hidden so inner panes (the repos list,
     // and the editor's tree vs. preview) each own their scroll instead of the
@@ -73,6 +85,9 @@ function SignedInView({
         contexts={contexts}
         activeContext={activeContext}
         onSelectContext={setActiveRef}
+        clones={switcherClones}
+        activeRepoId={editingClone?.repo_id}
+        onSelectRepo={setEditingClone}
         username={spaces.username ?? undefined}
         mode={mode}
         setMode={setMode}
@@ -83,7 +98,11 @@ function SignedInView({
         <Suspense
           fallback={<div className="flex flex-1 items-center justify-center text-sm text-is-text-tertiary">Loading editor…</div>}
         >
-          <EditorSurface clone={editingClone} onClose={() => setEditingClone(undefined)} />
+          <EditorSurface
+            key={editingClone.path}
+            clone={editingClone}
+            onClose={() => setEditingClone(undefined)}
+          />
         </Suspense>
       ) : (
       <div className="flex min-h-0 flex-1">

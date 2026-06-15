@@ -1,16 +1,21 @@
 import { ContextSwitcher } from "./ContextSwitcher";
 import { LogoSymbol } from "./LogoSymbol";
+import { RepoSwitcher } from "./RepoSwitcher";
 import { UserMenu } from "./UserMenu";
+import type { CloneRecord } from "../lib/cli";
 import type { SpaceContext } from "../lib/space-context";
 import type { ThemeMode } from "../theme/useTheme";
 
-// App top bar: a slim mark + the global context switcher on the left, user menu
-// (identity, theme, sign-out) on the right. Just the logo — the stacked wordmark
-// is for the sign-in screen; here the bar stays thin and out of the way.
+// App top bar: a slim mark + the global context switcher + a quick repo switcher
+// on the left, user menu (identity, theme, sign-out) on the right. Just the logo
+// — the stacked wordmark is for the sign-in screen; the bar stays thin.
 export function Header({
   contexts,
   activeContext,
   onSelectContext,
+  clones,
+  activeRepoId,
+  onSelectRepo,
   username,
   mode,
   setMode,
@@ -20,6 +25,9 @@ export function Header({
   contexts: SpaceContext[];
   activeContext: SpaceContext | null;
   onSelectContext: (ref: string) => void;
+  clones: CloneRecord[];
+  activeRepoId?: string;
+  onSelectRepo: (clone: CloneRecord) => void;
   username?: string;
   mode: ThemeMode;
   setMode: (mode: ThemeMode) => void;
@@ -39,6 +47,12 @@ export function Header({
             activeContext={activeContext}
             onSelect={onSelectContext}
           />
+          {clones.length > 0 && (
+            <>
+              <span className="h-4 w-px shrink-0 bg-is-border" />
+              <RepoSwitcher clones={clones} activeRepoId={activeRepoId} onSelect={onSelectRepo} />
+            </>
+          )}
         </div>
 
         <div className="flex shrink-0 items-center gap-1">
