@@ -470,9 +470,9 @@ function FolderList({
   onOpen: (f: FolderEntry) => void;
   disabled?: boolean;
   renamingRelPath?: string;
-  onStartRename?: (relPath: string) => void;
-  onSubmitRename?: (name: string) => void;
-  onCancelRename?: () => void;
+  onStartRename: (relPath: string) => void;
+  onSubmitRename: (name: string) => void;
+  onCancelRename: () => void;
 }) {
   return (
     <div>
@@ -482,11 +482,7 @@ function FolderList({
           renamingRelPath === dir.relPath ? (
             <li key={dir.relPath} className="flex items-center gap-2 px-2 py-1">
               <Folder size={15} strokeWidth={1.333} className="shrink-0 text-is-text-tertiary" aria-hidden="true" />
-              <RenameInput
-                initial={dir.name}
-                onSubmit={(v) => onSubmitRename?.(v)}
-                onCancel={() => onCancelRename?.()}
-              />
+              <RenameInput initial={dir.name} onSubmit={onSubmitRename} onCancel={onCancelRename} />
             </li>
           ) : (
             <li key={dir.relPath} className="group flex items-center rounded-md hover:bg-is-surface-alt">
@@ -502,9 +498,7 @@ function FolderList({
                   <span className="shrink-0 text-[11px] text-is-text-tertiary">{dir.fileCount}</span>
                 )}
               </button>
-              {onStartRename && (
-                <RenameButton onClick={() => onStartRename(dir.relPath)} disabled={disabled} />
-              )}
+              <RenameButton onClick={() => onStartRename(dir.relPath)} disabled={disabled} />
             </li>
           ),
         )}
@@ -532,9 +526,9 @@ function NoteList({
   disabled: boolean;
   compact?: boolean;
   renamingRelPath?: string;
-  onStartRename?: (relPath: string) => void;
-  onSubmitRename?: (name: string) => void;
-  onCancelRename?: () => void;
+  onStartRename: (relPath: string) => void;
+  onSubmitRename: (name: string) => void;
+  onCancelRename: () => void;
 }) {
   return (
     <div>
@@ -549,11 +543,7 @@ function NoteList({
             return (
               <li key={note.relPath} className="flex items-center gap-2 px-2.5 py-1.5">
                 <FileText size={compact ? 14 : 16} strokeWidth={1.333} className="shrink-0 text-is-text-tertiary" aria-hidden="true" />
-                <RenameInput
-                  initial={note.title || note.name}
-                  onSubmit={(v) => onSubmitRename?.(v)}
-                  onCancel={() => onCancelRename?.()}
-                />
+                <RenameInput initial={note.title || note.name} onSubmit={onSubmitRename} onCancel={onCancelRename} />
               </li>
             );
           }
@@ -602,7 +592,7 @@ function NoteList({
                   className="opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100"
                 />
               )}
-              {onStartRename && !isReadme && (
+              {!isReadme && (
                 <RenameButton onClick={() => onStartRename(note.relPath)} disabled={disabled} />
               )}
             </li>
@@ -1016,8 +1006,18 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
       setRenaming(null); // optimistic — unmount the input immediately
       try {
         if (target.kind === "folder") {
-          await renameFolder(clone.path, target.relPath, newName);
+          const newRel = await renameFolder(clone.path, target.relPath, newName);
           await Promise.all([reload(), reloadWiki()]);
+          // If the open note lives inside the renamed folder, follow it to the
+          // new path — otherwise the editor would save back to the old (gone)
+          // location. (Today's nav keeps the open note in the current folder, so
+          // this is defensive, but cheap and correct.)
+          if (selected && selected.relPath.startsWith(`${target.relPath}/`)) {
+            const newRelPath = newRel + selected.relPath.slice(target.relPath.length);
+            const root = clone.path.replace(/\/+$/, "");
+            setSelected({ ...selected, relPath: newRelPath, path: `${root}/${newRelPath}` });
+            setEditorKey((k) => k + 1);
+          }
         } else {
           const file = files.find((f) => f.relPath === target.relPath);
           if (!file) return;
@@ -1034,12 +1034,13 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
             setEditorKey((k) => k + 1);
           }
         }
+        // TODO: warn only when the wiki index has an inbound link to this path.
         toast("Renamed — update any links that point to it.");
       } catch (err) {
         toast(errMessage(err), "error");
       }
     },
-    [renaming, clone.path, files, selected?.relPath, reload, reloadWiki, toast],
+    [renaming, clone.path, files, selected, reload, reloadWiki, toast],
   );
 
   // Drop a pending rename when the folder changes — the row no longer exists.

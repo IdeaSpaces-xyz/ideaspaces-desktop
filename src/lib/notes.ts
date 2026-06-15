@@ -253,8 +253,13 @@ export async function renameFolder(
   const newRel = parent ? `${parent}/${seg}` : seg;
   if (newRel === relPath) return relPath; // unchanged
   const newAbs = `${root}/${newRel}`;
-  if (await exists(newAbs)) throw new Error(`"${seg}" already exists.`);
-  await rename(`${root}/${relPath}`, newAbs);
+  const oldAbs = `${root}/${relPath}`;
+  // On case-insensitive filesystems (macOS) a case-only rename (Notes → notes)
+  // resolves to the same file, so only block a genuinely different target.
+  if (newAbs.toLowerCase() !== oldAbs.toLowerCase() && (await exists(newAbs))) {
+    throw new Error(`"${seg}" already exists.`);
+  }
+  await rename(oldAbs, newAbs);
   return newRel;
 }
 
