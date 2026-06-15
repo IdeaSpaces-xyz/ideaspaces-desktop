@@ -10,6 +10,7 @@ import {
   FolderPlus,
   PanelLeft,
   PanelLeftClose,
+  Pencil,
   Plus,
   RefreshCw,
   UploadCloud,
@@ -28,6 +29,7 @@ import {
   createNote,
   createUntitledNote,
   readNote,
+  renameFolder,
   renameNote,
   writeNote,
   type FolderEntry,
@@ -69,6 +71,7 @@ function NotePane({
   note,
   clone,
   onBusyChange,
+  onRegisterFlush,
   onClose,
   onLink,
   onRetitle,
@@ -78,6 +81,9 @@ function NotePane({
   note: NoteFile;
   clone: CloneRecord;
   onBusyChange: (busy: boolean) => void;
+  // Expose this note's autosave-flush up so the surface can persist the draft
+  // before an external action (e.g. renaming the open note) reads it from disk.
+  onRegisterFlush: (flush: (() => Promise<void>) | null) => void;
   onClose: () => void;
   // Open a link/wiki-target, resolved relative to the note it was clicked in.
   onLink: (target: string, fromRelPath: string) => void;
@@ -206,6 +212,13 @@ function NotePane({
     },
     [flushSave],
   );
+
+  // Expose flush so the surface can persist the draft before an external rename
+  // of this note reads it from disk; deregister on unmount.
+  useEffect(() => {
+    onRegisterFlush(flushSave);
+    return () => onRegisterFlush(null);
+  }, [flushSave, onRegisterFlush]);
 
   // Sync = make local and remote match. Commit (auto-message) is plumbing; the
   // user only sees "Sync". Flushes the latest edit first, then commit + push.
@@ -395,26 +408,111 @@ function SectionLabel({ children }: { children: string }) {
   );
 }
 
-function FolderList({ folders, onOpen }: { folders: FolderEntry[]; onOpen: (f: FolderEntry) => void }) {
+// Inline rename input for a rail row (folder or note). Pre-filled + selected;
+// Enter commits, Escape or blur cancels. A no-op (empty/unchanged) just cancels.
+function RenameInput({
+  initial,
+  onSubmit,
+  onCancel,
+}: {
+  initial: string;
+  onSubmit: (value: string) => void;
+  onCancel: () => void;
+}) {
+  const [value, setValue] = useState(initial);
+  return (
+    <form
+      className="min-w-0 flex-1"
+      onSubmit={(e) => {
+        e.preventDefault();
+        const v = value.trim();
+        if (v && v !== initial) onSubmit(v);
+        else onCancel();
+      }}
+    >
+      <input
+        autoFocus
+        value={value}
+        onFocus={(e) => e.currentTarget.select()}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            e.preventDefault();
+            onCancel();
+          }
+        }}
+        onBlur={onCancel}
+        aria-label="New name"
+        className="w-full rounded-md border border-is-accent bg-is-bg px-2 py-1 text-sm text-is-text outline-none"
+      />
+    </form>
+  );
+}
+
+// Hover-revealed rename affordance on a rail row.
+function RenameButton({ onClick, disabled }: { onClick: () => void; disabled?: boolean }) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+      aria-label="Rename"
+      title="Rename"
+      className="mr-1 shrink-0 rounded-md p-1 text-is-text-tertiary opacity-0 transition hover:bg-is-surface-alt hover:text-is-text group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none disabled:opacity-0"
+    >
+      <Pencil size={13} strokeWidth={1.5} aria-hidden="true" />
+    </button>
+  );
+}
+
+function FolderList({
+  folders,
+  onOpen,
+  disabled,
+  renamingRelPath,
+  onStartRename,
+  onSubmitRename,
+  onCancelRename,
+}: {
+  folders: FolderEntry[];
+  onOpen: (f: FolderEntry) => void;
+  disabled?: boolean;
+  renamingRelPath?: string;
+  onStartRename: (relPath: string) => void;
+  onSubmitRename: (name: string) => void;
+  onCancelRename: () => void;
+}) {
   return (
     <div>
       <SectionLabel>Folders</SectionLabel>
       <ul className="flex flex-col gap-0.5">
-        {folders.map((dir) => (
-          <li key={dir.relPath}>
-            <button
-              type="button"
-              onClick={() => onOpen(dir)}
-              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-is-text transition hover:bg-is-surface-alt focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
-            >
+        {folders.map((dir) =>
+          renamingRelPath === dir.relPath ? (
+            <li key={dir.relPath} className="flex items-center gap-2 px-2 py-1">
               <Folder size={15} strokeWidth={1.333} className="shrink-0 text-is-text-tertiary" aria-hidden="true" />
-              <span className="min-w-0 flex-1 truncate">{dir.name}</span>
-              {dir.fileCount > 0 && (
-                <span className="shrink-0 text-[11px] text-is-text-tertiary">{dir.fileCount}</span>
-              )}
-            </button>
-          </li>
-        ))}
+              <RenameInput initial={dir.name} onSubmit={onSubmitRename} onCancel={onCancelRename} />
+            </li>
+          ) : (
+            <li key={dir.relPath} className="group flex items-center rounded-md hover:bg-is-surface-alt">
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={() => onOpen(dir)}
+                className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-is-text transition disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
+              >
+                <Folder size={15} strokeWidth={1.333} className="shrink-0 text-is-text-tertiary" aria-hidden="true" />
+                <span className="min-w-0 flex-1 truncate">{dir.name}</span>
+                {dir.fileCount > 0 && (
+                  <span className="shrink-0 text-[11px] text-is-text-tertiary">{dir.fileCount}</span>
+                )}
+              </button>
+              <RenameButton onClick={() => onStartRename(dir.relPath)} disabled={disabled} />
+            </li>
+          ),
+        )}
       </ul>
     </div>
   );
@@ -428,12 +526,20 @@ function NoteList({
   onSelect,
   disabled,
   compact = false,
+  renamingRelPath,
+  onStartRename,
+  onSubmitRename,
+  onCancelRename,
 }: {
   files: NoteFile[];
   selectedRel: string | undefined;
   onSelect: (note: NoteFile) => void;
   disabled: boolean;
   compact?: boolean;
+  renamingRelPath?: string;
+  onStartRename: (relPath: string) => void;
+  onSubmitRename: (name: string) => void;
+  onCancelRename: () => void;
 }) {
   return (
     <div>
@@ -441,12 +547,24 @@ function NoteList({
       <ul className={cn("flex flex-col", compact ? "gap-0.5" : "gap-1.5")}>
         {files.map((note) => {
           const active = selectedRel === note.relPath;
+          // README is the folder's structural guide — not renamable from here.
+          const isReadme = /^readme$/i.test(note.name);
+
+          if (renamingRelPath === note.relPath) {
+            return (
+              <li key={note.relPath} className="flex items-center gap-2 px-2.5 py-1.5">
+                <FileText size={compact ? 14 : 16} strokeWidth={1.333} className="shrink-0 text-is-text-tertiary" aria-hidden="true" />
+                <RenameInput initial={note.title || note.name} onSubmit={onSubmitRename} onCancel={onCancelRename} />
+              </li>
+            );
+          }
+
           return (
             <li
               key={note.relPath}
               className={cn(
                 "group flex items-center rounded-lg border transition",
-                compact ? "gap-0" : "gap-1 pr-2",
+                compact ? "gap-0 pr-1" : "gap-1 pr-2",
                 active
                   ? "border-is-border bg-is-surface-alt"
                   : "border-transparent hover:border-is-border hover:bg-is-surface-alt",
@@ -459,7 +577,7 @@ function NoteList({
                 aria-current={active ? "true" : undefined}
                 className={cn(
                   "flex min-w-0 flex-1 items-center rounded-l-lg text-left transition disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring",
-                  compact ? "gap-2 rounded-lg px-2.5 py-1.5" : "gap-3 px-3.5 py-3",
+                  compact ? "gap-2 px-2.5 py-1.5" : "gap-3 px-3.5 py-3",
                 )}
                 title={note.summary ? `${note.relPath} — ${note.summary}` : note.relPath}
               >
@@ -484,6 +602,9 @@ function NoteList({
                   label="note path"
                   className="opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100"
                 />
+              )}
+              {!isReadme && (
+                <RenameButton onClick={() => onStartRename(note.relPath)} disabled={disabled} />
               )}
             </li>
           );
@@ -816,9 +937,19 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
   const [busy, setBusy] = useState(false);
   // Only folders use the inline create row now; new notes open blank + titled.
   const [creating, setCreating] = useState<"folder" | null>(null);
+  // The rail row being inline-renamed (folder or note), if any.
+  const [renaming, setRenaming] = useState<{ relPath: string; kind: "folder" | "note" } | null>(
+    null,
+  );
   // Browse the folder tree, or the Recent timeline (all notes by last-saved).
   const [browseMode, setBrowseMode] = useState<"tree" | "recent">("tree");
   const containerRef = useRef<HTMLDivElement>(null);
+  // The open note's autosave-flush, registered by NotePane — used to persist its
+  // draft before a rename reads the file from disk.
+  const flushOpenNoteRef = useRef<(() => Promise<void>) | null>(null);
+  const registerFlush = useCallback((fn: (() => Promise<void>) | null) => {
+    flushOpenNoteRef.current = fn;
+  }, []);
   const { status, folders, files, error, reload } = useDir(clone.path, path);
   const { index: wikiIndex, reload: reloadWiki } = useWikiIndex(clone.path);
   // Loaded lazily — only while Recent is the active browse view and no note is open.
@@ -874,6 +1005,66 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
     setRailCollapsed(false); // the inline name input lives in the rail
     setCreating("folder");
   }, [selected, confirmLeave]);
+
+  // Inline rename of a rail item. Notes retitle (frontmatter `name` + slug, like
+  // the editor's title field); folders move via fs `rename`. Inbound links to the
+  // renamed path aren't rewritten yet — a warning toast covers it (fast-follow).
+  const startRename = useCallback(
+    (relPath: string, kind: "folder" | "note") => {
+      if (!busy) setRenaming({ relPath, kind });
+    },
+    [busy],
+  );
+  const cancelRename = useCallback(() => setRenaming(null), []);
+  const submitRename = useCallback(
+    async (newName: string) => {
+      if (!renaming) return;
+      const target = renaming;
+      setRenaming(null); // optimistic — unmount the input immediately
+      try {
+        // Persist the open note's draft first, so renaming it (or its folder)
+        // reads the latest content from disk rather than dropping live edits.
+        await flushOpenNoteRef.current?.();
+        if (target.kind === "folder") {
+          const newRel = await renameFolder(clone.path, target.relPath, newName);
+          await Promise.all([reload(), reloadWiki()]);
+          // If the open note lives inside the renamed folder, follow it to the
+          // new path — otherwise the editor would save back to the old (gone)
+          // location. (Today's nav keeps the open note in the current folder, so
+          // this is defensive, but cheap and correct.)
+          if (selected && selected.relPath.startsWith(`${target.relPath}/`)) {
+            const newRelPath = newRel + selected.relPath.slice(target.relPath.length);
+            const root = clone.path.replace(/\/+$/, "");
+            setSelected({ ...selected, relPath: newRelPath, path: `${root}/${newRelPath}` });
+            setEditorKey((k) => k + 1);
+          }
+        } else {
+          const file = files.find((f) => f.relPath === target.relPath);
+          if (!file) return;
+          const content = await readNote(file.path);
+          const newNote = await renameNote(
+            clone.path,
+            file.relPath,
+            newName,
+            setFrontmatterName(content, newName),
+          );
+          await Promise.all([reload(), reloadWiki()]);
+          if (selected?.relPath === file.relPath) {
+            setSelected(newNote); // the open note moved — follow it
+            setEditorKey((k) => k + 1);
+          }
+        }
+        // TODO: warn only when the wiki index has an inbound link to this path.
+        toast("Renamed — update any links that point to it.");
+      } catch (err) {
+        toast(errMessage(err), "error");
+      }
+    },
+    [renaming, clone.path, files, selected, reload, reloadWiki, toast],
+  );
+
+  // Drop a pending rename when the folder changes — the row no longer exists.
+  useEffect(() => setRenaming(null), [path]);
 
   // Add+ → New note: create a blank "Untitled" note and open it in Focus,
   // Obsidian-style — the title field focuses so you type the title (= filename).
@@ -1146,7 +1337,15 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
                   <CreateRow onSubmit={(n) => void submitCreate(n)} onCancel={() => setCreating(null)} />
                 )}
                 {folders.length > 0 && (
-                  <FolderList folders={folders} onOpen={(f) => void navigate(f.relPath)} />
+                  <FolderList
+                    folders={folders}
+                    onOpen={(f) => void navigate(f.relPath)}
+                    disabled={busy}
+                    renamingRelPath={renaming?.kind === "folder" ? renaming.relPath : undefined}
+                    onStartRename={(relPath) => startRename(relPath, "folder")}
+                    onSubmitRename={(name) => void submitRename(name)}
+                    onCancelRename={cancelRename}
+                  />
                 )}
                 {noteFiles.length > 0 ? (
                   <NoteList
@@ -1155,6 +1354,10 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
                     onSelect={(n) => void selectNote(n)}
                     disabled={busy}
                     compact
+                    renamingRelPath={renaming?.kind === "note" ? renaming.relPath : undefined}
+                    onStartRename={(relPath) => startRename(relPath, "note")}
+                    onSubmitRename={(name) => void submitRename(name)}
+                    onCancelRename={cancelRename}
                   />
                 ) : (
                   folders.length === 0 &&
@@ -1189,6 +1392,7 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
               note={selected}
               clone={clone}
               onBusyChange={setBusy}
+              onRegisterFlush={registerFlush}
               onClose={() => void closeNote()}
               onLink={(t, from) => void handleLink(t, from)}
               onRetitle={retitleNote}
