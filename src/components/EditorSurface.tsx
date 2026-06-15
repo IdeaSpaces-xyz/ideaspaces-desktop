@@ -1024,16 +1024,19 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
   // Title is the current folder name, or the repo itself at the root.
   const title = segments.length ? segments[segments.length - 1] : clone.slug;
   // README is pulled out of the notes list and shown as the folder's guide.
-  const readme = files.find((f) => /^readme$/i.test(f.name));
-  const noteFiles = readme ? files.filter((f) => f.relPath !== readme.relPath) : files;
+  const readme = useMemo(() => files.find((f) => /^readme$/i.test(f.name)), [files]);
+  const noteFiles = useMemo(
+    () => (readme ? files.filter((f) => f.relPath !== readme.relPath) : files),
+    [files, readme],
+  );
   const empty = folders.length === 0 && files.length === 0;
-  // The landing lists notes newest-edited first; keyed on `files` (stable per
-  // load) so it doesn't re-sort on unrelated re-renders (busy / sync / rail).
-  const notesByRecency = useMemo(() => {
-    const readmeNote = files.find((f) => /^readme$/i.test(f.name));
-    const notes = readmeNote ? files.filter((f) => f.relPath !== readmeNote.relPath) : files;
-    return [...notes].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
-  }, [files]);
+  // Newest-edited first for the landing. `noteFiles` is memoized above, so this
+  // keys off a stable ref — no duplicated README filter (vs re-deriving here),
+  // and no re-sort on unrelated re-renders (busy / sync / rail toggles).
+  const notesByRecency = useMemo(
+    () => [...noteFiles].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0)),
+    [noteFiles],
+  );
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
