@@ -1027,6 +1027,13 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
   const readme = files.find((f) => /^readme$/i.test(f.name));
   const noteFiles = readme ? files.filter((f) => f.relPath !== readme.relPath) : files;
   const empty = folders.length === 0 && files.length === 0;
+  // The landing lists notes newest-edited first; keyed on `files` (stable per
+  // load) so it doesn't re-sort on unrelated re-renders (busy / sync / rail).
+  const notesByRecency = useMemo(() => {
+    const readmeNote = files.find((f) => /^readme$/i.test(f.name));
+    const notes = readmeNote ? files.filter((f) => f.relPath !== readmeNote.relPath) : files;
+    return [...notes].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+  }, [files]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -1230,9 +1237,7 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
                       <>
                         <SectionLabel>Notes</SectionLabel>
                         <FolderNotes
-                          notes={[...noteFiles].sort(
-                            (a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0),
-                          )}
+                          notes={notesByRecency}
                           disabled={busy}
                           onSelect={(n) => void selectNote(n)}
                         />
