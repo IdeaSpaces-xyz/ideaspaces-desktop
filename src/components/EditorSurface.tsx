@@ -8,6 +8,8 @@ import {
   FileText,
   Folder,
   FolderPlus,
+  PanelLeft,
+  PanelLeftClose,
   Plus,
   RefreshCw,
   UploadCloud,
@@ -755,9 +757,10 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
   const toast = useToast();
   const [path, setPath] = useState("");
   const [selected, setSelected] = useState<NoteFile | undefined>(undefined);
-  // Width of the slim note rail in Focus mode (a note is open). The editor takes
-  // the rest of the width.
+  // Width of the persistent file rail (folders + notes); content takes the rest.
   const [railWidth, setRailWidth] = useState(256);
+  // The file rail folds away for full-width content (Obsidian-style).
+  const [railCollapsed, setRailCollapsed] = useState(false);
   // Bumped on retitle to force the editor to remount even when the path is
   // unchanged (a title edit that slugs to the same filename).
   const [editorKey, setEditorKey] = useState(0);
@@ -824,6 +827,7 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
   const startCreateFolder = useCallback(async () => {
     if (selected && !(await confirmLeave())) return;
     setSelected(undefined);
+    setRailCollapsed(false); // the inline name input lives in the rail
     setCreating("folder");
   }, [selected, confirmLeave]);
 
@@ -982,7 +986,27 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-center gap-3 border-b border-is-border px-4 py-2.5">
+      <div className="flex items-center gap-2 border-b border-is-border px-3 py-2.5">
+        {railCollapsed && (
+          <button
+            type="button"
+            onClick={() => setRailCollapsed(false)}
+            aria-label="Show files"
+            title="Show files"
+            className="hidden shrink-0 rounded-md p-1 text-is-text-tertiary transition hover:bg-is-surface-alt hover:text-is-text md:inline-flex"
+          >
+            <PanelLeft size={16} strokeWidth={1.5} aria-hidden="true" />
+          </button>
+        )}
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void goBack()}
+          className="inline-flex shrink-0 items-center gap-1 rounded-md px-1 text-xs text-is-text-tertiary transition hover:text-is-text disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
+        >
+          <ArrowLeft size={14} strokeWidth={1.333} aria-hidden="true" />
+          Back
+        </button>
         <div className="min-w-0 flex-1">
           <Breadcrumb slug={clone.slug} segments={segments} onNavigate={(p) => void navigate(p)} />
         </div>
@@ -1020,98 +1044,107 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
         className="flex min-h-0 flex-1"
         style={{ "--rail-width": `${railWidth}px` } as CSSProperties}
       >
-        {selected ? (
-          // FOCUS: a note is open — slim active-branch rail + a dominant editor.
-          <>
-            <nav
-              aria-label="Notes in this folder"
-              className="flex shrink-0 flex-col overflow-hidden border-r border-is-border md:w-[var(--rail-width)] max-md:hidden"
+        {/* Persistent file rail — folders + notes for the current folder,
+            foldable + resizable. On mobile it's the full-width browse list when
+            no note is open, and hides to give the editor the screen. */}
+        <nav
+          aria-label="Files"
+          className={cn(
+            "flex shrink-0 flex-col overflow-hidden border-r border-is-border",
+            railCollapsed ? "md:hidden" : "md:w-[var(--rail-width)]",
+            selected ? "max-md:hidden" : "max-md:w-full max-md:border-r-0",
+          )}
+        >
+          <div className="flex items-center gap-1.5 border-b border-is-border px-3 py-2">
+            <span className="min-w-0 flex-1 truncate text-xs font-medium text-is-text-secondary">
+              {title}
+            </span>
+            <CopyButton value={path || clone.slug} label="folder path" size={13} />
+            <button
+              type="button"
+              onClick={() => setRailCollapsed(true)}
+              aria-label="Hide files"
+              title="Hide files"
+              className="hidden rounded-md p-1 text-is-text-tertiary transition hover:bg-is-surface-alt hover:text-is-text md:inline-flex"
             >
-              <div className="flex items-center gap-2 border-b border-is-border px-3 py-2.5">
+              <PanelLeftClose size={15} strokeWidth={1.5} aria-hidden="true" />
+            </button>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto p-2">
+            {status === "loading" && (
+              <p className="px-2 py-1 text-xs text-is-text-tertiary">Loading…</p>
+            )}
+            {status === "error" && (
+              <p className="px-2 py-1 text-xs text-is-danger-text">
+                Couldn't load files.{" "}
                 <button
                   type="button"
-                  disabled={busy}
-                  onClick={() => void goBack()}
-                  className="inline-flex shrink-0 items-center gap-1 rounded-md text-xs text-is-text-tertiary transition hover:text-is-text disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
+                  className="underline underline-offset-2 hover:text-is-text"
+                  onClick={() => void reload()}
                 >
-                  <ArrowLeft size={14} strokeWidth={1.333} aria-hidden="true" />
-                  Back
+                  Retry
                 </button>
-                <span className="min-w-0 flex-1 truncate text-xs font-medium text-is-text-secondary">
-                  {title}
-                </span>
-              </div>
-              <div className="min-h-0 flex-1 overflow-y-auto p-2">
-                {status === "loading" && (
-                  <p className="px-2 py-1 text-xs text-is-text-tertiary">Loading…</p>
+              </p>
+            )}
+            {status === "loaded" && (
+              <div className="flex flex-col gap-3">
+                {creating && (
+                  <CreateRow onSubmit={(n) => void submitCreate(n)} onCancel={() => setCreating(null)} />
                 )}
-                {status === "error" && (
-                  <p className="px-2 py-1 text-xs text-is-danger-text">Couldn't load notes.</p>
+                {folders.length > 0 && (
+                  <FolderList folders={folders} onOpen={(f) => void navigate(f.relPath)} />
                 )}
-                {status === "loaded" &&
-                  (noteFiles.length > 0 ? (
-                    <NoteList
-                      files={noteFiles}
-                      selectedRel={selected.relPath}
-                      onSelect={(n) => void selectNote(n)}
-                      disabled={busy}
-                      compact
-                    />
-                  ) : (
-                    <p className="px-2 py-1 text-xs text-is-text-tertiary">No other notes here.</p>
-                  ))}
+                {noteFiles.length > 0 ? (
+                  <NoteList
+                    files={noteFiles}
+                    selectedRel={selected?.relPath}
+                    onSelect={(n) => void selectNote(n)}
+                    disabled={busy}
+                    compact
+                  />
+                ) : (
+                  folders.length === 0 &&
+                  !creating && (
+                    <p className="px-2 py-1 text-xs text-is-text-tertiary">Empty folder.</p>
+                  )
+                )}
               </div>
-            </nav>
-            <Resizer
-              side="left"
-              min={200}
-              max={420}
-              label="Note list width"
-              containerRef={containerRef}
-              width={railWidth}
-              onResize={setRailWidth}
+            )}
+          </div>
+        </nav>
+        {!railCollapsed && (
+          <Resizer
+            side="left"
+            min={200}
+            max={420}
+            label="File rail width"
+            containerRef={containerRef}
+            width={railWidth}
+            onResize={setRailWidth}
+          />
+        )}
+
+        {/* Content — the open note, the Recent feed, or the folder's README. */}
+        <section
+          aria-label="Content"
+          className={cn("flex min-w-0 flex-1 overflow-hidden", !selected && "max-md:hidden")}
+        >
+          {selected ? (
+            <NotePane
+              key={`${selected.path}:${editorKey}`}
+              note={selected}
+              clone={clone}
+              onBusyChange={setBusy}
+              onClose={() => void closeNote()}
+              onLink={(t, from) => void handleLink(t, from)}
+              onRetitle={retitleNote}
+              autoFocusTitle={selected.path === newNotePath}
+              resolveWiki={resolveWiki}
             />
-            <section
-              aria-label="Note editor"
-              className="flex min-w-0 flex-1 overflow-hidden max-md:fixed max-md:inset-0 max-md:z-40"
-            >
-              <NotePane
-                key={`${selected.path}:${editorKey}`}
-                note={selected}
-                clone={clone}
-                onBusyChange={setBusy}
-                onClose={() => void closeNote()}
-                onLink={(t, from) => void handleLink(t, from)}
-                onRetitle={retitleNote}
-                autoFocusTitle={selected.path === newNotePath}
-                resolveWiki={resolveWiki}
-              />
-            </section>
-          </>
-        ) : (
-          // BROWSE: no note open — the folder tree, or the Recent timeline.
-          <nav className="min-w-0 flex-1 overflow-y-auto">
-            <div className="mx-auto w-full max-w-3xl px-6 py-6">
-              <div className="mb-5 flex items-center gap-3">
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void goBack()}
-                  className="inline-flex shrink-0 items-center gap-1 rounded-md text-xs text-is-text-tertiary transition hover:text-is-text disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
-                >
-                  <ArrowLeft size={14} strokeWidth={1.333} aria-hidden="true" />
-                  Back
-                </button>
-                <div className="flex min-w-0 flex-1 items-center gap-1.5">
-                  <h1 className="min-w-0 truncate text-xl font-medium text-is-text">
-                    {browseMode === "recent" ? "Recent" : title}
-                  </h1>
-                  {browseMode === "tree" && (
-                    <CopyButton value={path || clone.slug} label="folder path" size={14} />
-                  )}
-                </div>
-              </div>
-              {browseMode === "recent" ? (
+          ) : browseMode === "recent" ? (
+            <div className="min-w-0 flex-1 overflow-y-auto">
+              <div className="mx-auto w-full max-w-3xl px-6 py-6">
+                <h1 className="mb-5 text-xl font-medium text-is-text">Recent</h1>
                 <RecentTimeline
                   notes={recent.notes}
                   status={recent.status}
@@ -1120,68 +1153,52 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
                   onSelect={(n) => void openNote(n)}
                   onReload={() => void recent.reload()}
                 />
-              ) : (
-                <>
-                  {status === "loading" && <p className="text-sm text-is-text-tertiary">Loading…</p>}
-                  {status === "error" && (
-                    <p className="text-sm text-is-danger-text">
-                      {error}{" "}
-                      <button
-                        type="button"
-                        className="underline underline-offset-2 hover:text-is-text"
-                        onClick={() => void reload()}
-                      >
-                        Retry
-                      </button>
-                    </p>
-                  )}
-                  {status === "loaded" && (
-                    <>
-                      {creating && (
-                        <CreateRow onSubmit={(n) => void submitCreate(n)} onCancel={() => setCreating(null)} />
-                      )}
-                      {readme && (
-                        <ReadmeCard
-                          key={readme.path}
-                          note={readme}
-                          onOpen={() => void selectNote(readme)}
-                          onLink={(t, from) => void handleLink(t, from)}
-                          resolveWiki={resolveWiki}
-                        />
-                      )}
-                      {empty && !readme && !creating ? (
-                        <p className="text-sm text-is-text-tertiary">This folder has no notes or sub-folders.</p>
-                      ) : folders.length > 0 ? (
-                        <div className="grid gap-x-8 gap-y-6 sm:grid-cols-[12rem_minmax(0,1fr)]">
-                          <FolderList folders={folders} onOpen={(f) => void navigate(f.relPath)} />
-                          {noteFiles.length > 0 ? (
-                            <NoteList
-                              files={noteFiles}
-                              selectedRel={undefined}
-                              onSelect={(n) => void selectNote(n)}
-                              disabled={busy}
-                            />
-                          ) : (
-                            <p className="text-sm text-is-text-tertiary">No notes in this folder.</p>
-                          )}
-                        </div>
-                      ) : (
-                        noteFiles.length > 0 && (
-                          <NoteList
-                            files={noteFiles}
-                            selectedRel={undefined}
-                            onSelect={(n) => void selectNote(n)}
-                            disabled={busy}
-                          />
-                        )
-                      )}
-                    </>
-                  )}
-                </>
-              )}
+              </div>
             </div>
-          </nav>
-        )}
+          ) : (
+            <div className="min-w-0 flex-1 overflow-y-auto">
+              <div className="mx-auto w-full max-w-3xl px-6 py-8">
+                {status === "loading" && <p className="text-sm text-is-text-tertiary">Loading…</p>}
+                {status === "error" && (
+                  <p className="text-sm text-is-danger-text">
+                    {error}{" "}
+                    <button
+                      type="button"
+                      className="underline underline-offset-2 hover:text-is-text"
+                      onClick={() => void reload()}
+                    >
+                      Retry
+                    </button>
+                  </p>
+                )}
+                {status === "loaded" &&
+                  (readme ? (
+                    <ReadmeCard
+                      key={readme.path}
+                      note={readme}
+                      onOpen={() => void selectNote(readme)}
+                      onLink={(t, from) => void handleLink(t, from)}
+                      resolveWiki={resolveWiki}
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center py-20 text-center">
+                      <FileText
+                        size={28}
+                        strokeWidth={1.333}
+                        className="text-is-text-tertiary"
+                        aria-hidden="true"
+                      />
+                      <p className="mt-3 max-w-sm text-sm text-is-text-tertiary">
+                        {empty
+                          ? "This folder is empty — add a note from the Add menu."
+                          : "Pick a file on the left, or open a note to start writing."}
+                      </p>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+        </section>
       </div>
     </div>
   );
