@@ -145,6 +145,14 @@ function ConversationDetail({
   const forbidden =
     status === "error" && /\b403\b|Only Process participants|not a participant/i.test(error ?? "");
 
+  // Status pill: the live phase while streaming, then "Saving…" through the
+  // reconcile window so the briefly-disabled compose box isn't silent.
+  const liveStatus = streaming
+    ? streamStatusLabel(streamState.state, streamState.currentTool)
+    : sending
+      ? "Saving…"
+      : null;
+
   return (
     <div className="mx-auto flex h-full w-full max-w-3xl flex-col px-6">
       <header className="shrink-0 pb-3 pt-6">
@@ -190,7 +198,7 @@ function ConversationDetail({
             detail={detail}
             streamState={streamState}
             optimisticUserMessage={optimistic}
-            statusLabel={streamStatusLabel(streamState.state, streamState.currentTool)}
+            statusLabel={liveStatus}
             emptyLabel="No messages yet — send one below."
           />
           <Compose
