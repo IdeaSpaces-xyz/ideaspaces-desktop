@@ -1,9 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Lock, MessageSquare, Plus } from "lucide-react";
+import { ArrowLeft, Lock, MessageSquare, Plus, RefreshCw, X } from "lucide-react";
 import { useConversations, type ConversationRow } from "../spaces/useConversations";
 import { NewConversation } from "./NewConversation";
 import { bucketByTime, relativeTime } from "../lib/time";
-import { getConversation, streamConversation, type Space, type StreamHandle } from "../lib/cli";
+import {
+  getConversation,
+  listClones,
+  streamConversation,
+  syncClone,
+  type CloneRecord,
+  type Space,
+  type StreamHandle,
+} from "../lib/cli";
 import type { KeeperConversationDetail } from "../conversation/keeper-types";
 import {
   createInitialKeeperStreamState,
@@ -52,6 +60,27 @@ function ConversationDetail({
     };
   }, []);
 
+  // Coherence: a Keeper turn edits notes in the context repo server-side. If we
+  // have a local clone of that repo, the user is now behind — offer to Sync. The
+  // count is from the turn's `workspace` surface (created + modified + deleted).
+  const [clone, setClone] = useState<CloneRecord | undefined>(undefined);
+  const [pendingSync, setPendingSync] = useState<number | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    listClones()
+      .then((cs) => {
+        if (alive) setClone(cs.find((c) => c.repo_id === repoId));
+      })
+      .catch(() => {
+        // No clone registry / not cloned — the changes are server-only; the
+        // banner still informs, it just can't offer a local Sync.
+      });
+    return () => {
+      alive = false;
+    };
+  }, [repoId]);
+
   // Initial load (and explicit Retry). The post-turn reconcile is inlined in
   // `send` so it doesn't flash the loading screen over the transcript.
   const load = useCallback(async () => {
@@ -92,10 +121,13 @@ function ConversationDetail({
       sendingRef.current = true;
       setSending(true);
       setOptimistic(text);
+      setPendingSync(null); // a new turn supersedes the prior change banner
       setStreamState({ ...createInitialKeeperStreamState(), state: "connecting" });
       // Single error sink: a transport failure rejects `done`; a mid-turn error
       // event resolves it but is captured here. Either way, toast exactly once.
       let streamError: string | null = null;
+      // Notes the turn touched in the context repo (created + modified + deleted).
+      let changed = 0;
       const handle = streamConversation(
         repoId,
         convId,
@@ -103,6 +135,10 @@ function ConversationDetail({
         {
           onEvent: (e) => {
             if (e.type === "error" && typeof e.message === "string") streamError = e.message;
+            if (e.type === "turn_complete") {
+              const w = e.result.workspace;
+              changed = w.created.length + w.modified.length + w.deleted.length;
+            }
             setStreamState((s) => reduceKeeperStreamState(s, e));
           },
         },
@@ -115,6 +151,7 @@ function ConversationDetail({
       }
       handleRef.current = null;
       if (streamError && mounted.current) toast(streamError, "error");
+      if (changed > 0 && mounted.current) setPendingSync(changed);
       // Reconcile canonical history, then clear the live + optimistic display in
       // one batch (with setDetail) so the turn never shows twice. The clear runs
       // in `finally`, so a reconcile failure still drops the orphaned partial
@@ -142,6 +179,25 @@ function ConversationDetail({
   const stop = useCallback(() => {
     void handleRef.current?.cancel();
   }, []);
+
+  // Pull Keeper's note edits into the local clone of the context repo.
+  const pullChanges = useCallback(async () => {
+    if (!clone) return; // the button is disabled while syncing, so no re-entry guard needed
+    setSyncing(true);
+    try {
+      const res = await syncClone(clone.path);
+      toast(
+        res.integrated
+          ? `Synced — pulled ${res.integrated} change${res.integrated === 1 ? "" : "s"}`
+          : "Synced — already up to date",
+      );
+      if (mounted.current) setPendingSync(null);
+    } catch (err) {
+      toast(err instanceof Error ? err.message : String(err), "error");
+    } finally {
+      if (mounted.current) setSyncing(false);
+    }
+  }, [clone, toast]);
 
   // Auto-send the first message of a freshly created conversation, once the
   // (empty) history has loaded. Ref-guarded so it fires exactly once per mount.
@@ -215,6 +271,33 @@ function ConversationDetail({
             statusLabel={liveStatus}
             emptyLabel="No messages yet — send one below."
           />
+          {pendingSync !== null && (
+            <div className="mb-2 flex items-center gap-2 rounded-lg border border-is-border bg-is-surface px-3 py-2 text-xs text-is-text-secondary">
+              <RefreshCw size={14} strokeWidth={1.333} className="shrink-0 text-is-text-tertiary" aria-hidden="true" />
+              <span className="min-w-0 flex-1">
+                Keeper changed {pendingSync} note{pendingSync === 1 ? "" : "s"}
+                {clone ? "." : " in this repo — clone it to pull them locally."}
+              </span>
+              {clone && (
+                <button
+                  type="button"
+                  onClick={() => void pullChanges()}
+                  disabled={syncing}
+                  className="shrink-0 rounded-md px-2 py-1 font-medium text-is-accent-text transition hover:bg-is-surface-alt disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
+                >
+                  {syncing ? "Syncing…" : "Sync to pull"}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setPendingSync(null)}
+                aria-label="Dismiss"
+                className="shrink-0 rounded-md p-1 text-is-text-tertiary transition hover:bg-is-surface-alt hover:text-is-text"
+              >
+                <X size={14} strokeWidth={1.5} aria-hidden="true" />
+              </button>
+            </div>
+          )}
           <Compose
             onSend={(t) => void send(t)}
             onStop={stop}
