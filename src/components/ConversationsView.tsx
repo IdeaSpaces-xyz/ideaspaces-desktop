@@ -59,9 +59,13 @@ function ConversationDetail({
   const [sending, setSending] = useState(false);
   const sendingRef = useRef(false);
   const handleRef = useRef<StreamHandle | null>(null);
-  // Async-setState guard: navigating Back unmounts mid-load/reconcile.
+  // Async-setState guard: navigating Back unmounts mid-load/reconcile. Set true
+  // on mount (not just at init) so a StrictMode remount — which runs the cleanup
+  // then re-runs this effect — leaves the flag true; otherwise every async
+  // result is dropped and the view sticks on "Loading conversation…".
   const mounted = useRef(true);
   useEffect(() => {
+    mounted.current = true;
     return () => {
       mounted.current = false;
     };
