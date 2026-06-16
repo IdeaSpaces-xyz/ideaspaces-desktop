@@ -178,7 +178,11 @@ function SignedInView({
                 </div>
               }
             >
-              <ConversationsView repos={visibleSpaces} reposLoading={spaces.status !== "loaded"} />
+              <ConversationsView
+                repos={visibleSpaces}
+                reposLoading={spaces.status !== "loaded"}
+                username={spaces.username ?? "you"}
+              />
             </Suspense>
           )}
         </main>
