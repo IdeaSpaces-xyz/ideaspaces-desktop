@@ -149,3 +149,34 @@ body {
     opacity: 0;
   }
 }
+
+/* Streaming cursor — appended to the last rendered markdown element while a
+ * Keeper turn streams, so the cursor sits inline with the final character
+ * (a sibling span would detach below the block-level output). */
+.is-md-streaming > *:last-child::after {
+  content: "";
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: -0.15em;
+  background-color: currentColor;
+  animation: is-cursor-blink 1s ease-in-out infinite;
+}
+
+@keyframes is-cursor-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.2;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .is-md-streaming > *:last-child::after {
+    animation: none;
+    opacity: 0.7;
+  }
+}

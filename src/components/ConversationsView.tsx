@@ -1,44 +1,22 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Lock, MessageSquare } from "lucide-react";
 import { useConversations, type ConversationRow } from "../spaces/useConversations";
 import { bucketByTime, relativeTime } from "../lib/time";
-import { getConversation, type Space } from "../lib/cli";
+import { getConversation, streamConversation, type Space, type StreamHandle } from "../lib/cli";
 import type { KeeperConversationDetail } from "../conversation/keeper-types";
-import { AssistantMessage, UserMessage, toRenderableMessages } from "../conversation/Message";
-import { ToolCallList } from "../conversation/ToolCallIndicator";
+import {
+  createInitialKeeperStreamState,
+  reduceKeeperStreamState,
+} from "../conversation/keeper-stream-state";
+import { streamStatusLabel } from "../conversation/stream-status";
+import { MessageList } from "../conversation/MessageList";
+import { Compose } from "../conversation/Compose";
+import { useToast } from "../toast/toast-context";
 
-// The conversation's message history, rendered with the transplanted Keeper
-// renderers (user bubbles, assistant markdown, paired tool calls). Read-only —
-// the compose box + live streaming turn land in the next slice.
-function Transcript({ detail }: { detail: KeeperConversationDetail }) {
-  const renderable = useMemo(() => toRenderableMessages(detail.history), [detail.history]);
-  if (renderable.length === 0) {
-    return <p className="mt-6 text-sm text-is-text-tertiary">No messages in this conversation yet.</p>;
-  }
-  return (
-    <div className="mt-6 flex flex-col gap-4">
-      {renderable.map((msg) => {
-        if (msg.kind === "user") {
-          return <UserMessage key={msg.key} content={msg.content} />;
-        }
-        const hasTools = (msg.toolCalls?.length ?? 0) > 0;
-        if (!hasTools) {
-          return <AssistantMessage key={msg.key} content={msg.content} />;
-        }
-        return (
-          <div key={msg.key} className="flex flex-col gap-2">
-            <ToolCallList toolCalls={msg.toolCalls ?? []} />
-            {msg.content && <AssistantMessage content={msg.content} />}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-// An opened conversation — its message transcript (read-only). The compose box
-// + live streaming turn are the next slice; participant management returns with
-// the Tier-0 write half.
+// An opened conversation — its live chat. Loads history, renders the streaming
+// transcript, and sends turns through the CLI sidecar (streamConversation →
+// reducer → live thinking/tool/text slots), reconciling canonical history when
+// the turn completes. Full-height: header + scrolling transcript + compose.
 function ConversationDetail({
   conversation,
   onBack,
@@ -46,32 +24,92 @@ function ConversationDetail({
   conversation: ConversationRow;
   onBack: () => void;
 }) {
+  const toast = useToast();
+  const repoId = conversation.repoId;
+  const convId = conversation.conversation_id;
+
   const [status, setStatus] = useState<"loading" | "loaded" | "error">("loading");
   const [detail, setDetail] = useState<KeeperConversationDetail | null>(null);
   const [error, setError] = useState<string | undefined>(undefined);
   const [reloadCount, setReloadCount] = useState(0);
 
-  useEffect(() => {
-    let alive = true;
+  const [streamState, setStreamState] = useState(createInitialKeeperStreamState());
+  const [optimistic, setOptimistic] = useState<string | null>(null);
+  const handleRef = useRef<StreamHandle | null>(null);
+
+  // Initial load (and explicit Retry). The post-turn reconcile is inlined in
+  // `send` so it doesn't flash the loading screen over the transcript.
+  const load = useCallback(async () => {
     setStatus("loading");
     setError(undefined);
-    getConversation(conversation.repoId, conversation.conversation_id)
-      .then((d) => {
-        if (alive) {
-          setDetail(d);
-          setStatus("loaded");
-        }
-      })
-      .catch((err) => {
-        if (alive) {
-          setError(err instanceof Error ? err.message : String(err));
-          setStatus("error");
-        }
-      });
+    try {
+      const d = await getConversation(repoId, convId);
+      setDetail(d);
+      setStatus("loaded");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setStatus("error");
+    }
+  }, [repoId, convId]);
+
+  useEffect(() => {
+    void load();
+  }, [load, reloadCount]);
+
+  // Leaving the conversation mid-turn cancels it (kills the sidecar, which
+  // DELETEs the server-side turn).
+  useEffect(() => {
     return () => {
-      alive = false;
+      void handleRef.current?.cancel();
     };
-  }, [conversation.repoId, conversation.conversation_id, reloadCount]);
+  }, [convId]);
+
+  const streaming =
+    streamState.state === "connecting" ||
+    streamState.state === "generating" ||
+    streamState.state === "tool_running";
+
+  const send = useCallback(
+    async (text: string) => {
+      if (handleRef.current) return; // a turn is already in flight
+      setOptimistic(text);
+      setStreamState({ ...createInitialKeeperStreamState(), state: "connecting" });
+      const handle = streamConversation(
+        repoId,
+        convId,
+        { message: text },
+        {
+          onEvent: (e) => {
+            if (e.type === "error" && typeof e.message === "string") toast(e.message, "error");
+            setStreamState((s) => reduceKeeperStreamState(s, e));
+          },
+        },
+      );
+      handleRef.current = handle;
+      try {
+        await handle.done;
+      } catch (err) {
+        toast(err instanceof Error ? err.message : String(err), "error");
+      }
+      handleRef.current = null;
+      // Reconcile canonical history (the turn persisted server-side), then clear
+      // the live + optimistic display in the same batch so the turn never shows
+      // twice. If the reconcile itself fails, keep the live result on screen.
+      try {
+        const d = await getConversation(repoId, convId);
+        setDetail(d);
+        setOptimistic(null);
+        setStreamState(createInitialKeeperStreamState());
+      } catch (err) {
+        toast(err instanceof Error ? err.message : String(err), "error");
+      }
+    },
+    [repoId, convId, toast],
+  );
+
+  const stop = useCallback(() => {
+    void handleRef.current?.cancel();
+  }, []);
 
   // Reading a conversation may be participant-gated server-side: the repo-scoped
   // list can surface a conversation you're not in (or a legacy one with no owner
@@ -80,28 +118,25 @@ function ConversationDetail({
     status === "error" && /\b403\b|Only Process participants|not a participant/i.test(error ?? "");
 
   return (
-    <div>
-      <button
-        type="button"
-        onClick={onBack}
-        className="mb-4 inline-flex items-center gap-1 text-xs text-is-text-tertiary transition hover:text-is-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
-      >
-        <ArrowLeft size={14} strokeWidth={1.333} aria-hidden="true" />
-        Conversations
-      </button>
-      <h2 className="truncate text-lg font-medium text-is-text">
-        {detail?.name || conversation.name || "Untitled"}
-      </h2>
-      <p className="mt-0.5 text-xs text-is-text-tertiary">
-        {conversation.repoSlug} · {conversation.message_count} message
-        {conversation.message_count === 1 ? "" : "s"}
-      </p>
+    <div className="mx-auto flex h-full w-full max-w-3xl flex-col px-6">
+      <header className="shrink-0 pb-3 pt-6">
+        <button
+          type="button"
+          onClick={onBack}
+          className="mb-3 inline-flex items-center gap-1 text-xs text-is-text-tertiary transition hover:text-is-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
+        >
+          <ArrowLeft size={14} strokeWidth={1.333} aria-hidden="true" />
+          Conversations
+        </button>
+        <h2 className="truncate text-lg font-medium text-is-text">
+          {detail?.name || conversation.name || "Untitled"}
+        </h2>
+        <p className="mt-0.5 text-xs text-is-text-tertiary">{conversation.repoSlug}</p>
+      </header>
 
-      {status === "loading" && (
-        <p className="mt-6 text-sm text-is-text-tertiary">Loading conversation…</p>
-      )}
+      {status === "loading" && <p className="text-sm text-is-text-tertiary">Loading conversation…</p>}
       {status === "error" && forbidden && (
-        <div className="mt-6 flex flex-col items-center py-8 text-center">
+        <div className="flex flex-col items-center py-8 text-center">
           <Lock size={24} strokeWidth={1.333} className="text-is-text-tertiary" aria-hidden="true" />
           <p className="mt-3 max-w-sm text-sm text-is-text-tertiary">
             This conversation is private — you're not a participant, so its messages aren't visible
@@ -110,7 +145,7 @@ function ConversationDetail({
         </div>
       )}
       {status === "error" && !forbidden && (
-        <p className="mt-6 text-sm text-is-danger-text">
+        <p className="text-sm text-is-danger-text">
           {error}{" "}
           <button
             type="button"
@@ -121,7 +156,18 @@ function ConversationDetail({
           </button>
         </p>
       )}
-      {status === "loaded" && detail && <Transcript detail={detail} />}
+      {status === "loaded" && detail && (
+        <>
+          <MessageList
+            detail={detail}
+            streamState={streamState}
+            optimisticUserMessage={optimistic}
+            statusLabel={streamStatusLabel(streamState.state, streamState.currentTool)}
+            emptyLabel="No messages yet — send one below."
+          />
+          <Compose onSend={(t) => void send(t)} onStop={stop} streaming={streaming} />
+        </>
+      )}
     </div>
   );
 }
@@ -149,13 +195,15 @@ export function ConversationsView({
   // arrive newest-first, which the bucketer preserves within each section.
   const buckets = useMemo(() => bucketByTime(rows, (c) => c.updated_at), [rows]);
 
+  // A selected conversation takes the full height (its own scroll + pinned
+  // compose), so it renders outside the padded list page.
+  if (selected) {
+    return <ConversationDetail conversation={selected} onBack={() => setSelected(null)} />;
+  }
+
   return (
     <div className="mx-auto w-full max-w-2xl px-6 py-8">
-      {selected ? (
-        <ConversationDetail conversation={selected} onBack={() => setSelected(null)} />
-      ) : (
-        <>
-          <h2 className="mb-3 text-sm font-medium text-is-text-secondary">Conversations</h2>
+      <h2 className="mb-3 text-sm font-medium text-is-text-secondary">Conversations</h2>
 
           {effectiveStatus === "loading" && (
             <p className="text-sm text-is-text-tertiary">Loading conversations…</p>
@@ -242,8 +290,6 @@ export function ConversationsView({
               )}
             </>
           )}
-        </>
-      )}
     </div>
   );
 }
