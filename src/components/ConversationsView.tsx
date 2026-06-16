@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Lock, MessageSquare } from "lucide-react";
+import { ArrowLeft, Lock, MessageSquare, Plus } from "lucide-react";
 import { useConversations, type ConversationRow } from "../spaces/useConversations";
+import { NewConversation } from "./NewConversation";
 import { bucketByTime, relativeTime } from "../lib/time";
 import { getConversation, streamConversation, type Space, type StreamHandle } from "../lib/cli";
 import type { KeeperConversationDetail } from "../conversation/keeper-types";
@@ -20,9 +21,12 @@ import { useToast } from "../toast/toast-context";
 function ConversationDetail({
   conversation,
   onBack,
+  initialMessage,
 }: {
   conversation: ConversationRow;
   onBack: () => void;
+  // A just-created conversation's first message — auto-sent once on mount.
+  initialMessage?: string;
 }) {
   const toast = useToast();
   const repoId = conversation.repoId;
@@ -139,6 +143,16 @@ function ConversationDetail({
     void handleRef.current?.cancel();
   }, []);
 
+  // Auto-send the first message of a freshly created conversation, once the
+  // (empty) history has loaded. Ref-guarded so it fires exactly once per mount.
+  const autoSent = useRef(false);
+  useEffect(() => {
+    if (status === "loaded" && initialMessage && !autoSent.current) {
+      autoSent.current = true;
+      void send(initialMessage);
+    }
+  }, [status, initialMessage, send]);
+
   // Reading a conversation may be participant-gated server-side: the repo-scoped
   // list can surface a conversation you're not in (or a legacy one with no owner
   // row), so a 403 here is "private", not a failure.
@@ -214,7 +228,7 @@ function ConversationDetail({
 }
 
 // The connected Conversations surface — conversations across the active context's
-// repos, newest first. Click one to open its roster (read-only).
+// repos, newest first. Click one to open the live chat, or start a new one.
 export function ConversationsView({
   repos,
   reposLoading,
@@ -224,10 +238,15 @@ export function ConversationsView({
 }) {
   const { status, rows, error, truncated, reload } = useConversations(repos);
   const [selected, setSelected] = useState<ConversationRow | null>(null);
-  // An open roster belongs to the context it was opened in — drop it on a
-  // context/repo switch so we never show a conversation that's out of scope.
+  const [creating, setCreating] = useState(false);
+  // Set only for a just-created conversation, to auto-send its first message.
+  const [initialMessage, setInitialMessage] = useState<string | undefined>(undefined);
+  // An open conversation belongs to the context it was opened in — drop it (and
+  // any draft) on a context/repo switch so we never show one that's out of scope.
   useEffect(() => {
     setSelected(null);
+    setCreating(false);
+    setInitialMessage(undefined);
   }, [repos]);
   // Repos still loading → repos is [] and conversations resolve to a false
   // "empty"; show loading until the repo set is known.
@@ -236,15 +255,54 @@ export function ConversationsView({
   // arrive newest-first, which the bucketer preserves within each section.
   const buckets = useMemo(() => bucketByTime(rows, (c) => c.updated_at), [rows]);
 
-  // A selected conversation takes the full height (its own scroll + pinned
-  // compose), so it renders outside the padded list page.
+  // Leaving a conversation clears the pending first message so reopening it
+  // (as an existing row) never re-sends.
+  const backToList = () => {
+    setSelected(null);
+    setInitialMessage(undefined);
+  };
+
+  // Draft created → open it as the selected conversation and hand off its first
+  // message; refresh the list so it appears when you go back.
+  const handleCreated = (row: ConversationRow, firstMessage: string) => {
+    setCreating(false);
+    setInitialMessage(firstMessage);
+    setSelected(row);
+    void reload();
+  };
+
+  // The draft and a selected conversation each take the full height (own scroll
+  // + pinned compose), so they render outside the padded list page.
+  if (creating) {
+    return (
+      <NewConversation repos={repos} onBack={() => setCreating(false)} onCreated={handleCreated} />
+    );
+  }
   if (selected) {
-    return <ConversationDetail conversation={selected} onBack={() => setSelected(null)} />;
+    return (
+      <ConversationDetail
+        conversation={selected}
+        onBack={backToList}
+        initialMessage={initialMessage}
+      />
+    );
   }
 
   return (
     <div className="mx-auto w-full max-w-2xl px-6 py-8">
-      <h2 className="mb-3 text-sm font-medium text-is-text-secondary">Conversations</h2>
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-sm font-medium text-is-text-secondary">Conversations</h2>
+        {repos.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setCreating(true)}
+            className="inline-flex items-center gap-1.5 rounded-md border border-is-border bg-is-surface px-2.5 py-1.5 text-xs text-is-text-secondary transition hover:border-is-accent hover:text-is-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
+          >
+            <Plus size={14} strokeWidth={1.5} aria-hidden="true" />
+            New conversation
+          </button>
+        )}
+      </div>
 
           {effectiveStatus === "loading" && (
             <p className="text-sm text-is-text-tertiary">Loading conversations…</p>
