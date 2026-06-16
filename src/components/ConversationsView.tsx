@@ -132,6 +132,9 @@ function ConversationDetail({
     [repoId, convId, toast],
   );
 
+  // Stop cancels the in-flight turn. The sent text isn't restored to the compose
+  // box: the message persists as the user turn in the transcript through the
+  // reconcile, so restoring it would duplicate it.
   const stop = useCallback(() => {
     void handleRef.current?.cancel();
   }, []);
