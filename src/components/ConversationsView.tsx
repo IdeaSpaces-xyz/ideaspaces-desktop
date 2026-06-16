@@ -35,7 +35,17 @@ function ConversationDetail({
 
   const [streamState, setStreamState] = useState(createInitialKeeperStreamState());
   const [optimistic, setOptimistic] = useState<string | null>(null);
+  // True from a send through its post-turn reconcile — guards a second send from
+  // racing the reconcile (which would clobber its optimistic + stream state).
+  const [sending, setSending] = useState(false);
   const handleRef = useRef<StreamHandle | null>(null);
+  // Async-setState guard: navigating Back unmounts mid-load/reconcile.
+  const mounted = useRef(true);
+  useEffect(() => {
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   // Initial load (and explicit Retry). The post-turn reconcile is inlined in
   // `send` so it doesn't flash the loading screen over the transcript.
@@ -44,9 +54,11 @@ function ConversationDetail({
     setError(undefined);
     try {
       const d = await getConversation(repoId, convId);
+      if (!mounted.current) return;
       setDetail(d);
       setStatus("loaded");
     } catch (err) {
+      if (!mounted.current) return;
       setError(err instanceof Error ? err.message : String(err));
       setStatus("error");
     }
@@ -71,16 +83,20 @@ function ConversationDetail({
 
   const send = useCallback(
     async (text: string) => {
-      if (handleRef.current) return; // a turn is already in flight
+      if (handleRef.current || sending) return; // a turn is in flight or reconciling
+      setSending(true);
       setOptimistic(text);
       setStreamState({ ...createInitialKeeperStreamState(), state: "connecting" });
+      // Single error sink: a transport failure rejects `done`; a mid-turn error
+      // event resolves it but is captured here. Either way, toast exactly once.
+      let streamError: string | null = null;
       const handle = streamConversation(
         repoId,
         convId,
         { message: text },
         {
           onEvent: (e) => {
-            if (e.type === "error" && typeof e.message === "string") toast(e.message, "error");
+            if (e.type === "error" && typeof e.message === "string") streamError = e.message;
             setStreamState((s) => reduceKeeperStreamState(s, e));
           },
         },
@@ -89,22 +105,27 @@ function ConversationDetail({
       try {
         await handle.done;
       } catch (err) {
-        toast(err instanceof Error ? err.message : String(err), "error");
+        streamError = err instanceof Error ? err.message : String(err);
       }
       handleRef.current = null;
+      if (streamError && mounted.current) toast(streamError, "error");
       // Reconcile canonical history (the turn persisted server-side), then clear
       // the live + optimistic display in the same batch so the turn never shows
       // twice. If the reconcile itself fails, keep the live result on screen.
       try {
         const d = await getConversation(repoId, convId);
-        setDetail(d);
-        setOptimistic(null);
-        setStreamState(createInitialKeeperStreamState());
+        if (mounted.current) {
+          setDetail(d);
+          setOptimistic(null);
+          setStreamState(createInitialKeeperStreamState());
+        }
       } catch (err) {
-        toast(err instanceof Error ? err.message : String(err), "error");
+        if (mounted.current) toast(err instanceof Error ? err.message : String(err), "error");
+      } finally {
+        if (mounted.current) setSending(false);
       }
     },
-    [repoId, convId, toast],
+    [repoId, convId, sending, toast],
   );
 
   const stop = useCallback(() => {
@@ -165,7 +186,12 @@ function ConversationDetail({
             statusLabel={streamStatusLabel(streamState.state, streamState.currentTool)}
             emptyLabel="No messages yet — send one below."
           />
-          <Compose onSend={(t) => void send(t)} onStop={stop} streaming={streaming} />
+          <Compose
+            onSend={(t) => void send(t)}
+            onStop={stop}
+            streaming={streaming}
+            disabled={sending && !streaming}
+          />
         </>
       )}
     </div>
