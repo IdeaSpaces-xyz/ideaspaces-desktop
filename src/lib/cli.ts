@@ -293,6 +293,9 @@ export function streamConversation(
   body: SendMessage,
   handlers: StreamHandlers,
 ): StreamHandle {
+  // The message rides as a single `--message` argv. OS arg limits cap this
+  // (~256 KB total on macOS, ~2 MB on Linux); long pasted content could hit it,
+  // so PR B validates length before streaming. A stdin path is the fix if it bites.
   const args = ["conversation", "send", repoId, conversationId, "--message", body.message];
   if (body.modelTier) args.push("--model", body.modelTier);
   if (body.thinking) args.push("--thinking");
@@ -309,7 +312,10 @@ export function streamConversation(
     try {
       handlers.onEvent(JSON.parse(line) as KeeperStreamEvent);
     } catch {
-      // Not a JSON event line — ignore (defensive; the CLI emits only events).
+      // The CLI emits only JSON event lines on stdout, so a non-JSON line is
+      // unexpected (e.g. a Node deprecation notice). Surface it for devtools
+      // rather than dropping it silently — a silent swallow looks like a hang.
+      console.warn("[keeper stream] ignoring non-JSON stdout line:", line);
     }
   };
 
@@ -341,7 +347,9 @@ export function streamConversation(
       .spawn()
       .then((spawned) => {
         child = spawned;
-        if (cancelled) void spawned.kill(); // cancelled before spawn resolved
+        // Cancelled before spawn resolved — kill now; ignore a kill error (the
+        // close event still fires and resolves via the `cancelled` flag).
+        if (cancelled) void spawned.kill().catch(() => {});
       })
       .catch(reject);
   });
