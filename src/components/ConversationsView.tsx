@@ -17,10 +17,12 @@ import {
   createInitialKeeperStreamState,
   reduceKeeperStreamState,
 } from "../conversation/keeper-stream-state";
-import { streamStatusLabel } from "../conversation/stream-status";
-import { MessageList } from "../conversation/MessageList";
+import { V2Transcript } from "../conversation/V2Transcript";
+import { useChatScroll } from "../conversation/useChatScroll";
+import { formatAbsoluteDate } from "../conversation/transcript-format";
 import { Compose } from "../conversation/Compose";
 import { useToast } from "../toast/toast-context";
+import { cn } from "../lib/cn";
 
 // An opened conversation — its live chat. Loads history, renders the streaming
 // transcript, and sends turns through the CLI sidecar (streamConversation →
@@ -30,11 +32,13 @@ function ConversationDetail({
   conversation,
   onBack,
   initialMessage,
+  username,
 }: {
   conversation: ConversationRow;
   onBack: () => void;
   // A just-created conversation's first message — auto-sent once on mount.
   initialMessage?: string;
+  username: string;
 }) {
   const toast = useToast();
   const repoId = conversation.repoId;
@@ -215,99 +219,168 @@ function ConversationDetail({
   const forbidden =
     status === "error" && /\b403\b|Only Process participants|not a participant/i.test(error ?? "");
 
-  // Status pill: the live phase while streaming, then "Saving…" through the
-  // reconcile window so the briefly-disabled compose box isn't silent.
-  const liveStatus = streaming
-    ? streamStatusLabel(streamState.state, streamState.currentTool)
-    : sending
-      ? "Saving…"
-      : null;
+  // v2 layout: a collapsing header on scroll, auto-follow scroll with a "New ↓"
+  // jump, and a measured floating composer the thread reserves space beneath.
+  const [collapsed, setCollapsed] = useState(false);
+  const [composerHeight, setComposerHeight] = useState(0);
+  const messageCount = (detail?.history.length ?? 0) + (optimistic ? 1 : 0);
+  const { scrollContainerRef, messagesEndRef, showScrollButton, scrollToBottom } = useChatScroll({
+    messageCount,
+    isStreaming: streaming,
+    streamingText: streamState.accumulatedText,
+  });
+  const composerRef = useCallback((el: HTMLDivElement | null) => {
+    if (!el) return;
+    const update = () => setComposerHeight(el.getBoundingClientRect().height);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-3xl flex-col px-6">
-      <header className="shrink-0 pb-3 pt-6">
-        <button
-          type="button"
-          onClick={onBack}
-          className="mb-3 inline-flex items-center gap-1 text-xs text-is-text-tertiary transition hover:text-is-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
-        >
-          <ArrowLeft size={14} strokeWidth={1.333} aria-hidden="true" />
-          Conversations
-        </button>
-        <h2 className="truncate text-lg font-medium text-is-text">
-          {detail?.name || conversation.name || "Untitled"}
-        </h2>
-        <p className="mt-0.5 text-xs text-is-text-tertiary">{conversation.repoSlug}</p>
-      </header>
-
-      {status === "loading" && <p className="text-sm text-is-text-tertiary">Loading conversation…</p>}
-      {status === "error" && forbidden && (
-        <div className="flex flex-col items-center py-8 text-center">
-          <Lock size={24} strokeWidth={1.333} className="text-is-text-tertiary" aria-hidden="true" />
-          <p className="mt-3 max-w-sm text-sm text-is-text-tertiary">
-            This conversation is private — you're not a participant, so its messages aren't visible
-            here.
-          </p>
-        </div>
-      )}
-      {status === "error" && !forbidden && (
-        <p className="text-sm text-is-danger-text">
-          {error}{" "}
+    <div className="flex h-full min-h-0 flex-col">
+      {/* Header — collapses to a thin bar once the thread scrolls. */}
+      <div className="shrink-0 border-b border-is-border/60 px-4 sm:px-6">
+        <div className="mx-auto max-w-[760px] py-3">
           <button
             type="button"
-            className="underline underline-offset-2 hover:text-is-text"
-            onClick={() => setReloadCount((n) => n + 1)}
+            onClick={onBack}
+            className="inline-flex items-center gap-1.5 font-chrome text-xs text-is-text-tertiary transition-colors hover:text-is-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
           >
-            Retry
+            <ArrowLeft size={14} strokeWidth={1.333} aria-hidden="true" />
+            Conversations
           </button>
-        </p>
-      )}
-      {status === "loaded" && detail && (
-        <>
-          <MessageList
-            detail={detail}
-            streamState={streamState}
-            optimisticUserMessage={optimistic}
-            statusLabel={liveStatus}
-            emptyLabel="No messages yet — send one below."
-          />
-          {pendingSync !== null && (
-            <div className="mb-2 flex items-center gap-2 rounded-lg border border-is-border bg-is-surface px-3 py-2 text-xs text-is-text-secondary">
-              <RefreshCw size={14} strokeWidth={1.333} className="shrink-0 text-is-text-tertiary" aria-hidden="true" />
-              <span className="min-w-0 flex-1">
-                Keeper changed {pendingSync} note{pendingSync === 1 ? "" : "s"}
-                {clone ? "." : " in this repo — clone it to pull them locally."}
+          <h1
+            className={cn(
+              "truncate font-prose tracking-[-0.012em] text-is-text transition-all duration-200",
+              collapsed ? "mt-1 text-lg leading-tight" : "mt-2 text-[2rem] leading-tight",
+            )}
+          >
+            {detail?.name || conversation.name || "Untitled"}
+          </h1>
+          {detail && !collapsed && (
+            <div className="mt-2 flex flex-wrap items-center gap-3 font-chrome text-[11px] tracking-[0.02em] text-is-text-tertiary">
+              <span>{conversation.repoSlug}</span>
+              <Dot />
+              <span>Started {detail.created_at ? formatAbsoluteDate(detail.created_at) : "recently"}</span>
+              <Dot />
+              <span className="rounded-full border border-is-border px-2.5 py-1 text-is-text-secondary">
+                {detail.model_tier || "sonnet"}
               </span>
-              {clone && (
-                <button
-                  type="button"
-                  onClick={() => void pullChanges()}
-                  disabled={syncing}
-                  className="shrink-0 rounded-md px-2 py-1 font-medium text-is-accent-text transition hover:bg-is-surface-alt disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
-                >
-                  {syncing ? "Syncing…" : "Sync to pull"}
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => setPendingSync(null)}
-                aria-label="Dismiss"
-                className="shrink-0 rounded-md p-1 text-is-text-tertiary transition hover:bg-is-surface-alt hover:text-is-text"
-              >
-                <X size={14} strokeWidth={1.5} aria-hidden="true" />
-              </button>
             </div>
           )}
-          <Compose
-            onSend={(t) => void send(t)}
-            onStop={stop}
-            streaming={streaming}
-            disabled={sending && !streaming}
-          />
-        </>
-      )}
+        </div>
+      </div>
+
+      {/* Thread — the one scroll region; the composer floats over its bottom. */}
+      <div className="relative min-h-0 flex-1">
+        <div
+          ref={scrollContainerRef}
+          onScroll={(e) => setCollapsed(e.currentTarget.scrollTop > 48)}
+          className="h-full overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
+          <div className="mx-auto max-w-[760px] px-4 py-6 sm:px-6">
+            {status === "loading" && (
+              <p className="text-sm text-is-text-tertiary">Loading conversation…</p>
+            )}
+            {status === "error" && forbidden && (
+              <div className="flex flex-col items-center py-8 text-center">
+                <Lock size={24} strokeWidth={1.333} className="text-is-text-tertiary" aria-hidden="true" />
+                <p className="mt-3 max-w-sm text-sm text-is-text-tertiary">
+                  This conversation is private — you're not a participant, so its messages aren't
+                  visible here.
+                </p>
+              </div>
+            )}
+            {status === "error" && !forbidden && (
+              <p className="text-sm text-is-danger-text">
+                {error}{" "}
+                <button
+                  type="button"
+                  className="underline underline-offset-2 hover:text-is-text"
+                  onClick={() => setReloadCount((n) => n + 1)}
+                >
+                  Retry
+                </button>
+              </p>
+            )}
+            {status === "loaded" && detail && (
+              <V2Transcript
+                detail={detail}
+                userName={username}
+                optimisticUserText={optimistic}
+                streamState={streamState}
+              />
+            )}
+            <div ref={messagesEndRef} />
+            {/* Reserve space so the last message clears the floating composer. */}
+            <div aria-hidden style={{ height: composerHeight }} />
+          </div>
+        </div>
+
+        {showScrollButton && status === "loaded" && (
+          <div className="absolute left-1/2 -translate-x-1/2" style={{ bottom: composerHeight + 16 }}>
+            <button
+              type="button"
+              onClick={scrollToBottom}
+              aria-label="Scroll to new messages"
+              className="rounded-full border border-is-border bg-is-surface px-3.5 py-1.5 font-chrome text-xs text-is-text shadow-sm transition-colors hover:bg-is-surface-alt focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
+            >
+              New ↓
+            </button>
+          </div>
+        )}
+
+        {status === "loaded" && detail && (
+          <div
+            ref={composerRef}
+            className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-is-bg via-is-bg to-transparent px-4 pb-4 pt-6 sm:px-6"
+          >
+            <div className="mx-auto max-w-[760px]">
+              {pendingSync !== null && (
+                <div className="mb-2 flex items-center gap-2 rounded-lg border border-is-border bg-is-surface px-3 py-2 text-xs text-is-text-secondary">
+                  <RefreshCw size={14} strokeWidth={1.333} className="shrink-0 text-is-text-tertiary" aria-hidden="true" />
+                  <span className="min-w-0 flex-1">
+                    Keeper changed {pendingSync} note{pendingSync === 1 ? "" : "s"}
+                    {clone ? "." : " in this repo — clone it to pull them locally."}
+                  </span>
+                  {clone && (
+                    <button
+                      type="button"
+                      onClick={() => void pullChanges()}
+                      disabled={syncing}
+                      className="shrink-0 rounded-md px-2 py-1 font-medium text-is-accent-text transition hover:bg-is-surface-alt disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
+                    >
+                      {syncing ? "Syncing…" : "Sync to pull"}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setPendingSync(null)}
+                    aria-label="Dismiss"
+                    className="shrink-0 rounded-md p-1 text-is-text-tertiary transition hover:bg-is-surface-alt hover:text-is-text"
+                  >
+                    <X size={14} strokeWidth={1.5} aria-hidden="true" />
+                  </button>
+                </div>
+              )}
+              <Compose
+                onSend={(t) => void send(t)}
+                onStop={stop}
+                streaming={streaming}
+                disabled={sending && !streaming}
+              />
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
+}
+
+function Dot() {
+  return <span className="h-0.5 w-0.5 rounded-full bg-is-text-tertiary" />;
 }
 
 // The connected Conversations surface — conversations across the active context's
@@ -315,9 +388,11 @@ function ConversationDetail({
 export function ConversationsView({
   repos,
   reposLoading,
+  username,
 }: {
   repos: Space[];
   reposLoading: boolean;
+  username: string;
 }) {
   const { status, rows, error, truncated, reload } = useConversations(repos);
   const [selected, setSelected] = useState<ConversationRow | null>(null);
@@ -367,6 +442,7 @@ export function ConversationsView({
         conversation={selected}
         onBack={backToList}
         initialMessage={initialMessage}
+        username={username}
       />
     );
   }
