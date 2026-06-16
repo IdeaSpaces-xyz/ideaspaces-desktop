@@ -1,6 +1,5 @@
 import { lazy, Suspense, useMemo, useState, type ReactNode } from "react";
 import { RefreshCw } from "lucide-react";
-import { ConversationsView } from "./components/ConversationsView";
 import { Header } from "./components/Header";
 import { LogoSymbol } from "./components/LogoSymbol";
 import { Rail, type View } from "./components/Rail";
@@ -19,6 +18,12 @@ import type { CloneRecord } from "./lib/cli";
 // keeping the initial bundle (login/browse) light.
 const EditorSurface = lazy(() =>
   import("./components/EditorSurface").then((m) => ({ default: m.EditorSurface })),
+);
+
+// Code-split: the chat transcript pulls in react-markdown — load it only when
+// the Conversations view opens, keeping the login/browse bundle light.
+const ConversationsView = lazy(() =>
+  import("./components/ConversationsView").then((m) => ({ default: m.ConversationsView })),
 );
 
 type Auth = ReturnType<typeof useAuth>;
@@ -166,7 +171,15 @@ function SignedInView({
               {auth.error && <p className="mt-3 text-sm text-is-danger-text">{auth.error}</p>}
             </div>
           ) : (
-            <ConversationsView repos={visibleSpaces} reposLoading={spaces.status !== "loaded"} />
+            <Suspense
+              fallback={
+                <div className="flex flex-1 items-center justify-center text-sm text-is-text-tertiary">
+                  Loading conversations…
+                </div>
+              }
+            >
+              <ConversationsView repos={visibleSpaces} reposLoading={spaces.status !== "loaded"} />
+            </Suspense>
           )}
         </main>
       </div>
