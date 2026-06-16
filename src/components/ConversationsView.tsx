@@ -1,36 +1,44 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Bot, Lock, MessageSquare, User } from "lucide-react";
+import { ArrowLeft, Lock, MessageSquare } from "lucide-react";
 import { useConversations, type ConversationRow } from "../spaces/useConversations";
 import { bucketByTime, relativeTime } from "../lib/time";
-import { listConversationParticipants, type Participant, type Space } from "../lib/cli";
+import { getConversation, type Space } from "../lib/cli";
+import type { KeeperConversationDetail } from "../conversation/keeper-types";
+import { AssistantMessage, UserMessage, toRenderableMessages } from "../conversation/Message";
+import { ToolCallList } from "../conversation/ToolCallIndicator";
 
-// person:alice → "alice"; agent:n_x / node:n_y → the id. The prefix is shown
-// via the row icon, so the label drops it.
-function principalName(p: string): string {
-  const i = p.indexOf(":");
-  return i === -1 ? p : p.slice(i + 1);
-}
-
-function RoleTag({ role }: { role: Participant["role"] }) {
+// The conversation's message history, rendered with the transplanted Keeper
+// renderers (user bubbles, assistant markdown, paired tool calls). Read-only —
+// the compose box + live streaming turn land in the next slice.
+function Transcript({ detail }: { detail: KeeperConversationDetail }) {
+  const renderable = useMemo(() => toRenderableMessages(detail.history), [detail.history]);
+  if (renderable.length === 0) {
+    return <p className="mt-6 text-sm text-is-text-tertiary">No messages in this conversation yet.</p>;
+  }
   return (
-    <span className="shrink-0 rounded-full border border-is-border px-2 py-0.5 text-[10px] uppercase tracking-wide text-is-text-tertiary">
-      {role}
-    </span>
+    <div className="mt-6 flex flex-col gap-4">
+      {renderable.map((msg) => {
+        if (msg.kind === "user") {
+          return <UserMessage key={msg.key} content={msg.content} />;
+        }
+        const hasTools = (msg.toolCalls?.length ?? 0) > 0;
+        if (!hasTools) {
+          return <AssistantMessage key={msg.key} content={msg.content} />;
+        }
+        return (
+          <div key={msg.key} className="flex flex-col gap-2">
+            <ToolCallList toolCalls={msg.toolCalls ?? []} />
+            {msg.content && <AssistantMessage content={msg.content} />}
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
-function ParticipantRow({ p, icon: Icon }: { p: Participant; icon: typeof User }) {
-  return (
-    <li className="flex items-center gap-2.5 rounded-lg border border-is-border bg-is-surface px-3 py-2.5">
-      <Icon size={16} strokeWidth={1.333} className="shrink-0 text-is-text-tertiary" aria-hidden="true" />
-      <span className="min-w-0 flex-1 truncate text-sm text-is-text">{principalName(p.participant)}</span>
-      <RoleTag role={p.role} />
-    </li>
-  );
-}
-
-// An opened conversation's roster — its participants, split People / Agents.
-// Read-only for now; add/remove is the next slice.
+// An opened conversation — its message transcript (read-only). The compose box
+// + live streaming turn are the next slice; participant management returns with
+// the Tier-0 write half.
 function ConversationDetail({
   conversation,
   onBack,
@@ -39,7 +47,7 @@ function ConversationDetail({
   onBack: () => void;
 }) {
   const [status, setStatus] = useState<"loading" | "loaded" | "error">("loading");
-  const [parts, setParts] = useState<Participant[]>([]);
+  const [detail, setDetail] = useState<KeeperConversationDetail | null>(null);
   const [error, setError] = useState<string | undefined>(undefined);
   const [reloadCount, setReloadCount] = useState(0);
 
@@ -47,10 +55,10 @@ function ConversationDetail({
     let alive = true;
     setStatus("loading");
     setError(undefined);
-    listConversationParticipants(conversation.repoId, conversation.conversation_id)
-      .then((p) => {
+    getConversation(conversation.repoId, conversation.conversation_id)
+      .then((d) => {
         if (alive) {
-          setParts(p);
+          setDetail(d);
           setStatus("loaded");
         }
       })
@@ -65,19 +73,11 @@ function ConversationDetail({
     };
   }, [conversation.repoId, conversation.conversation_id, reloadCount]);
 
-  // Reading a roster is participant-gated server-side: only the conversation's
-  // owner/participants may list it, and repo membership doesn't count. The
-  // repo-scoped conversation list can surface a conversation you're not in (or a
-  // legacy one with no owner row), so a 403 here is "private", not a failure.
-  const forbidden = status === "error" && /\b403\b|Only Process participants/i.test(error ?? "");
-
-  // Split agents out; everyone else is a person. The branch is only on `agent:`
-  // on purpose: in Tier 0 a `node:` principal is the owner's *person*-node
-  // (the server synthesizes the owner as `node:{person_node_id}`), so it belongs
-  // in People, not Agents. (Org-node participants don't exist in Tier 0; revisit
-  // the split if they ever do.)
-  const people = useMemo(() => parts.filter((p) => !p.participant.startsWith("agent:")), [parts]);
-  const agents = useMemo(() => parts.filter((p) => p.participant.startsWith("agent:")), [parts]);
+  // Reading a conversation may be participant-gated server-side: the repo-scoped
+  // list can surface a conversation you're not in (or a legacy one with no owner
+  // row), so a 403 here is "private", not a failure.
+  const forbidden =
+    status === "error" && /\b403\b|Only Process participants|not a participant/i.test(error ?? "");
 
   return (
     <div>
@@ -89,21 +89,23 @@ function ConversationDetail({
         <ArrowLeft size={14} strokeWidth={1.333} aria-hidden="true" />
         Conversations
       </button>
-      <h2 className="truncate text-lg font-medium text-is-text">{conversation.name || "Untitled"}</h2>
+      <h2 className="truncate text-lg font-medium text-is-text">
+        {detail?.name || conversation.name || "Untitled"}
+      </h2>
       <p className="mt-0.5 text-xs text-is-text-tertiary">
         {conversation.repoSlug} · {conversation.message_count} message
         {conversation.message_count === 1 ? "" : "s"}
       </p>
 
       {status === "loading" && (
-        <p className="mt-6 text-sm text-is-text-tertiary">Loading participants…</p>
+        <p className="mt-6 text-sm text-is-text-tertiary">Loading conversation…</p>
       )}
       {status === "error" && forbidden && (
         <div className="mt-6 flex flex-col items-center py-8 text-center">
           <Lock size={24} strokeWidth={1.333} className="text-is-text-tertiary" aria-hidden="true" />
           <p className="mt-3 max-w-sm text-sm text-is-text-tertiary">
-            This conversation's roster is private — you're not a participant, so its people aren't
-            visible here.
+            This conversation is private — you're not a participant, so its messages aren't visible
+            here.
           </p>
         </div>
       )}
@@ -119,36 +121,7 @@ function ConversationDetail({
           </button>
         </p>
       )}
-      {status === "loaded" && (
-        <div className="mt-6 flex flex-col gap-6">
-          <section>
-            <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.08em] text-is-text-tertiary">
-              People{people.length ? ` · ${people.length}` : ""}
-            </p>
-            {people.length ? (
-              <ul className="flex flex-col gap-2">
-                {people.map((p) => (
-                  <ParticipantRow key={p.participant} p={p} icon={User} />
-                ))}
-              </ul>
-            ) : (
-              <p className="text-sm text-is-text-tertiary">No people in this conversation.</p>
-            )}
-          </section>
-          {agents.length > 0 && (
-            <section>
-              <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.08em] text-is-text-tertiary">
-                Agents · {agents.length}
-              </p>
-              <ul className="flex flex-col gap-2">
-                {agents.map((p) => (
-                  <ParticipantRow key={p.participant} p={p} icon={Bot} />
-                ))}
-              </ul>
-            </section>
-          )}
-        </div>
-      )}
+      {status === "loaded" && detail && <Transcript detail={detail} />}
     </div>
   );
 }
