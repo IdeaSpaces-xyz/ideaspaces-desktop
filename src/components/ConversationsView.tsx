@@ -281,6 +281,8 @@ function ConversationDetail({
         <div
           ref={scrollContainerRef}
           onScroll={(e) => setCollapsed(e.currentTarget.scrollTop > 48)}
+          role="log"
+          aria-label="Conversation messages"
           className="h-full overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
           <div className={cn(COLUMN, "px-4 py-6 sm:px-6")}>

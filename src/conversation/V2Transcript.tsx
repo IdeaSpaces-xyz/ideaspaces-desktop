@@ -9,7 +9,7 @@
 // `complete` state (until the parent reconciles canonical history in one batch),
 // so the finished turn never blinks out during the reconcile.
 
-import { type ComponentPropsWithoutRef, type ReactNode } from "react";
+import { useEffect, useState, type ComponentPropsWithoutRef, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
@@ -93,12 +93,17 @@ function V2LiveAssistant({
   modelTier: string;
 }) {
   const hasText = streamState.accumulatedText.length > 0;
+  const isThinkingStream =
+    streamState.state === "connecting" ||
+    streamState.state === "generating" ||
+    streamState.state === "tool_running";
   return (
     <div className="grid grid-cols-[40px_1fr] gap-3.5">
       <V2Avatar label="K" agent />
       <div className="min-w-0">
         <V2Attribution name="Keeper" role={`Claude · ${modelTier}`} when="streaming…" />
         <div className="text-is-text">
+          <V2ThinkingBlock content={streamState.accumulatedThinking} isStreaming={isThinkingStream} />
           {hasText && <V2Markdown variant="chat">{streamState.accumulatedText}</V2Markdown>}
           {streamState.state === "tool_running" && streamState.currentTool ? (
             <ActiveIndicator label={`Running ${streamState.currentTool}…`} />
@@ -108,11 +113,40 @@ function V2LiveAssistant({
               <ActiveIndicator label="Saving…" />
             </div>
           ) : (
-            !hasText && <ActiveIndicator label="Keeper is thinking…" />
+            // No text yet and no thinking content → a plain "thinking" indicator
+            // (the disclosure above already covers the thinking-content case).
+            !hasText &&
+            streamState.accumulatedThinking.length === 0 && (
+              <ActiveIndicator label="Keeper is thinking…" />
+            )
           )}
         </div>
       </div>
     </div>
+  );
+}
+
+// Live thinking tokens (ephemeral — history doesn't carry them) in a collapsed
+// disclosure, expanded while streaming. v2 chrome styling.
+function V2ThinkingBlock({ content, isStreaming }: { content: string; isStreaming: boolean }) {
+  const [expanded, setExpanded] = useState(isStreaming);
+  useEffect(() => {
+    if (!isStreaming) setExpanded(false);
+  }, [isStreaming]);
+  if (!content) return null;
+  return (
+    <details
+      open={expanded}
+      onToggle={(e) => setExpanded((e.currentTarget as HTMLDetailsElement).open)}
+      className="mb-3 rounded-lg border border-is-border bg-is-bg font-chrome"
+    >
+      <summary className="cursor-pointer list-none px-3.5 py-2 text-[11px] uppercase tracking-[0.06em] text-is-text-tertiary [&::-webkit-details-marker]:hidden">
+        {isStreaming ? "Thinking…" : "Thought process"}
+      </summary>
+      <p className="whitespace-pre-wrap px-3.5 pb-3 text-xs italic leading-relaxed text-is-text-tertiary">
+        {content}
+      </p>
+    </details>
   );
 }
 
