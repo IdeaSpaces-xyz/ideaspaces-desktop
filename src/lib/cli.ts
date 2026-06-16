@@ -240,6 +240,31 @@ export async function listConversationParticipants(
   return parseJson<{ participants: Participant[] }>(stdout, "conversation participants").participants;
 }
 
+export interface CreatedConversation {
+  conversation_id: string;
+  repo_id: string;
+  name: string;
+}
+
+/**
+ * Create a new (empty) conversation under a repo (drives `conversation new`).
+ * The repo is the conversation's context — the agent's point of view — and is
+ * bound here at creation (the desktop locks the context picker after this).
+ */
+export async function createConversation(
+  repoId: string,
+  name?: string,
+): Promise<CreatedConversation> {
+  const args = name
+    ? ["conversation", "new", repoId, "--name", name, "--json"]
+    : ["conversation", "new", repoId, "--json"];
+  const { code, stdout, stderr } = await runCli(args);
+  if (code !== 0) {
+    throw new Error(stderr.trim() || `Could not create conversation (exit ${code ?? "unknown"}).`);
+  }
+  return parseJson<CreatedConversation>(stdout, "conversation new");
+}
+
 /** Full conversation detail + message history (drives `conversation get`). */
 export async function getConversation(
   repoId: string,
