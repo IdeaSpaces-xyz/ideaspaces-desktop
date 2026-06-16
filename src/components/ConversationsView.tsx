@@ -182,7 +182,7 @@ function ConversationDetail({
 
   // Pull Keeper's note edits into the local clone of the context repo.
   const pullChanges = useCallback(async () => {
-    if (!clone || syncing) return;
+    if (!clone) return; // the button is disabled while syncing, so no re-entry guard needed
     setSyncing(true);
     try {
       const res = await syncClone(clone.path);
@@ -197,7 +197,7 @@ function ConversationDetail({
     } finally {
       if (mounted.current) setSyncing(false);
     }
-  }, [clone, syncing, toast]);
+  }, [clone, toast]);
 
   // Auto-send the first message of a freshly created conversation, once the
   // (empty) history has loaded. Ref-guarded so it fires exactly once per mount.
