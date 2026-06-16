@@ -2,7 +2,11 @@
 // identically (it's the same contract, with toolCalls always an array + createdAt).
 import { describe, expect, it } from "vitest";
 import type { KeeperHistoryMessage } from "./keeper-types";
-import { shouldShowResumeDivider, toV2RenderableMessages } from "./transcript-messages";
+import {
+  shouldShowResumeDivider,
+  toV2RenderableMessages,
+  type ToolCallWithResult,
+} from "./transcript-messages";
 
 function msg(overrides: Partial<KeeperHistoryMessage>): KeeperHistoryMessage {
   return {
@@ -43,7 +47,7 @@ describe("toV2RenderableMessages", () => {
       msg({ role: "tool", tool_call_id: "t1", tool_name: "search", content: '["result-a"]' }),
     ]);
     expect(result).toHaveLength(2);
-    const assistant = result[1] as { kind: "assistant"; toolCalls: ToolCall[] };
+    const assistant = result[1] as { kind: "assistant"; toolCalls: ToolCallWithResult[] };
     expect(assistant.toolCalls).toEqual([
       { id: "t1", name: "search", args: { q: "foo" }, result: { content: '["result-a"]', is_error: false } },
     ]);
@@ -72,7 +76,7 @@ describe("toV2RenderableMessages", () => {
       msg({ role: "tool", tool_call_id: "t2", content: "public" }),
     ]);
     expect(result).toHaveLength(1);
-    const assistant = result[0] as { toolCalls: ToolCall[] };
+    const assistant = result[0] as { toolCalls: ToolCallWithResult[] };
     expect(assistant.toolCalls).toEqual([
       { id: "t2", name: "read", args: { path: "core/README.md" }, result: { content: "public", is_error: false } },
     ]);
@@ -98,8 +102,26 @@ describe("toV2RenderableMessages", () => {
     const result = toV2RenderableMessages([
       msg({ role: "assistant", content: "", tool_calls: [{ id: "t1", name: "search", args: {} }] }),
     ]);
-    const calls = (result[0] as { toolCalls: ToolCall[] }).toolCalls;
+    const calls = (result[0] as { toolCalls: ToolCallWithResult[] }).toolCalls;
     expect(calls).toEqual([{ id: "t1", name: "search", args: {}, result: undefined }]);
+  });
+
+  it("emits a tool-only assistant turn (content empty, calls present)", () => {
+    const result = toV2RenderableMessages([
+      msg({ role: "assistant", content: "", tool_calls: [{ id: "t1", name: "search", args: {} }] }),
+      msg({ role: "tool", tool_call_id: "t1", content: "done" }),
+    ]);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ kind: "assistant", content: "" });
+  });
+
+  it("flags is_error on failed tool results", () => {
+    const result = toV2RenderableMessages([
+      msg({ role: "assistant", content: "", tool_calls: [{ id: "t1", name: "broken", args: {} }] }),
+      msg({ role: "tool", tool_call_id: "t1", content: "boom", is_error: true }),
+    ]);
+    const calls = (result[0] as { toolCalls: ToolCallWithResult[] }).toolCalls;
+    expect(calls[0].result).toEqual({ content: "boom", is_error: true });
   });
 
   it("preserves source order across a multi-turn transcript", () => {
@@ -134,10 +156,3 @@ describe("shouldShowResumeDivider", () => {
     expect(shouldShowResumeDivider("nope", "2026-06-01T12:00:00Z")).toBe(false);
   });
 });
-
-interface ToolCall {
-  id: string;
-  name: string;
-  args: Record<string, unknown>;
-  result?: { content: string; is_error: boolean };
-}

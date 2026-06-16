@@ -51,6 +51,12 @@ export function V2Transcript({
 
   return (
     <div className={cn("flex flex-col gap-12", className)}>
+      <span className="sr-only" aria-live="polite" aria-atomic="true">
+        {live === "complete" ? "Response complete" : ""}
+      </span>
+      {messages.length === 0 && !optimisticUserText && !showLive && (
+        <p className="text-center text-sm text-is-text-tertiary">No messages yet — send one below.</p>
+      )}
       {messages.map((message, index) => {
         const previous = index > 0 ? messages[index - 1] : null;
         const showDivider = previous
@@ -207,42 +213,65 @@ function V2ToolCalls({ toolCalls }: { toolCalls: ToolCallWithResult[] }) {
     <div className="mt-4 space-y-2">
       {toolCalls.map((call) => {
         const hasBody = Object.keys(call.args).length > 0 || !!call.result;
+        const dot = (
+          <span
+            className={cn(
+              "h-1.5 w-1.5 rounded-full",
+              call.result?.is_error
+                ? "bg-is-danger"
+                : call.result
+                  ? "bg-is-text-tertiary"
+                  : "bg-is-accent animate-pulse",
+            )}
+          />
+        );
+        const label = call.result?.is_error ? "error" : call.result ? "done" : "running…";
+
+        // Nothing to expand (a just-started call) → a static row, not a
+        // toggleable <details> that opens to reveal nothing.
+        if (!hasBody) {
+          return (
+            <div
+              key={call.id}
+              className="flex items-center gap-2 rounded-lg border border-is-border bg-is-surface px-3.5 py-2.5 font-chrome text-xs text-is-text-secondary"
+            >
+              {dot}
+              <span className="text-is-text">{call.name}</span>
+              <span className="text-is-text-tertiary">{label}</span>
+            </div>
+          );
+        }
+
         return (
           <details
             key={call.id}
             className="overflow-hidden rounded-lg border border-is-border bg-is-surface font-chrome"
           >
             <summary className="flex cursor-pointer list-none items-center gap-2 px-3.5 py-2.5 text-xs text-is-text-secondary hover:text-is-text [&::-webkit-details-marker]:hidden">
-              <span
-                className={cn(
-                  "h-1.5 w-1.5 rounded-full",
-                  call.result?.is_error
-                    ? "bg-is-danger"
-                    : call.result
-                      ? "bg-is-text-tertiary"
-                      : "bg-is-accent animate-pulse",
-                )}
-              />
+              {dot}
               <span className="text-is-text">{call.name}</span>
-              <span className="text-is-text-tertiary">
-                {call.result?.is_error ? "error" : call.result ? "done" : "running…"}
-              </span>
-              {hasBody && <span className="ml-auto text-is-text-tertiary">▾</span>}
+              <span className="text-is-text-tertiary">{label}</span>
+              <span className="ml-auto text-is-text-tertiary">▾</span>
             </summary>
-            {hasBody && (
-              <div className="border-t border-is-border px-3.5 py-3 text-xs leading-relaxed text-is-text-tertiary">
-                {Object.keys(call.args).length > 0 && (
-                  <pre className="mb-2 overflow-x-auto whitespace-pre-wrap break-words rounded bg-is-bg p-2">
-                    {formatJson(call.args)}
-                  </pre>
-                )}
-                {call.result && (
-                  <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words rounded bg-is-bg p-2">
-                    {call.result.content}
-                  </pre>
-                )}
-              </div>
-            )}
+            <div className="border-t border-is-border px-3.5 py-3 text-xs leading-relaxed text-is-text-tertiary">
+              {Object.keys(call.args).length > 0 && (
+                <pre className="mb-2 overflow-x-auto whitespace-pre-wrap break-words rounded bg-is-bg p-2">
+                  {formatJson(call.args)}
+                </pre>
+              )}
+              {call.result && (
+                <pre
+                  className={cn(
+                    "max-h-48 overflow-auto whitespace-pre-wrap break-words rounded p-2",
+                    call.result.is_error
+                      ? "bg-is-danger/5 text-is-danger-text"
+                      : "bg-is-bg text-is-text-secondary",
+                  )}
+                >
+                  {call.result.content}
+                </pre>
+              )}
+            </div>
           </details>
         );
       })}

@@ -24,6 +24,9 @@ import { Compose } from "../conversation/Compose";
 import { useToast } from "../toast/toast-context";
 import { cn } from "../lib/cn";
 
+// The v2 reading column — header, thread, and floating composer all share it.
+const COLUMN = "mx-auto max-w-[760px]";
+
 // An opened conversation — its live chat. Loads history, renders the streaming
 // transcript, and sends turns through the CLI sidecar (streamConversation →
 // reducer → live thinking/tool/text slots), reconciling canonical history when
@@ -242,7 +245,7 @@ function ConversationDetail({
     <div className="flex h-full min-h-0 flex-col">
       {/* Header — collapses to a thin bar once the thread scrolls. */}
       <div className="shrink-0 border-b border-is-border/60 px-4 sm:px-6">
-        <div className="mx-auto max-w-[760px] py-3">
+        <div className={cn(COLUMN, "py-3")}>
           <button
             type="button"
             onClick={onBack}
@@ -280,7 +283,7 @@ function ConversationDetail({
           onScroll={(e) => setCollapsed(e.currentTarget.scrollTop > 48)}
           className="h-full overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
-          <div className="mx-auto max-w-[760px] px-4 py-6 sm:px-6">
+          <div className={cn(COLUMN, "px-4 py-6 sm:px-6")}>
             {status === "loading" && (
               <p className="text-sm text-is-text-tertiary">Loading conversation…</p>
             )}
@@ -337,7 +340,7 @@ function ConversationDetail({
             ref={composerRef}
             className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-is-bg via-is-bg to-transparent px-4 pb-4 pt-6 sm:px-6"
           >
-            <div className="mx-auto max-w-[760px]">
+            <div className={COLUMN}>
               {pendingSync !== null && (
                 <div className="mb-2 flex items-center gap-2 rounded-lg border border-is-border bg-is-surface px-3 py-2 text-xs text-is-text-secondary">
                   <RefreshCw size={14} strokeWidth={1.333} className="shrink-0 text-is-text-tertiary" aria-hidden="true" />
