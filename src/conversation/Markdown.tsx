@@ -2,8 +2,11 @@
 // transplanted from is_web (`src/conversation/Markdown.tsx`). Renderers map to
 // the desktop's `--is-*` tokens.
 //
-// rehype-sanitize runs the default github-like schema so script/iframe/etc. are
-// stripped. No syntax highlighting today — fenced code renders as a plain
+// rehype-sanitize runs the default github-like schema, so script/iframe, event
+// handlers (`onClick`…), AND `style` attributes are stripped — verified against
+// hast-util-sanitize's default schema (`{style:…,onClick:…}` → `{}`). Model
+// output therefore can't inject CSS or handlers into the privileged Tauri
+// webview. No syntax highlighting today — fenced code renders as a plain
 // `<pre><code>`; a highlighter can slot in later without touching consumers.
 
 import type { ComponentPropsWithoutRef, ReactNode } from "react";

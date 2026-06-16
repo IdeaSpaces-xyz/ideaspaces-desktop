@@ -15,7 +15,6 @@ interface UseChatScrollReturn {
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
   showScrollButton: boolean;
   scrollToBottom: () => void;
-  resetScrollLock: () => void;
 }
 
 const IS_TOUCH = typeof window !== "undefined" && "ontouchstart" in window;
@@ -101,13 +100,5 @@ export function useChatScroll({
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, []);
 
-  const resetScrollLock = useCallback(() => {
-    userScrolledUp.current = false;
-    const container = scrollContainerRef.current;
-    if (!container) return;
-    lastProgrammaticScroll.current = Date.now();
-    container.scrollTop = container.scrollHeight;
-  }, []);
-
-  return { scrollContainerRef, messagesEndRef, showScrollButton, scrollToBottom, resetScrollLock };
+  return { scrollContainerRef, messagesEndRef, showScrollButton, scrollToBottom };
 }

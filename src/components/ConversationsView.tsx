@@ -35,9 +35,10 @@ function ConversationDetail({
 
   const [streamState, setStreamState] = useState(createInitialKeeperStreamState());
   const [optimistic, setOptimistic] = useState<string | null>(null);
-  // True from a send through its post-turn reconcile — guards a second send from
-  // racing the reconcile (which would clobber its optimistic + stream state).
+  // True from a send through its post-turn reconcile. The ref is the guard (read
+  // synchronously, no dep churn); the state drives Compose's disabled prop.
   const [sending, setSending] = useState(false);
+  const sendingRef = useRef(false);
   const handleRef = useRef<StreamHandle | null>(null);
   // Async-setState guard: navigating Back unmounts mid-load/reconcile.
   const mounted = useRef(true);
@@ -83,7 +84,8 @@ function ConversationDetail({
 
   const send = useCallback(
     async (text: string) => {
-      if (handleRef.current || sending) return; // a turn is in flight or reconciling
+      if (handleRef.current || sendingRef.current) return; // in flight or reconciling
+      sendingRef.current = true;
       setSending(true);
       setOptimistic(text);
       setStreamState({ ...createInitialKeeperStreamState(), state: "connecting" });
@@ -109,23 +111,25 @@ function ConversationDetail({
       }
       handleRef.current = null;
       if (streamError && mounted.current) toast(streamError, "error");
-      // Reconcile canonical history (the turn persisted server-side), then clear
-      // the live + optimistic display in the same batch so the turn never shows
-      // twice. If the reconcile itself fails, keep the live result on screen.
+      // Reconcile canonical history, then clear the live + optimistic display in
+      // one batch (with setDetail) so the turn never shows twice. The clear runs
+      // in `finally`, so a reconcile failure still drops the orphaned partial
+      // turn — the transcript reverts to last-known canonical history.
       try {
         const d = await getConversation(repoId, convId);
-        if (mounted.current) {
-          setDetail(d);
-          setOptimistic(null);
-          setStreamState(createInitialKeeperStreamState());
-        }
+        if (mounted.current) setDetail(d);
       } catch (err) {
         if (mounted.current) toast(err instanceof Error ? err.message : String(err), "error");
       } finally {
-        if (mounted.current) setSending(false);
+        sendingRef.current = false;
+        if (mounted.current) {
+          setOptimistic(null);
+          setStreamState(createInitialKeeperStreamState());
+          setSending(false);
+        }
       }
     },
-    [repoId, convId, sending, toast],
+    [repoId, convId, toast],
   );
 
   const stop = useCallback(() => {
