@@ -12,6 +12,11 @@
 // (no arbitrary programs); the webview is first-party with CSP set.
 
 import { Command, type Child } from "@tauri-apps/plugin-shell";
+import type {
+  KeeperConversationDetail,
+  KeeperStreamEvent,
+  ModelTier,
+} from "../conversation/keeper-types";
 
 interface SidecarResult {
   code: number | null;
@@ -233,6 +238,128 @@ export async function listConversationParticipants(
     throw new Error(stderr.trim() || `Could not load participants (exit ${code ?? "unknown"}).`);
   }
   return parseJson<{ participants: Participant[] }>(stdout, "conversation participants").participants;
+}
+
+/** Full conversation detail + message history (drives `conversation get`). */
+export async function getConversation(
+  repoId: string,
+  conversationId: string,
+): Promise<KeeperConversationDetail> {
+  const { code, stdout, stderr } = await runCli([
+    "conversation",
+    "get",
+    repoId,
+    conversationId,
+    "--json",
+  ]);
+  if (code !== 0) {
+    throw new Error(stderr.trim() || `Could not load conversation (exit ${code ?? "unknown"}).`);
+  }
+  return parseJson<KeeperConversationDetail>(stdout, "conversation get");
+}
+
+export interface SendMessage {
+  message: string;
+  modelTier?: ModelTier;
+  thinking?: boolean;
+}
+
+export interface StreamHandlers {
+  /** Each parsed stream event, in order. */
+  onEvent: (event: KeeperStreamEvent) => void;
+}
+
+export interface StreamHandle {
+  /** Resolves on a clean turn (or cancel); rejects on a stream failure. */
+  done: Promise<void>;
+  /**
+   * Stop the turn. Kills the sidecar, which on SIGTERM also tells the server to
+   * cancel the active turn (the turn runs server-side past disconnect, so the
+   * kill alone wouldn't stop it).
+   */
+  cancel: () => Promise<void>;
+}
+
+/**
+ * Stream a Keeper turn (drives `conversation send`). The CLI POSTs the SSE
+ * endpoint and re-emits each event as one JSON object per line on stdout; we
+ * line-buffer that (a `data` event can carry a partial or multiple lines) and
+ * parse each line into a {@link KeeperStreamEvent}. Spawned (not execute()'d) so
+ * the turn can be cancelled mid-flight.
+ */
+export function streamConversation(
+  repoId: string,
+  conversationId: string,
+  body: SendMessage,
+  handlers: StreamHandlers,
+): StreamHandle {
+  // The message rides as a single `--message` argv. OS arg limits cap this
+  // (~256 KB total on macOS, ~2 MB on Linux); long pasted content could hit it,
+  // so PR B validates length before streaming. A stdin path is the fix if it bites.
+  const args = ["conversation", "send", repoId, conversationId, "--message", body.message];
+  if (body.modelTier) args.push("--model", body.modelTier);
+  if (body.thinking) args.push("--thinking");
+  args.push("--json");
+
+  const command = Command.sidecar("binaries/ideaspaces", args);
+
+  let buffer = "";
+  let stderr = "";
+
+  const emitLine = (raw: string) => {
+    const line = raw.trim();
+    if (!line) return;
+    try {
+      handlers.onEvent(JSON.parse(line) as KeeperStreamEvent);
+    } catch {
+      // The CLI emits only JSON event lines on stdout, so a non-JSON line is
+      // unexpected (e.g. a Node deprecation notice). Surface it for devtools
+      // rather than dropping it silently — a silent swallow looks like a hang.
+      console.warn("[keeper stream] ignoring non-JSON stdout line:", line);
+    }
+  };
+
+  command.stdout.on("data", (chunk) => {
+    buffer += chunk;
+    let nl: number;
+    while ((nl = buffer.indexOf("\n")) !== -1) {
+      const line = buffer.slice(0, nl);
+      buffer = buffer.slice(nl + 1);
+      emitLine(line);
+    }
+  });
+  command.stderr.on("data", (chunk) => {
+    stderr += chunk;
+  });
+
+  let child: Child | null = null;
+  let cancelled = false;
+
+  const done = new Promise<void>((resolve, reject) => {
+    command.on("error", (err) => reject(new Error(String(err))));
+    command.on("close", ({ code }) => {
+      if (buffer.trim()) emitLine(buffer); // flush a final line with no trailing \n
+      buffer = "";
+      if (cancelled || code === 0) resolve();
+      else reject(new Error(stderr.trim() || `Conversation stream failed (exit ${code ?? "unknown"}).`));
+    });
+    command
+      .spawn()
+      .then((spawned) => {
+        child = spawned;
+        // Cancelled before spawn resolved — kill now; ignore a kill error (the
+        // close event still fires and resolves via the `cancelled` flag).
+        if (cancelled) void spawned.kill().catch(() => {});
+      })
+      .catch(reject);
+  });
+
+  const cancel = async () => {
+    cancelled = true;
+    if (child) await child.kill();
+  };
+
+  return { done, cancel };
 }
 
 export interface LoginHandle {
