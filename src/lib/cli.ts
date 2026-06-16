@@ -249,16 +249,12 @@ export interface CreatedConversation {
 /**
  * Create a new (empty) conversation under a repo (drives `conversation new`).
  * The repo is the conversation's context — the agent's point of view — and is
- * bound here at creation (the desktop locks the context picker after this).
+ * bound here at creation (the desktop locks the context picker after this). The
+ * conversation auto-names from its first turn, so no name is passed (the CLI's
+ * `--name` can be wired back when a UI name field exists).
  */
-export async function createConversation(
-  repoId: string,
-  name?: string,
-): Promise<CreatedConversation> {
-  const args = name
-    ? ["conversation", "new", repoId, "--name", name, "--json"]
-    : ["conversation", "new", repoId, "--json"];
-  const { code, stdout, stderr } = await runCli(args);
+export async function createConversation(repoId: string): Promise<CreatedConversation> {
+  const { code, stdout, stderr } = await runCli(["conversation", "new", repoId, "--json"]);
   if (code !== 0) {
     throw new Error(stderr.trim() || `Could not create conversation (exit ${code ?? "unknown"}).`);
   }
