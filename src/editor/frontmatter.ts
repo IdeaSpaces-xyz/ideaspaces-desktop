@@ -147,3 +147,20 @@ export function setFrontmatterName(content: string, name: string): string {
   else lines.splice(fm.startLine, 0, line);
   return lines.join("\n");
 }
+
+/**
+ * Offset of the first caret position after any leading frontmatter block, so a
+ * focus never lands at offset 0 — inside the block, where an Enter inserts a
+ * newline before the opening `---` and breaks the fence (the YAML stops parsing
+ * and spills raw into the body). Returns 0 when there's no frontmatter; the doc
+ * length when it's frontmatter-only (no body line yet).
+ */
+export function bodyStartOffset(content: string): number {
+  const fm = parseFrontmatter(content);
+  if (!fm) return 0;
+  const lines = content.split("\n");
+  if (fm.endLine >= lines.length) return content.length;
+  let offset = 0;
+  for (let i = 0; i < fm.endLine; i++) offset += lines[i].length + 1;
+  return Math.min(offset, content.length);
+}
