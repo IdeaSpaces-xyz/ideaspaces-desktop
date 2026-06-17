@@ -71,9 +71,16 @@ class FrontmatterWidget extends WidgetType {
   }
 
   toDOM(view: EditorView): HTMLElement {
+    // Outer wrapper carries the vertical rhythm as *padding*, not margin. CM6's
+    // heightmap measures a block widget via getBoundingClientRect, which includes
+    // padding but EXCLUDES margin — so a margin here would under-allocate the
+    // widget's height and every line below it would click ~that much too low.
+    const wrap = document.createElement("div");
+    wrap.className = "cm-fm-wrap";
+    wrap.setAttribute("contenteditable", "false");
+
     const root = document.createElement("div");
     root.className = "cm-fm-panel";
-    root.setAttribute("contenteditable", "false");
 
     const head = document.createElement("div");
     head.className = "cm-fm-head";
@@ -120,7 +127,8 @@ class FrontmatterWidget extends WidgetType {
       }
       root.append(rows);
     }
-    return root;
+    wrap.append(root);
+    return wrap;
   }
 
   // The panel handles its own button events; let CodeMirror skip the region.
