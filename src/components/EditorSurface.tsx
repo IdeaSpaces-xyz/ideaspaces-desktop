@@ -299,7 +299,7 @@ function NotePane({
       ) : (
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="px-6 pt-5">
-            <div className="mx-auto max-w-[640px]">
+            <div className="mx-auto max-w-[720px]">
               {isReadme ? (
                 <h1 className="font-prose text-3xl text-is-text">{note.title || note.name}</h1>
               ) : (
