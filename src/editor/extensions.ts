@@ -133,12 +133,14 @@ export function noteEditorExtensions(opts: {
     // source). Cell links route through the same handler as body links.
     tables({ onLinkClick: opts.onLinkClick }),
     inlinePreview({ onLinkClick: opts.onLinkClick }),
-    // `[[wiki-links]]` — render + resolve (resolved/missing styling) + open on
-    // click. Only wired when the host supplies handlers (the clone's note index).
+    // `[[wiki-links]]` — render + resolve (resolved/missing styling) + open.
+    // openOnClick:false → a plain click places the caret and reveals the raw
+    // `[[…]]` to edit (Obsidian edit-mode); ⌘/Ctrl-click opens. Only wired when
+    // the host supplies handlers (the clone's note index).
     ...(opts.onWikiOpen || opts.resolveWiki
       ? [
           wikiLinks({
-            openOnClick: true,
+            openOnClick: false,
             onOpen: opts.onWikiOpen,
             resolve: opts.resolveWiki
               ? async (target) => opts.resolveWiki!(target)

@@ -20,6 +20,25 @@ export type LinkAction =
 const EXTERNAL = /^[a-z][a-z\d+.-]*:/i;
 const MD_EXT = /\.(md|markdown)$/i;
 const ANY_EXT = /\.[a-z0-9]+$/i;
+const WEB_SCHEME = /^https?:\/\//i;
+// A bare host typed as a link — `example.com`, `sub.example.com/path` — no
+// scheme, at least one dot, no whitespace. Excludes note extensions so
+// `[[note.md]]` stays a note.
+const BARE_HOST = /^[a-z0-9-]+(\.[a-z0-9-]+)+(\/\S*)?$/i;
+
+/**
+ * If `target` is a web address — an explicit `http(s)://` URL, or a bare host
+ * like `example.com` — return a fully-qualified URL; else null. Lets
+ * `[[example.com]]` and `[x](example.com)` open the browser instead of reading
+ * as a missing note.
+ */
+export function webUrl(target: string): string | null {
+  const t = target.trim();
+  if (WEB_SCHEME.test(t)) return t;
+  if (EXTERNAL.test(t)) return null; // another scheme (mailto:, …) — not http(s)
+  if (BARE_HOST.test(t) && !MD_EXT.test(t)) return `https://${t}`;
+  return null;
+}
 
 function decode(s: string): string {
   try {
@@ -54,6 +73,11 @@ export function classifyLink(url: string, fromRelPath: string, index: WikiIndex)
 
   const target = decode(url).split("#")[0].split("|")[0].trim();
   if (!target) return { kind: "anchor" };
+
+  // A bare host typed as a link (`[[example.com]]`, `[x](example.com)`) → web,
+  // not a missing note to create.
+  const web = webUrl(target);
+  if (web) return { kind: "external", url: web };
 
   // Bare name → global by-name (a `[[wiki-link]]` or extensionless reference).
   if (!target.includes("/") && !ANY_EXT.test(target)) {
