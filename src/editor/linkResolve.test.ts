@@ -26,4 +26,12 @@ describe("webUrl", () => {
   it("is null for other schemes (mailto:) — not http(s)", () => {
     expect(webUrl("mailto:a@b.com")).toBeNull();
   });
+
+  it("documents the heuristic edge: a dotted non-note name reads as a host", () => {
+    // Only `.md`/`.markdown` are protected as notes; any other dotted bare token
+    // (`notes.txt`, `v2.api`) is treated as a web host. Rare inside `[[…]]`, and
+    // the deliberate trade-off for catching bare domains like `example.com`.
+    expect(webUrl("notes.txt")).toBe("https://notes.txt");
+    expect(webUrl("v2.api")).toBe("https://v2.api");
+  });
 });
