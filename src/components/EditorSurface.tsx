@@ -22,7 +22,7 @@ import { NoteEditor } from "../editor/NoteEditor";
 import { useDir } from "../editor/useDir";
 import { useRecentNotes } from "../editor/useRecentNotes";
 import { useWikiIndex } from "../editor/useWikiIndex";
-import { classifyLink } from "../editor/linkResolve";
+import { classifyLink, webUrl } from "../editor/linkResolve";
 import { parseFrontmatter, setFrontmatterName } from "../editor/frontmatter";
 import {
   createFolder,
@@ -1096,9 +1096,11 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
     [selected, clone.path, reload, reloadWiki],
   );
 
-  // `[[wiki-link]]` styling: resolved (points at a note) vs. missing.
+  // `[[wiki-link]]` styling: a web address (`[[example.com]]`) reads like a
+  // link; otherwise resolved (points at a note) vs. missing.
   const resolveWiki = useCallback(
     (target: string): WikiLinkResolvedTarget | null => {
+      if (webUrl(target)) return { target, label: target, status: "resolved" };
       const note = wikiIndex.resolve(target);
       return note
         ? { target, label: note.name, status: "resolved" }
