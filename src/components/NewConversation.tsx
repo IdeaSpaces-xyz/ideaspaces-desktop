@@ -4,7 +4,7 @@ import { ArrowLeft, Check, ChevronsUpDown, FolderGit2 } from "lucide-react";
 import { createConversation, type Space } from "../lib/cli";
 import type { ConversationRow } from "../spaces/useConversations";
 import { useToast } from "../toast/toast-context";
-import { Compose } from "../conversation/Compose";
+import { Compose, type SendOptions } from "../conversation/Compose";
 
 // The draft for a new conversation: pick a context repo (the agent's point of
 // view) and send the first message. Nothing exists server-side until that first
@@ -19,7 +19,7 @@ export function NewConversation({
 }: {
   repos: Space[];
   onBack: () => void;
-  onCreated: (row: ConversationRow, firstMessage: string) => void;
+  onCreated: (row: ConversationRow, firstMessage: string, opts: SendOptions) => void;
 }) {
   const toast = useToast();
   // Single-repo contexts have no real choice — preselect it.
@@ -27,7 +27,7 @@ export function NewConversation({
   const [busy, setBusy] = useState(false);
   const chosen = repos.find((r) => r.repo_id === repoId);
 
-  const send = async (text: string) => {
+  const send = async (text: string, opts: SendOptions) => {
     if (busy || !repoId) return;
     setBusy(true);
     try {
@@ -44,6 +44,7 @@ export function NewConversation({
           repoSlug: chosen?.slug ?? repoId,
         },
         text,
+        opts,
       );
       // Parent unmounts this (creating → false) on handoff; no need to reset busy.
     } catch (err) {
@@ -114,7 +115,12 @@ export function NewConversation({
         </p>
       </div>
 
-      <Compose onSend={(t) => void send(t)} onStop={() => {}} streaming={false} disabled={busy || !repoId} />
+      <Compose
+        onSend={(t, opts) => void send(t, opts)}
+        onStop={() => {}}
+        streaming={false}
+        disabled={busy || !repoId}
+      />
     </div>
   );
 }

@@ -20,7 +20,7 @@ import {
 import { V2Transcript } from "../conversation/V2Transcript";
 import { useChatScroll } from "../conversation/useChatScroll";
 import { formatAbsoluteDate } from "../conversation/transcript-format";
-import { Compose } from "../conversation/Compose";
+import { Compose, type SendOptions } from "../conversation/Compose";
 import { useToast } from "../toast/toast-context";
 import { cn } from "../lib/cn";
 
@@ -34,13 +34,14 @@ const COLUMN = "mx-auto max-w-[760px]";
 function ConversationDetail({
   conversation,
   onBack,
-  initialMessage,
+  initialSend,
   username,
 }: {
   conversation: ConversationRow;
   onBack: () => void;
-  // A just-created conversation's first message — auto-sent once on mount.
-  initialMessage?: string;
+  // A just-created conversation's first message + chosen options — auto-sent
+  // once on mount (the draft's model tier / Think carry into the first turn).
+  initialSend?: { message: string } & SendOptions;
   username: string;
 }) {
   const toast = useToast();
@@ -127,7 +128,7 @@ function ConversationDetail({
     streamState.state === "tool_running";
 
   const send = useCallback(
-    async (text: string) => {
+    async (text: string, opts: SendOptions) => {
       if (handleRef.current || sendingRef.current) return; // in flight or reconciling
       sendingRef.current = true;
       setSending(true);
@@ -142,7 +143,7 @@ function ConversationDetail({
       const handle = streamConversation(
         repoId,
         convId,
-        { message: text },
+        { message: text, modelTier: opts.modelTier, thinking: opts.thinking },
         {
           onEvent: (e) => {
             if (e.type === "error" && typeof e.message === "string") streamError = e.message;
@@ -214,11 +215,11 @@ function ConversationDetail({
   // (empty) history has loaded. Ref-guarded so it fires exactly once per mount.
   const autoSent = useRef(false);
   useEffect(() => {
-    if (status === "loaded" && initialMessage && !autoSent.current) {
+    if (status === "loaded" && initialSend && !autoSent.current) {
       autoSent.current = true;
-      void send(initialMessage);
+      void send(initialSend.message, { modelTier: initialSend.modelTier, thinking: initialSend.thinking });
     }
-  }, [status, initialMessage, send]);
+  }, [status, initialSend, send]);
 
   // Reading a conversation may be participant-gated server-side: the repo-scoped
   // list can surface a conversation you're not in (or a legacy one with no owner
@@ -375,7 +376,7 @@ function ConversationDetail({
                 </div>
               )}
               <Compose
-                onSend={(t) => void send(t)}
+                onSend={(t, opts) => void send(t, opts)}
                 onStop={stop}
                 streaming={streaming}
                 disabled={sending && !streaming}
@@ -406,14 +407,17 @@ export function ConversationsView({
   const { status, rows, error, truncated, reload } = useConversations(repos);
   const [selected, setSelected] = useState<ConversationRow | null>(null);
   const [creating, setCreating] = useState(false);
-  // Set only for a just-created conversation, to auto-send its first message.
-  const [initialMessage, setInitialMessage] = useState<string | undefined>(undefined);
+  // Set only for a just-created conversation, to auto-send its first message
+  // with the model tier / Think chosen in the draft.
+  const [initialSend, setInitialSend] = useState<({ message: string } & SendOptions) | undefined>(
+    undefined,
+  );
   // An open conversation belongs to the context it was opened in — drop it (and
   // any draft) on a context/repo switch so we never show one that's out of scope.
   useEffect(() => {
     setSelected(null);
     setCreating(false);
-    setInitialMessage(undefined);
+    setInitialSend(undefined);
   }, [repos]);
   // Repos still loading → repos is [] and conversations resolve to a false
   // "empty"; show loading until the repo set is known.
@@ -426,14 +430,15 @@ export function ConversationsView({
   // (as an existing row) never re-sends.
   const backToList = () => {
     setSelected(null);
-    setInitialMessage(undefined);
+    setInitialSend(undefined);
   };
 
   // Draft created → open it as the selected conversation and hand off its first
-  // message; refresh the list so it appears when you go back.
-  const handleCreated = (row: ConversationRow, firstMessage: string) => {
+  // message (with the chosen model tier / Think); refresh the list so it appears
+  // when you go back.
+  const handleCreated = (row: ConversationRow, firstMessage: string, opts: SendOptions) => {
     setCreating(false);
-    setInitialMessage(firstMessage);
+    setInitialSend({ message: firstMessage, ...opts });
     setSelected(row);
     void reload();
   };
@@ -450,7 +455,7 @@ export function ConversationsView({
       <ConversationDetail
         conversation={selected}
         onBack={backToList}
-        initialMessage={initialMessage}
+        initialSend={initialSend}
         username={username}
       />
     );
