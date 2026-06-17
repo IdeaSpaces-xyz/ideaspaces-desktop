@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseFrontmatter, setFrontmatterName } from "./frontmatter";
+import { bodyStartOffset, parseFrontmatter, setFrontmatterName } from "./frontmatter";
 
 describe("parseFrontmatter", () => {
   it("parses a basic block with 1-based fence lines", () => {
@@ -83,5 +83,29 @@ describe("setFrontmatterName", () => {
 
   it("leaves plain values unquoted", () => {
     expect(setFrontmatterName("", "Hello World")).toContain("name: Hello World");
+  });
+});
+
+describe("bodyStartOffset", () => {
+  it("is 0 when there is no frontmatter", () => {
+    expect(bodyStartOffset("# Just a heading\n")).toBe(0);
+    expect(bodyStartOffset("")).toBe(0);
+  });
+
+  it("points at the first body line after the closing fence", () => {
+    const doc = "---\nname: Hello\n---\nbody\n";
+    // "---\n"(4) + "name: Hello\n"(12) + "---\n"(4) = 20 → the 'b' of "body".
+    expect(bodyStartOffset(doc)).toBe(20);
+    expect(doc.slice(bodyStartOffset(doc))).toBe("body\n");
+  });
+
+  it("returns the doc end when frontmatter has no body yet (a fresh titled note)", () => {
+    const doc = "---\nname: My Note\n---\n";
+    expect(bodyStartOffset(doc)).toBe(doc.length);
+  });
+
+  it("is CRLF-safe (offset indexes the original string)", () => {
+    const doc = "---\r\nname: Hi\r\n---\r\nbody";
+    expect(doc.slice(bodyStartOffset(doc))).toBe("body");
   });
 });

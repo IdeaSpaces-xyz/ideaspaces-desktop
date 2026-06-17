@@ -3,6 +3,7 @@ import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import type { WikiLinkResolvedTarget } from "@atomic-editor/editor";
 import { noteEditorExtensions } from "./extensions";
+import { bodyStartOffset } from "./frontmatter";
 import "./editor.css";
 
 const noop = () => {};
@@ -72,7 +73,12 @@ export function NoteEditor({
         }),
       }),
     });
-    if (autoFocus) view.focus();
+    if (autoFocus) {
+      // Land the caret in the body, past the frontmatter — never at offset 0.
+      const at = bodyStartOffset(initialContent);
+      if (at > 0) view.dispatch({ selection: { anchor: at } });
+      view.focus();
+    }
 
     return () => view.destroy();
     // initialContent is the mount-time seed only; the parent remounts per note.
