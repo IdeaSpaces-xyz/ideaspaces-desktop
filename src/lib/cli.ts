@@ -293,14 +293,47 @@ export interface CreatedConversation {
  * The repo is the conversation's context — the agent's point of view — and is
  * bound here at creation (the desktop locks the context picker after this). The
  * conversation auto-names from its first turn, so no name is passed (the CLI's
- * `--name` can be wired back when a UI name field exists).
+ * `--name` can be wired back when a UI name field exists). `agentNodeId` picks
+ * the agent: the server accepts it and honors it once backend agent-selection
+ * lands (forward-compatible, like is_web).
  */
-export async function createConversation(repoId: string): Promise<CreatedConversation> {
-  const { code, stdout, stderr } = await runCli(["conversation", "new", repoId, "--json"]);
+export async function createConversation(
+  repoId: string,
+  agentNodeId?: string,
+): Promise<CreatedConversation> {
+  const args = ["conversation", "new", repoId, "--json"];
+  if (agentNodeId) args.push("--agent", agentNodeId);
+  const { code, stdout, stderr } = await runCli(args);
   if (code !== 0) {
     throw new Error(stderr.trim() || `Could not create conversation (exit ${code ?? "unknown"}).`);
   }
   return parseJson<CreatedConversation>(stdout, "conversation new");
+}
+
+export interface Agent {
+  /** Agent Actor node_id — what create/select takes. */
+  node_id: string;
+  name: string;
+  summary: string;
+  /** Whether the current user may invoke this agent. */
+  can_use: boolean;
+  /** Whether this is the owner's default agent. */
+  is_default: boolean;
+}
+
+/**
+ * List the Agent Actors the user can pick to run a conversation (drives
+ * `agents`). User-scoped (`GET /api/v1/agents`) — no Space required. `owner`
+ * (`person:{username}` / `hostname:{domain}`) scopes to another context.
+ */
+export async function listAgents(owner?: string): Promise<Agent[]> {
+  const args = ["agents", "--json"];
+  if (owner) args.push("--owner", owner);
+  const { code, stdout, stderr } = await runCli(args);
+  if (code !== 0) {
+    throw new Error(stderr.trim() || `Could not load agents (exit ${code ?? "unknown"}).`);
+  }
+  return parseJson<{ agents: Agent[] }>(stdout, "agents").agents;
 }
 
 /** Full conversation detail + message history (drives `conversation get`). */
