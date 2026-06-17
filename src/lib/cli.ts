@@ -240,6 +240,48 @@ export async function listConversationParticipants(
   return parseJson<{ participants: Participant[] }>(stdout, "conversation participants").participants;
 }
 
+/**
+ * Add a person to a conversation (drives `conversation add`). `actor` is a bare
+ * username — the CLI builds the `person:{username}` principal. Owner-only on the
+ * server; email resolution is a backend feature, so the desktop adds by username.
+ */
+export async function addConversationParticipant(
+  repoId: string,
+  conversationId: string,
+  actor: string,
+  role: "member" | "reader" = "member",
+): Promise<void> {
+  const args = ["conversation", "add", repoId, conversationId, actor, "--json"];
+  if (role !== "member") args.push("--role", role);
+  const { code, stderr } = await runCli(args);
+  if (code !== 0) {
+    throw new Error(stderr.trim() || `Could not add ${actor} (exit ${code ?? "unknown"}).`);
+  }
+}
+
+/**
+ * Remove a participant from a conversation (drives `conversation remove`).
+ * `participant` is the full principal from the roster (`person:…` / `node:…`),
+ * passed through as-is. Owner-only on the server.
+ */
+export async function removeConversationParticipant(
+  repoId: string,
+  conversationId: string,
+  participant: string,
+): Promise<void> {
+  const { code, stderr } = await runCli([
+    "conversation",
+    "remove",
+    repoId,
+    conversationId,
+    participant,
+    "--json",
+  ]);
+  if (code !== 0) {
+    throw new Error(stderr.trim() || `Could not remove participant (exit ${code ?? "unknown"}).`);
+  }
+}
+
 export interface CreatedConversation {
   conversation_id: string;
   repo_id: string;
