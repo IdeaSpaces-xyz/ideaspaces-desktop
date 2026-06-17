@@ -76,7 +76,7 @@ export function Compose({
         placeholder="Ask Keeper…"
         aria-label="Message"
         disabled={disabled}
-        className="block max-h-[200px] min-h-[3.5rem] w-full resize-none bg-transparent font-sans text-sm leading-relaxed text-is-text outline-none placeholder:text-is-text-tertiary disabled:opacity-60"
+        className="block max-h-[200px] min-h-[3.5rem] w-full resize-none bg-transparent font-chrome text-sm leading-relaxed text-is-text outline-none placeholder:text-is-text-tertiary disabled:opacity-60"
       />
       <div className="mt-2 flex items-center gap-2">
         {/* Segmented model picker — flat pills, not a native <select> (renders
