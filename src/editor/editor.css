@@ -203,8 +203,14 @@
    the note's leading YAML, which organizes it in the platform. Sits in the
    content column; colors are `--is-*` tokens, contrast-checked for both themes
    (label/value read on --is-surface-alt at AA in light and dark). */
+/* Vertical rhythm as padding on the wrapper (measured by CM6's heightmap), not
+   margin on the panel: a block widget's margin is excluded from
+   getBoundingClientRect, so the heightmap under-allocates and every line below
+   the panel clicks ~a line too low. */
+.cm-note-host .cm-fm-wrap {
+  padding-block: 0.25rem 1.5rem;
+}
 .cm-note-host .cm-fm-panel {
-  margin-block: 0.25rem 1.5rem;
   border: 1px solid var(--is-border);
   border-radius: 8px;
   background-color: var(--is-surface-alt);
