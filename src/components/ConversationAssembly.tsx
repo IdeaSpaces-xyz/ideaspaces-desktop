@@ -34,7 +34,8 @@ export function ConversationAssembly({
   // Roster read is participant-gated; a 403 (legacy/ownerless, or a conversation
   // you can see listed but aren't in) hides the people half, not the whole row.
   const [rosterError, setRosterError] = useState(false);
-  const [busyId, setBusyId] = useState<string | null>(null);
+  // Per-principal in-flight removals (a Set, so two quick ✕ clicks don't race).
+  const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     try {
@@ -55,17 +56,24 @@ export function ConversationAssembly({
     (p) => p.participant.startsWith("person:") || p.participant.startsWith("node:"),
   );
 
-  const removePerson = async (participant: string) => {
-    setBusyId(participant);
-    try {
-      await removeConversationParticipant(repoId, conversationId, participant);
-      await load();
-    } catch (err) {
-      toast(errMessage(err), "error");
-    } finally {
-      setBusyId(null);
-    }
-  };
+  const removePerson = useCallback(
+    async (participant: string) => {
+      setBusyIds((s) => new Set(s).add(participant));
+      try {
+        await removeConversationParticipant(repoId, conversationId, participant);
+        await load();
+      } catch (err) {
+        toast(errMessage(err), "error");
+      } finally {
+        setBusyIds((s) => {
+          const next = new Set(s);
+          next.delete(participant);
+          return next;
+        });
+      }
+    },
+    [repoId, conversationId, load, toast],
+  );
 
   // Bare username → `person:{username}` (the CLI builds the principal). Throws on
   // failure so the AddPeople form keeps the value for a retry.
@@ -101,7 +109,7 @@ export function ConversationAssembly({
               key={p.participant}
               label={personLabel(p.participant, username)}
               removable={p.role !== "owner"}
-              removing={busyId === p.participant}
+              removing={busyIds.has(p.participant)}
               onRemove={() => void removePerson(p.participant)}
             />
           ))}
@@ -128,7 +136,7 @@ function LockedChip({ icon, label, title }: { icon: ReactNode; label: string; ti
     >
       <span className="shrink-0 text-is-text-tertiary">{icon}</span>
       <span className="max-w-[160px] truncate text-is-text">{label}</span>
-      <Lock size={10} strokeWidth={1.5} className="shrink-0 text-is-text-tertiary" aria-label="locked" />
+      <Lock size={10} strokeWidth={1.5} className="shrink-0 text-is-text-tertiary" aria-hidden="true" />
     </span>
   );
 }
