@@ -5,7 +5,7 @@
 // deferred (the bigger MentionComposer features in is_web).
 
 import { useEffect, useRef, useState } from "react";
-import { MODEL_TIERS } from "./model-tiers";
+import { MODEL_TIERS, MODEL_TIER_INFO } from "./model-tiers";
 import type { ModelTier } from "./keeper-types";
 import { cn } from "../lib/cn";
 import { useToast } from "../toast/toast-context";
@@ -79,19 +79,34 @@ export function Compose({
         className="block max-h-[200px] min-h-[3.5rem] w-full resize-none bg-transparent font-sans text-sm leading-relaxed text-is-text outline-none placeholder:text-is-text-tertiary disabled:opacity-60"
       />
       <div className="mt-2 flex items-center gap-2">
-        <select
-          value={modelTier}
-          onChange={(e) => setModelTier(e.target.value as ModelTier)}
-          disabled={disabled}
+        {/* Segmented model picker — flat pills, not a native <select> (renders
+            inconsistently in the webview, and the Think pill beside it is the
+            proven pattern). */}
+        <div
+          role="radiogroup"
           aria-label="Model"
-          className={cn(pill, "bg-is-surface-alt text-is-text-secondary")}
+          className="flex items-center gap-0.5 rounded bg-is-surface-alt p-0.5"
         >
           {MODEL_TIERS.map((tier) => (
-            <option key={tier} value={tier}>
-              {tier}
-            </option>
+            <button
+              key={tier}
+              type="button"
+              role="radio"
+              aria-checked={modelTier === tier}
+              onClick={() => setModelTier(tier)}
+              disabled={disabled}
+              title={MODEL_TIER_INFO[tier].description}
+              className={cn(
+                "rounded px-2 py-0.5 font-chrome text-[11px] uppercase tracking-[0.04em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring disabled:opacity-50",
+                modelTier === tier
+                  ? "bg-is-text text-is-bg"
+                  : "text-is-text-tertiary hover:text-is-text",
+              )}
+            >
+              {MODEL_TIER_INFO[tier].label}
+            </button>
           ))}
-        </select>
+        </div>
         <button
           type="button"
           onClick={() => setThinking((v) => !v)}
