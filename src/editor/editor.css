@@ -40,6 +40,13 @@
   padding-block: 0.5rem 4rem;
 }
 
+/* The editing surface (h-full, not the auto-height README render) gets a deep
+   bottom pad so the active line can scroll up off the viewport bottom as you
+   type — you're never writing glued to the bottom edge. */
+.cm-note-host.h-full .cm-content {
+  padding-bottom: 33vh;
+}
+
 /* The open note shows a real vertical scrollbar (the rest of the app hides
    them) — it gives a sense of document length and where you are. Thin and
    theme-aligned; the read-only README render doesn't scroll, so none appears. */

@@ -47,10 +47,10 @@ const isChromeTheme = EditorView.theme({
   ".cm-content": {
     fontFamily: "var(--font-sans)",
     fontSize: "1.0625rem",
-    lineHeight: "1.7",
+    lineHeight: "1.85",
     caretColor: "var(--is-text)",
     padding: "0",
-    maxWidth: "640px",
+    maxWidth: "720px",
     margin: "0 auto",
   },
   ".cm-scroller": { overflow: "auto" },
@@ -109,7 +109,11 @@ export function noteEditorExtensions(opts: {
     frontmatterPanel({ editable: !opts.readOnly }),
     isChromeTheme,
     ...(opts.autoHeight ? [autoHeightTheme] : []),
-    ...(opts.readOnly ? [EditorState.readOnly.of(true), EditorView.editable.of(false)] : []),
+    ...(opts.readOnly
+      ? [EditorState.readOnly.of(true), EditorView.editable.of(false)]
+      : // Native browser spellcheck (red squiggles on misspellings) on the
+        // editable surface only. autocorrect off — flag, don't silently rewrite.
+        [EditorView.contentAttributes.of({ spellcheck: "true", autocorrect: "off" })]),
     // Save shortcut sits above the defaults so it wins.
     keymap.of([
       {
