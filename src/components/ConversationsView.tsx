@@ -212,7 +212,8 @@ function ConversationDetail({
   }, [clone, toast]);
 
   // Auto-send the first message of a freshly created conversation, once the
-  // (empty) history has loaded. Ref-guarded so it fires exactly once per mount.
+  // (empty) history has loaded. Ref-guarded so it fires exactly once per mount —
+  // the guard, not initialSend's identity, is what prevents a re-send.
   const autoSent = useRef(false);
   useEffect(() => {
     if (status === "loaded" && initialSend && !autoSent.current) {

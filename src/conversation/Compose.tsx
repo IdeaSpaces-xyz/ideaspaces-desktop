@@ -24,17 +24,15 @@ export function Compose({
   onStop,
   streaming,
   disabled = false,
-  defaultModelTier = "sonnet",
 }: {
   onSend: (text: string, opts: SendOptions) => void;
   onStop: () => void;
   streaming: boolean;
   disabled?: boolean;
-  defaultModelTier?: ModelTier;
 }) {
   const toast = useToast();
   const [text, setText] = useState("");
-  const [modelTier, setModelTier] = useState<ModelTier>(defaultModelTier);
+  const [modelTier, setModelTier] = useState<ModelTier>("sonnet");
   const [thinking, setThinking] = useState(false);
   const taRef = useRef<HTMLTextAreaElement>(null);
 
@@ -57,7 +55,9 @@ export function Compose({
     setText("");
   };
 
-  const pill =
+  // The standalone Think toggle pill. The model-tier radios use a sibling
+  // variant inline (tighter padding); not a shared base, so named for its one use.
+  const togglePill =
     "rounded px-2 py-1 font-chrome text-[11px] uppercase tracking-[0.04em] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-is-focus-ring disabled:opacity-50";
 
   return (
@@ -114,7 +114,7 @@ export function Compose({
           aria-pressed={thinking}
           title="Show the model's thinking"
           className={cn(
-            pill,
+            togglePill,
             thinking
               ? "bg-is-text text-is-bg"
               : "bg-is-surface-alt text-is-text-tertiary hover:text-is-text",
