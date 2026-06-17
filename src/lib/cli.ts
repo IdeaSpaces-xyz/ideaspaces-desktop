@@ -323,13 +323,12 @@ export interface Agent {
 
 /**
  * List the Agent Actors the user can pick to run a conversation (drives
- * `agents`). User-scoped (`GET /api/v1/agents`) — no Space required. `owner`
- * (`person:{username}` / `hostname:{domain}`) scopes to another context.
+ * `agents`). User-scoped (`GET /api/v1/agents`) — no Space required. The CLI
+ * verb takes `--owner` to scope to another context; add it back here when a
+ * caller needs it.
  */
-export async function listAgents(owner?: string): Promise<Agent[]> {
-  const args = ["agents", "--json"];
-  if (owner) args.push("--owner", owner);
-  const { code, stdout, stderr } = await runCli(args);
+export async function listAgents(): Promise<Agent[]> {
+  const { code, stdout, stderr } = await runCli(["agents", "--json"]);
   if (code !== 0) {
     throw new Error(stderr.trim() || `Could not load agents (exit ${code ?? "unknown"}).`);
   }
