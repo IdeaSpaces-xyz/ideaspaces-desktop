@@ -21,6 +21,7 @@ import { V2Transcript } from "../conversation/V2Transcript";
 import { useChatScroll } from "../conversation/useChatScroll";
 import { formatAbsoluteDate } from "../conversation/transcript-format";
 import { Compose, type SendOptions } from "../conversation/Compose";
+import { ConversationAssembly } from "./ConversationAssembly";
 import { useToast } from "../toast/toast-context";
 import { cn } from "../lib/cn";
 
@@ -269,15 +270,21 @@ function ConversationDetail({
             {detail?.name || conversation.name || "Untitled"}
           </h1>
           {detail && !collapsed && (
-            <div className="mt-2 flex flex-wrap items-center gap-3 font-chrome text-[11px] tracking-[0.02em] text-is-text-tertiary">
-              <span>{conversation.repoSlug}</span>
-              <Dot />
-              <span>Started {detail.created_at ? formatAbsoluteDate(detail.created_at) : "recently"}</span>
-              <Dot />
-              <span className="rounded-full border border-is-border px-2.5 py-1 text-is-text-secondary">
-                {detail.model_tier || "sonnet"}
-              </span>
-            </div>
+            <>
+              <div className="mt-2 flex flex-wrap items-center gap-3 font-chrome text-[11px] tracking-[0.02em] text-is-text-tertiary">
+                <span>Started {detail.created_at ? formatAbsoluteDate(detail.created_at) : "recently"}</span>
+                <Dot />
+                <span className="rounded-full border border-is-border px-2.5 py-1 text-is-text-secondary">
+                  {detail.model_tier || "sonnet"}
+                </span>
+              </div>
+              <ConversationAssembly
+                repoId={repoId}
+                conversationId={convId}
+                repoLabel={conversation.repoSlug}
+                username={username}
+              />
+            </>
           )}
         </div>
       </div>
