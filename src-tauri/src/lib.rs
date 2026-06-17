@@ -17,6 +17,10 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         // Copy a doc/path to the clipboard (the copy-path buttons).
         .plugin(tauri_plugin_clipboard_manager::init())
+        // Remember the window's size + position across launches (auto-saves on
+        // exit, restores on start) — the config width/height is just the first-run
+        // default. No JS/capability needed; the plugin works off window events.
+        .plugin(tauri_plugin_window_state::Builder::default().build())
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
