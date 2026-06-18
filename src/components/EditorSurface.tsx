@@ -43,6 +43,8 @@ import { cloneStatus, commitClone, syncClone, type CloneRecord } from "../lib/cl
 import { useToast } from "../toast/toast-context";
 import { Resizer } from "./Resizer";
 import { CopyButton } from "./CopyButton";
+import { ExportMenu } from "./ExportMenu";
+import { printNoteAsPdf } from "../export/exportNote";
 import { cn } from "../lib/cn";
 
 // Ghost toolbar button — no border/fill, just text that lifts on hover. Keeps
@@ -281,6 +283,18 @@ function NotePane({
               Synced
             </span>
           ) : null /* loading — render nothing until git status resolves */}
+          {!isReadme && (
+            <ExportMenu
+              disabled={busy}
+              onPdf={() => {
+                try {
+                  printNoteAsPdf(draftRef.current, note.title || note.name);
+                } catch (err) {
+                  toast(errMessage(err), "error");
+                }
+              }}
+            />
+          )}
           <button
             type="button"
             onClick={onClose}
