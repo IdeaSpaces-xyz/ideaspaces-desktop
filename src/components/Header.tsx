@@ -16,6 +16,7 @@ export function Header({
   clones,
   activeRepoId,
   onSelectRepo,
+  onHome,
   username,
   mode,
   setMode,
@@ -28,6 +29,8 @@ export function Header({
   clones: CloneRecord[];
   activeRepoId?: string;
   onSelectRepo: (clone: CloneRecord) => void;
+  /** Click the logo → back to the conversations home (closes the editor). */
+  onHome: () => void;
   username?: string;
   mode: ThemeMode;
   setMode: (mode: ThemeMode) => void;
@@ -38,9 +41,15 @@ export function Header({
     <header className="shrink-0 border-b border-is-border bg-is-bg px-4 py-1.5 font-chrome sm:px-6">
       <div className="flex items-center justify-between gap-4">
         <div className="flex min-w-0 items-center gap-2.5">
-          <span aria-label="IdeaSpaces" className="inline-flex shrink-0 items-center text-is-text">
+          <button
+            type="button"
+            onClick={onHome}
+            aria-label="Home"
+            title="Home"
+            className="inline-flex shrink-0 items-center rounded text-is-text transition hover:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
+          >
             <LogoSymbol className="h-6 w-7" />
-          </span>
+          </button>
           <span className="h-4 w-px shrink-0 bg-is-border" />
           <ContextSwitcher
             contexts={contexts}
