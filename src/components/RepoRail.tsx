@@ -77,7 +77,6 @@ function RepoRow({
   status,
   failed,
   busy,
-  active,
   onOpen,
   onClone,
   onCloneTo,
@@ -89,7 +88,6 @@ function RepoRow({
   status: CloneStatus | undefined;
   failed: boolean;
   busy: boolean;
-  active: boolean;
   onOpen: (clone: CloneRecord) => void;
   onClone: (space: Space) => void;
   onCloneTo: (space: Space) => void;
@@ -100,10 +98,8 @@ function RepoRow({
     const sync = needsSync(status);
     return (
       <li
-        className={cn(
-          "group relative flex items-center gap-2 rounded-md px-2 py-1.5 transition",
-          active ? "bg-is-surface-alt" : "hover:bg-is-surface-alt",
-        )}
+        title={clone.path}
+        className="group relative flex items-center gap-2 rounded-md px-2 py-1.5 transition hover:bg-is-surface-alt"
       >
         {/* Whole-row open; the dot/name pass clicks through to it. */}
         <button
@@ -175,7 +171,6 @@ export function RepoRail({
   statuses,
   failedStatuses,
   busyIds,
-  activeRepoId,
   status,
   error,
   onReload,
@@ -194,7 +189,6 @@ export function RepoRail({
   statuses: Record<string, CloneStatus>;
   failedStatuses: Set<string>;
   busyIds: Set<string>;
-  activeRepoId?: string;
   status: "loading" | "loaded" | "error";
   error?: string;
   onReload: () => void;
@@ -264,7 +258,6 @@ export function RepoRail({
                   status={statuses[space.repo_id]}
                   failed={failedStatuses.has(space.repo_id)}
                   busy={busyIds.has(space.repo_id)}
-                  active={activeRepoId === space.repo_id}
                   onOpen={onOpen}
                   onClone={onClone}
                   onCloneTo={onCloneTo}
