@@ -81,12 +81,11 @@ export function WorkspaceStrip({
     [groups],
   );
 
-  // Resolve names for the visible ids (idempotent — the cache de-dupes).
-  const idKey = ids.join(",");
+  // Resolve names for the visible ids (idempotent — the cache de-dupes). `ids`
+  // is memoized, so its ref is stable until the workspace changes.
   useEffect(() => {
     ids.forEach(resolve);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [idKey, resolve]);
+  }, [ids, resolve]);
 
   if (workspaceIsEmpty(groups)) return null;
 

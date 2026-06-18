@@ -15,6 +15,8 @@ function body(content: string): string {
 // A resizable right-side quick-view of a workspace node. Read-only (the full
 // editor is a click away if the note is in a local clone); renders the same
 // live-preview look as the editor's README card.
+// TODO(post-v1): an "Open in editor" affordance — resolve node.path to a local
+// clone and open it in EditorSurface (disabled for remote-only repos).
 export function PreviewPane({
   target,
   nodeState,
