@@ -66,7 +66,11 @@ const PRINT_CSS = `
  * iframe with our print styles and prints just that — so the user gets a clean,
  * faithful "Save as PDF" without the app chrome.
  */
-export function printNoteAsPdf(content: string, title: string): void {
+export function printNoteAsPdf(
+  content: string,
+  title: string,
+  onError?: (err: unknown) => void,
+): void {
   const html = noteToHtml(content, title);
   const doc = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(
     title,
@@ -74,6 +78,11 @@ export function printNoteAsPdf(content: string, title: string): void {
 
   const iframe = document.createElement("iframe");
   iframe.setAttribute("aria-hidden", "true");
+  // Block active content (notes can come from a shared/cloned space, and `marked`
+  // doesn't sanitize): omitting `allow-scripts` stops <script> / inline handlers
+  // from running. `allow-same-origin` is required so the parent can write the doc
+  // and call print(); `allow-modals` so print() can open the OS dialog.
+  iframe.setAttribute("sandbox", "allow-same-origin allow-modals");
   iframe.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;";
   document.body.appendChild(iframe);
 
@@ -91,16 +100,22 @@ export function printNoteAsPdf(content: string, title: string): void {
     iframe.remove();
   };
   cw.addEventListener("afterprint", cleanup);
-  // Fallback: some webviews never fire afterprint — remove on a timer.
-  setTimeout(cleanup, 60_000);
+  // Fallback: some webviews never fire afterprint — remove on a short timer.
+  setTimeout(cleanup, 10_000);
 
   idoc.open();
   idoc.write(doc);
   idoc.close();
 
-  // Give the iframe a tick to lay out before printing.
+  // Give the iframe a tick to lay out before printing. print() is async to the
+  // caller, so surface its (rare) failures through onError, not a dropped throw.
   setTimeout(() => {
-    cw.focus();
-    cw.print();
+    try {
+      cw.focus();
+      cw.print();
+    } catch (err) {
+      cleanup();
+      onError?.(err);
+    }
   }, 200);
 }

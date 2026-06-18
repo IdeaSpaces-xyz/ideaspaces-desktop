@@ -288,7 +288,9 @@ function NotePane({
               disabled={busy}
               onPdf={() => {
                 try {
-                  printNoteAsPdf(draftRef.current, note.title || note.name);
+                  printNoteAsPdf(draftRef.current, note.title || note.name, (err) =>
+                    toast(errMessage(err), "error"),
+                  );
                 } catch (err) {
                   toast(errMessage(err), "error");
                 }

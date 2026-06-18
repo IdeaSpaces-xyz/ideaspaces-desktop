@@ -19,4 +19,8 @@ describe("noteToMarkdown", () => {
   it("does not prepend an empty title", () => {
     expect(noteToMarkdown("---\nname: x\n---\nBody\n", "")).toBe("Body\n");
   });
+
+  it("handles a note with only frontmatter (empty body)", () => {
+    expect(noteToMarkdown("---\nname: Empty\n---\n", "Empty")).toBe("# Empty\n\n");
+  });
 });
