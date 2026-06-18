@@ -44,7 +44,7 @@ function SyncDot({ status, failed }: { status: CloneStatus | undefined; failed: 
 }
 
 const rowMenuItem =
-  "flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-xs text-is-text-secondary outline-none data-[highlighted]:bg-is-surface-alt data-[highlighted]:text-is-text disabled:cursor-not-allowed disabled:opacity-50";
+  "flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 font-chrome text-xs text-is-text-secondary outline-none data-[highlighted]:bg-is-surface-alt data-[highlighted]:text-is-text disabled:cursor-not-allowed disabled:opacity-50";
 
 function RowMenu({ children, label }: { children: React.ReactNode; label: string }) {
   return (
@@ -99,7 +99,7 @@ function RepoRow({
     return (
       <li
         title={clone.path}
-        className="group relative flex items-center gap-2 rounded-md px-2 py-1.5 transition hover:bg-is-surface-alt"
+        className="group relative flex items-center gap-2.5 rounded-md px-2.5 py-2 transition hover:bg-is-surface-alt"
       >
         {/* Whole-row open; the dot/name pass clicks through to it. */}
         <button
@@ -109,7 +109,7 @@ function RepoRow({
           className="absolute inset-0 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
         />
         <SyncDot status={status} failed={failed} />
-        <span className="pointer-events-none min-w-0 flex-1 truncate text-sm text-is-text">
+        <span className="pointer-events-none min-w-0 flex-1 truncate text-[13px] tracking-[-0.01em] text-is-text">
           {space.slug}
         </span>
         {sync &&
@@ -137,12 +137,14 @@ function RepoRow({
 
   // Remote-only: not on disk. Clone (or clone-to / link) from the row menu.
   return (
-    <li className="group flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-is-surface-alt">
+    <li className="group flex items-center gap-2.5 rounded-md px-2.5 py-2 hover:bg-is-surface-alt">
       <span
         className="h-1.5 w-1.5 shrink-0 rounded-full border border-is-text-tertiary/40"
         aria-hidden="true"
       />
-      <span className="min-w-0 flex-1 truncate text-sm text-is-text-secondary">{space.slug}</span>
+      <span className="min-w-0 flex-1 truncate text-[13px] tracking-[-0.01em] text-is-text-secondary">
+        {space.slug}
+      </span>
       {busy ? (
         <RefreshCw size={13} strokeWidth={1.333} className="shrink-0 animate-spin text-is-text-tertiary" aria-hidden="true" />
       ) : (
@@ -205,11 +207,10 @@ export function RepoRail({
   const hasClones = spaces.some((s) => cloneIndex.has(s.repo_id));
 
   return (
-    <aside className="flex w-60 shrink-0 flex-col border-r border-is-border bg-is-bg">
-      <div className="flex items-center justify-between px-3 py-2.5">
-        <h2 className="font-chrome text-[11px] uppercase tracking-[0.08em] text-is-text-tertiary">
-          Repos
-        </h2>
+    // Fragment Mono throughout — a clean, technical repo list.
+    <aside className="flex w-60 shrink-0 flex-col border-r border-is-border bg-is-bg font-chrome">
+      <div className="flex items-center justify-between px-3.5 py-3">
+        <h2 className="text-[11px] uppercase tracking-[0.1em] text-is-text-tertiary">Repos</h2>
         {hasClones && (
           <button
             type="button"
