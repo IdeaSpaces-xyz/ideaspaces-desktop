@@ -1,7 +1,10 @@
-import { type CSSProperties } from "react";
+import { useCallback, type CSSProperties } from "react";
 import { X } from "lucide-react";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { NoteEditor } from "../editor/NoteEditor";
 import { bodyStartOffset } from "../editor/frontmatter";
+import { webUrl } from "../editor/linkResolve";
+import { useToast } from "../toast/toast-context";
 import type { NodeState } from "./useNodeCache";
 import type { PreviewTarget } from "./WorkspaceStrip";
 
@@ -28,8 +31,23 @@ export function PreviewPane({
   onClose: () => void;
   style?: CSSProperties;
 }) {
+  const toast = useToast();
   const node = nodeState?.status === "loaded" ? nodeState.node : undefined;
   const title = node ? node.name_display || node.name : target.label;
+
+  // Links in the read-only preview: a web address opens the browser; an internal
+  // note link can't be followed here, so say so rather than no-op silently.
+  const onLink = useCallback(
+    (url: string) => {
+      const web = webUrl(url);
+      if (web) {
+        void openUrl(web).catch((err) => toast(err instanceof Error ? err.message : String(err), "error"));
+      } else {
+        toast("Open the note in the editor to follow this link.");
+      }
+    },
+    [toast],
+  );
 
   return (
     <aside
@@ -65,7 +83,7 @@ export function PreviewPane({
             autoFocus={false}
             onChange={noop}
             onSave={noop}
-            onLinkClick={noop}
+            onLinkClick={onLink}
           />
         )}
       </div>

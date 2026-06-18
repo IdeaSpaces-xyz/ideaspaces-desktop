@@ -14,8 +14,12 @@ export type NodeState =
 export function useNodeCache(repoId: string) {
   const [cache, setCache] = useState<Map<string, NodeState>>(new Map());
   const requested = useRef<Set<string>>(new Set());
+  // The live repo — a fetch that resolves after a repo switch is dropped so its
+  // (stale-repo) node never lands in the new repo's cache.
+  const repoRef = useRef(repoId);
 
   useEffect(() => {
+    repoRef.current = repoId;
     setCache(new Map());
     requested.current = new Set();
   }, [repoId]);
@@ -26,15 +30,19 @@ export function useNodeCache(repoId: string) {
       requested.current.add(nodeId);
       setCache((c) => new Map(c).set(nodeId, { status: "loading" }));
       getNode(repoId, nodeId)
-        .then((node) => setCache((c) => new Map(c).set(nodeId, { status: "loaded", node })))
-        .catch((err) =>
+        .then((node) => {
+          if (repoRef.current !== repoId) return; // repo switched mid-flight
+          setCache((c) => new Map(c).set(nodeId, { status: "loaded", node }));
+        })
+        .catch((err) => {
+          if (repoRef.current !== repoId) return;
           setCache((c) =>
             new Map(c).set(nodeId, {
               status: "error",
               error: err instanceof Error ? err.message : String(err),
             }),
-          ),
-        );
+          );
+        });
     },
     [repoId],
   );
