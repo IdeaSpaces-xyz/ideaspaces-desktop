@@ -109,6 +109,8 @@ function NotePane({
   const [syncState, setSyncState] = useState<SyncState>("loading");
   // An operation (retitle or sync) is in flight — blocks navigation + inputs.
   const [busy, setBusy] = useState(false);
+  // A .docx export is generating — disables the Export menu (no double-export).
+  const [exporting, setExporting] = useState(false);
 
   // Title (= frontmatter `name`, = the filename slug). README is structural, so
   // it's shown read-only.
@@ -285,7 +287,7 @@ function NotePane({
           ) : null /* loading — render nothing until git status resolves */}
           {!isReadme && (
             <ExportMenu
-              disabled={busy}
+              disabled={busy || exporting}
               onPdf={() => {
                 try {
                   toast("Preparing PDF…");
@@ -298,11 +300,17 @@ function NotePane({
               }}
               onDocx={() => {
                 void (async () => {
+                  setExporting(true);
                   try {
-                    const path = await saveNoteAsDocx(draftRef.current, note.title || note.name);
-                    if (path) toast(`Saved ${path.slice(path.lastIndexOf("/") + 1)}`);
+                    const path = await saveNoteAsDocx(draftRef.current, note.title || note.name, () =>
+                      toast("Generating…"),
+                    );
+                    // Basename only — Tauri returns `\`-separated paths on Windows.
+                    if (path) toast(`Saved ${path.replace(/.*[\\/]/, "")}`);
                   } catch (err) {
                     toast(errMessage(err), "error");
+                  } finally {
+                    setExporting(false);
                   }
                 })();
               }}
