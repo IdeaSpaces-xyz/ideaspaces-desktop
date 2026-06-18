@@ -1,9 +1,17 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { ChevronDown, Download, FileText } from "lucide-react";
+import { ChevronDown, Download, FileText, FileType } from "lucide-react";
 
-// Export the open note. v1: Save as PDF (native print pipeline). Save as Word
-// (.docx) drops in here next.
-export function ExportMenu({ onPdf, disabled }: { onPdf: () => void; disabled?: boolean }) {
+// Export the open note — Save as PDF (native print pipeline) or Save as Word
+// (.docx, real editable OOXML).
+export function ExportMenu({
+  onPdf,
+  onDocx,
+  disabled,
+}: {
+  onPdf: () => void;
+  onDocx: () => void;
+  disabled?: boolean;
+}) {
   const item =
     "flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm text-is-text-secondary outline-none data-[highlighted]:bg-is-surface-alt data-[highlighted]:text-is-text";
   return (
@@ -30,6 +38,10 @@ export function ExportMenu({ onPdf, disabled }: { onPdf: () => void; disabled?: 
           <DropdownMenu.Item className={item} onSelect={onPdf}>
             <FileText size={15} strokeWidth={1.333} className="text-is-text-tertiary" aria-hidden="true" />
             Save as PDF
+          </DropdownMenu.Item>
+          <DropdownMenu.Item className={item} onSelect={onDocx}>
+            <FileType size={15} strokeWidth={1.333} className="text-is-text-tertiary" aria-hidden="true" />
+            Save as Word (.docx)
           </DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu.Portal>

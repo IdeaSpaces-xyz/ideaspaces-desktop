@@ -44,7 +44,7 @@ import { useToast } from "../toast/toast-context";
 import { Resizer } from "./Resizer";
 import { CopyButton } from "./CopyButton";
 import { ExportMenu } from "./ExportMenu";
-import { printNoteAsPdf } from "../export/exportNote";
+import { printNoteAsPdf, saveNoteAsDocx } from "../export/exportNote";
 import { cn } from "../lib/cn";
 
 // Ghost toolbar button — no border/fill, just text that lifts on hover. Keeps
@@ -288,12 +288,23 @@ function NotePane({
               disabled={busy}
               onPdf={() => {
                 try {
+                  toast("Preparing PDF…");
                   printNoteAsPdf(draftRef.current, note.title || note.name, (err) =>
                     toast(errMessage(err), "error"),
                   );
                 } catch (err) {
                   toast(errMessage(err), "error");
                 }
+              }}
+              onDocx={() => {
+                void (async () => {
+                  try {
+                    const path = await saveNoteAsDocx(draftRef.current, note.title || note.name);
+                    if (path) toast(`Saved ${path.slice(path.lastIndexOf("/") + 1)}`);
+                  } catch (err) {
+                    toast(errMessage(err), "error");
+                  }
+                })();
               }}
             />
           )}
