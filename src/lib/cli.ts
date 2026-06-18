@@ -335,6 +335,30 @@ export async function listAgents(): Promise<Agent[]> {
   return parseJson<{ agents: Agent[] }>(stdout, "agents").agents;
 }
 
+export interface NodeDetail {
+  node_id: string;
+  name: string;
+  /** Display-name override from frontmatter, when present. */
+  name_display?: string;
+  summary?: string;
+  content: string;
+  path: string;
+  node_type: string;
+}
+
+/**
+ * Resolve a node by id (drives `node get`) — name, path, content. A
+ * conversation's workspace surface is bare node-ids; this turns one into a
+ * label + previewable content. Per-node (no batch endpoint yet).
+ */
+export async function getNode(repoId: string, nodeId: string): Promise<NodeDetail> {
+  const { code, stdout, stderr } = await runCli(["node", "get", repoId, nodeId, "--json"]);
+  if (code !== 0) {
+    throw new Error(stderr.trim() || `Could not load node (exit ${code ?? "unknown"}).`);
+  }
+  return parseJson<NodeDetail>(stdout, "node get");
+}
+
 /** Full conversation detail + message history (drives `conversation get`). */
 export async function getConversation(
   repoId: string,
