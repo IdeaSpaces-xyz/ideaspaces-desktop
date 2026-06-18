@@ -21,6 +21,10 @@ import { V2Transcript } from "../conversation/V2Transcript";
 import { useChatScroll } from "../conversation/useChatScroll";
 import { formatAbsoluteDate } from "../conversation/transcript-format";
 import { Compose, type SendOptions } from "../conversation/Compose";
+import { useNodeCache } from "../conversation/useNodeCache";
+import { WorkspaceStrip, type PreviewTarget } from "../conversation/WorkspaceStrip";
+import { PreviewPane } from "../conversation/PreviewPane";
+import { Resizer } from "./Resizer";
 import { ConversationAssembly } from "./ConversationAssembly";
 import { useToast } from "../toast/toast-context";
 import { cn } from "../lib/cn";
@@ -248,8 +252,24 @@ function ConversationDetail({
     return () => ro.disconnect();
   }, []);
 
+  // Workspace preview: resolve the conversation's touched nodes (names for the
+  // strip, content for the pane) and open one in a resizable right-side pane.
+  const { cache: nodeCacheMap, resolve: resolveNode } = useNodeCache(repoId);
+  const [preview, setPreview] = useState<PreviewTarget | null>(null);
+  const [previewWidth, setPreviewWidth] = useState(380);
+  const previewContainerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => setPreview(null), [convId]);
+  const openPreview = useCallback(
+    (t: PreviewTarget) => {
+      resolveNode(t.nodeId);
+      setPreview(t);
+    },
+    [resolveNode],
+  );
+
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div ref={previewContainerRef} className="flex h-full min-h-0">
+      <div className="flex min-h-0 flex-1 flex-col">
       {/* Header — collapses to a thin bar once the thread scrolls. */}
       <div className="shrink-0 border-b border-is-border/60 px-4 sm:px-6">
         <div className={cn(COLUMN, "py-3")}>
@@ -383,6 +403,12 @@ function ConversationDetail({
                   </button>
                 </div>
               )}
+              <WorkspaceStrip
+                workspace={detail.workspace}
+                cache={nodeCacheMap}
+                resolve={resolveNode}
+                onOpen={openPreview}
+              />
               <Compose
                 onSend={(t, opts) => void send(t, opts)}
                 onStop={stop}
@@ -393,6 +419,26 @@ function ConversationDetail({
           </div>
         )}
       </div>
+      </div>
+      {preview && (
+        <>
+          <Resizer
+            side="right"
+            min={320}
+            max={640}
+            label="Preview width"
+            containerRef={previewContainerRef}
+            width={previewWidth}
+            onResize={setPreviewWidth}
+          />
+          <PreviewPane
+            target={preview}
+            nodeState={nodeCacheMap.get(preview.nodeId)}
+            onClose={() => setPreview(null)}
+            style={{ width: previewWidth }}
+          />
+        </>
+      )}
     </div>
   );
 }
