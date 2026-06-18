@@ -44,7 +44,7 @@ import { useToast } from "../toast/toast-context";
 import { Resizer } from "./Resizer";
 import { CopyButton } from "./CopyButton";
 import { ExportMenu } from "./ExportMenu";
-import { printNoteAsPdf } from "../export/exportNote";
+import { printNoteAsPdf, saveNoteAsDocx } from "../export/exportNote";
 import { cn } from "../lib/cn";
 
 // Ghost toolbar button — no border/fill, just text that lifts on hover. Keeps
@@ -109,6 +109,8 @@ function NotePane({
   const [syncState, setSyncState] = useState<SyncState>("loading");
   // An operation (retitle or sync) is in flight — blocks navigation + inputs.
   const [busy, setBusy] = useState(false);
+  // A .docx export is generating — disables the Export menu (no double-export).
+  const [exporting, setExporting] = useState(false);
 
   // Title (= frontmatter `name`, = the filename slug). README is structural, so
   // it's shown read-only.
@@ -285,15 +287,32 @@ function NotePane({
           ) : null /* loading — render nothing until git status resolves */}
           {!isReadme && (
             <ExportMenu
-              disabled={busy}
+              disabled={busy || exporting}
               onPdf={() => {
                 try {
+                  toast("Preparing PDF…");
                   printNoteAsPdf(draftRef.current, note.title || note.name, (err) =>
                     toast(errMessage(err), "error"),
                   );
                 } catch (err) {
                   toast(errMessage(err), "error");
                 }
+              }}
+              onDocx={() => {
+                void (async () => {
+                  setExporting(true);
+                  try {
+                    const path = await saveNoteAsDocx(draftRef.current, note.title || note.name, () =>
+                      toast("Generating…"),
+                    );
+                    // Basename only — Tauri returns `\`-separated paths on Windows.
+                    if (path) toast(`Saved ${path.replace(/.*[\\/]/, "")}`);
+                  } catch (err) {
+                    toast(errMessage(err), "error");
+                  } finally {
+                    setExporting(false);
+                  }
+                })();
               }}
             />
           )}

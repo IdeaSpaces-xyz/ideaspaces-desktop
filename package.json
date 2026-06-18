@@ -40,6 +40,7 @@
     "@tauri-apps/plugin-opener": "^2",
     "@tauri-apps/plugin-shell": "^2.3.5",
     "@tauri-apps/plugin-store": "^2.4.3",
+    "@turbodocx/html-to-docx": "^1.22.0",
     "clsx": "^2.1.1",
     "lucide-react": "^1.17.0",
     "marked": "^18.0.5",
