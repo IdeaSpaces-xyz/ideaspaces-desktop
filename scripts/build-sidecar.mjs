@@ -18,7 +18,7 @@
 // directly via `npm run build:sidecar` (host) or with `--universal`.
 
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -84,5 +84,8 @@ if (!universal) {
   } catch {
     fail("`lipo` failed — universal builds need Xcode command-line tools (macOS only).");
   }
+  // Drop the per-arch slices; only the fat binary is the sidecar Tauri resolves.
+  rmSync(arm, { force: true });
+  rmSync(x64, { force: true });
   console.log("build-sidecar: done (universal).");
 }
