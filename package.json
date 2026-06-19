@@ -12,6 +12,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "build:sidecar": "node scripts/build-sidecar.mjs",
+    "release": "node scripts/release.mjs",
     "make-icon": "node scripts/make-icon.mjs && tauri icon icon-source.png",
     "tauri": "tauri",
     "postinstall": "patch-package"
