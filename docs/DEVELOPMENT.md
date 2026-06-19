@@ -56,7 +56,12 @@ open src-tauri/target/release/bundle/macos/IdeaSpaces.app
 
 A binary you built locally carries no quarantine flag and opens directly — the
 Gatekeeper and file-access notes in the README's Download section apply only to
-a `.dmg` you download or hand to another Mac.
+a `.dmg` you download or hand to another Mac. To clear the flag on such a build
+without the right-click dance:
+
+```bash
+xattr -dr com.apple.quarantine /path/to/IdeaSpaces.app
+```
 
 v1 targets **macOS** first. `tauri build` also produces Linux/Windows bundles
 under the same `bundle/` root (packaging steps differ) — but those platforms
