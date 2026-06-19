@@ -7,6 +7,11 @@ on:
     tags:
       - "v*"
 
+# One build per tag — guards against a force-pushed tag racing two publishes.
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: true
+
 # The job needs to create the release and upload the DMG.
 permissions:
   contents: write
@@ -49,7 +54,7 @@ jobs:
       # A tag can be pushed to a commit that never went through PR CI — re-run
       # the frontend quality gate here so a broken build never ships in a DMG.
       - name: Frontend checks
-        run: npm run typecheck && npm run lint && npm test
+        run: npm run typecheck && npm run lint && npm test && npm run build
 
       - name: Build & publish release
         # Pinned to a commit SHA (supply-chain hygiene for a release/signing

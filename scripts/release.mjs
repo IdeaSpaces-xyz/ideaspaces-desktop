@@ -41,12 +41,12 @@ const from = pkg.version;
 pkg.version = version;
 writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n");
 
-// tauri.conf.json — top-level "version": "x.y.z".
+// tauri.conf.json — the top-level "version" (parse + rewrite, so a future
+// nested `version` field can't be hit by accident).
 const confPath = join(root, "src-tauri", "tauri.conf.json");
-const conf = readFileSync(confPath, "utf8");
-const confNext = conf.replace(/("version":\s*)"[^"]+"/, `$1"${version}"`);
-if (confNext === conf) die("could not find a version field in tauri.conf.json");
-writeFileSync(confPath, confNext);
+const conf = JSON.parse(readFileSync(confPath, "utf8"));
+conf.version = version;
+writeFileSync(confPath, JSON.stringify(conf, null, 2) + "\n");
 
 // Cargo.toml — the [package] version line (first `version = "…"` in the file).
 const cargoPath = join(root, "src-tauri", "Cargo.toml");
@@ -55,10 +55,12 @@ const cargoNext = cargo.replace(/^version\s*=\s*"[^"]+"/m, `version = "${version
 if (cargoNext === cargo) die("could not find a version field in Cargo.toml");
 writeFileSync(cargoPath, cargoNext);
 
-// Refresh Cargo.lock's own version entry so the bump doesn't leave the lock
-// stale (cargo would otherwise rewrite it on the next build, dirtying the tree).
+// Refresh Cargo.lock's workspace-member version so the bump doesn't leave the
+// lock stale (cargo would otherwise rewrite it on the next build, dirtying the
+// tree). `--workspace` syncs the local package entries without touching
+// external dependency ranges.
 try {
-  execFileSync("cargo", ["update", "--package", "is_desktop", "--precise", version], {
+  execFileSync("cargo", ["update", "--workspace"], {
     cwd: join(root, "src-tauri"),
     stdio: "ignore",
   });
