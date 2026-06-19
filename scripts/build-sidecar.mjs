@@ -9,16 +9,18 @@
 // Two modes:
 //   • default — compile for the host triple (e.g. aarch64-apple-darwin). Fast;
 //     used by `tauri dev` / a local `tauri build` on the current machine.
-//   • universal (SIDECAR_UNIVERSAL=1 or `--universal`) — cross-compile both
-//     macOS arches with bun and `lipo` them into a single fat binary named
-//     `ideaspaces-universal-apple-darwin`, which is what a universal app bundle
-//     (`tauri build --target universal-apple-darwin`, i.e. our release) requires.
+//   • universal (SIDECAR_UNIVERSAL=1 or `--universal`) — for a universal app
+//     build (`tauri build --target universal-apple-darwin`, i.e. our release),
+//     produce all three sidecars Tauri needs: the two triple-named per-arch
+//     binaries (each arch slice's cargo build resolves its own) AND the lipo'd
+//     `-universal-apple-darwin` fat binary (the bundling stage copies that into
+//     the app). Tauri does not lipo external binaries for us.
 //
 // Run automatically by Tauri's beforeDev/beforeBuild commands; also runnable
 // directly via `npm run build:sidecar` (host) or with `--universal`.
 
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -71,10 +73,16 @@ if (!universal) {
   compile(null, join(outDir, `ideaspaces-${hostTriple}`));
   console.log("build-sidecar: done.");
 } else {
-  // Cross-compile each arch, then fuse with lipo. Names are intermediate; only
-  // the fat `-universal-apple-darwin` binary is what Tauri's externalBin needs.
-  const arm = join(outDir, "ideaspaces-arm64");
-  const x64 = join(outDir, "ideaspaces-x64");
+  // A `--target universal-apple-darwin` build needs THREE sidecars present:
+  //  • the two triple-named per-arch binaries — each arch slice is a normal
+  //    per-target cargo build that resolves its sidecar by triple (omitting
+  //    them fails the build.rs externalBin check at compile time); and
+  //  • the lipo'd `-universal-apple-darwin` fat binary — the bundling stage
+  //    copies THAT into the universal app's Resources (omitting it fails with
+  //    "resource path …-universal-apple-darwin doesn't exist" at bundle time).
+  // Tauri does NOT lipo external binaries for us — we provide the fat one.
+  const arm = join(outDir, "ideaspaces-aarch64-apple-darwin");
+  const x64 = join(outDir, "ideaspaces-x86_64-apple-darwin");
   const fat = join(outDir, "ideaspaces-universal-apple-darwin");
   compile("bun-darwin-arm64", arm);
   compile("bun-darwin-x64", x64);
@@ -84,8 +92,5 @@ if (!universal) {
   } catch {
     fail("`lipo` failed — universal builds need Xcode command-line tools (macOS only).");
   }
-  // Drop the per-arch slices; only the fat binary is the sidecar Tauri resolves.
-  rmSync(arm, { force: true });
-  rmSync(x64, { force: true });
-  console.log("build-sidecar: done (universal).");
+  console.log("build-sidecar: done (universal — both arch sidecars + fat binary).");
 }
