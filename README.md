@@ -87,6 +87,10 @@ Output lands in `src-tauri/target/release/bundle/`:
 open src-tauri/target/release/bundle/macos/IdeaSpaces.app
 ```
 
+A binary you built locally carries no quarantine flag and opens directly — the
+Gatekeeper and file-access notes in the [Download](#download) section apply only
+to a `.dmg` you download or hand to another Mac.
+
 v1 targets **macOS** first. `tauri build` also produces Linux/Windows bundles
 under the same `bundle/` root (packaging steps differ) — but those platforms
 aren't tested yet.
