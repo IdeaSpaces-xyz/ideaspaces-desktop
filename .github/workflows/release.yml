@@ -1,0 +1,81 @@
+name: Release
+
+# Push a tag like `v0.2.0` (use `npm run release 0.2.0` to bump + tag) and this
+# builds a universal macOS DMG and publishes it as a GitHub Release.
+on:
+  push:
+    tags:
+      - "v*"
+
+# The job needs to create the release and upload the DMG.
+permissions:
+  contents: write
+
+jobs:
+  release-macos:
+    name: Build & publish macOS DMG (universal)
+    runs-on: macos-14 # Apple Silicon runner; cross-compiles the Intel slice too.
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      # bun compiles the @ideaspaces/cli bundle into the native sidecar.
+      - uses: oven-sh/setup-bun@v2
+
+      # Both macOS arches — the universal app links an aarch64 + x86_64 slice.
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      # package-lock pins @ideaspaces/cli over ssh; the runner has no SSH key.
+      # Rewrite to anonymous HTTPS (public repo). No token needed.
+      - name: Force HTTPS for GitHub git fetch
+        run: git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build & publish release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Tells build-sidecar.mjs to produce the lipo'd universal sidecar.
+          SIDECAR_UNIVERSAL: "1"
+          # Code signing + notarization (optional). Set these repo secrets to
+          # flip signing on — tauri-action imports the cert and notarizes when
+          # they're present. Empty (today) = unsigned ad-hoc build; users clear
+          # quarantine with `xattr -dr com.apple.quarantine` (see README).
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "IdeaSpaces ${{ github.ref_name }}"
+          releaseDraft: false
+          prerelease: false
+          args: --target universal-apple-darwin
+          releaseBody: |
+            Universal macOS build (Apple Silicon + Intel). Download the `.dmg`,
+            open it, and drag **IdeaSpaces** to Applications.
+
+            > **Unsigned build.** macOS Gatekeeper will block the first launch
+            > ("Apple cannot check it for malicious software"). Either
+            > **right-click the app → Open** and confirm once, or run:
+            > ```
+            > xattr -dr com.apple.quarantine /Applications/IdeaSpaces.app
+            > ```
+            > Signing + notarization is a tracked follow-up.

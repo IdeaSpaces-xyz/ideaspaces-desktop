@@ -7,6 +7,20 @@ on-disk editing fused with GitHub's browse-and-collaborate. Built with Tauri
 v1 scope: **login, edit, sync.** Browse/graph/collaboration ride the hosted API;
 a local agent is a later fast-follow.
 
+## Download
+
+Grab the latest **`.dmg`** from [**Releases**](https://github.com/IdeaSpaces-xyz/is_desktop/releases),
+open it, and drag **IdeaSpaces** to Applications. It's a universal build — runs
+on both Apple Silicon and Intel Macs.
+
+> **Unsigned build — first launch.** The DMG isn't yet code-signed, so macOS
+> Gatekeeper blocks the first open (*"Apple cannot check it for malicious
+> software"*). Either **right-click the app → Open** and confirm once, or:
+> ```bash
+> xattr -dr com.apple.quarantine /Applications/IdeaSpaces.app
+> ```
+> Signing + notarization (clean double-click) is a tracked follow-up.
+
 ## Architecture
 
 The desktop is a thin GUI over the bundled [`@ideaspaces/cli`](https://github.com/IdeaSpaces-xyz/cli),
@@ -92,6 +106,45 @@ cargo build
 
 CI runs the frontend checks and the Rust checks on every PR; a tailored SLC
 (Simple, Lovable, Complete) review runs alongside.
+
+## Releasing
+
+Releases are **tag-driven**. Cutting one is two commands:
+
+```bash
+npm run release 0.2.0      # bumps package.json + tauri.conf.json + Cargo.toml,
+                           # commits "Release v0.2.0", tags v0.2.0
+git push --follow-tags     # pushes the commit + tag
+```
+
+Pushing the `v*` tag triggers [`.github/workflows/release.yml`](.github/workflows/release.yml),
+which on a macOS runner compiles the universal CLI sidecar (`SIDECAR_UNIVERSAL=1`
+→ aarch64 + x86_64 lipo'd together), builds `--target universal-apple-darwin`,
+and publishes a GitHub Release with the universal **`.dmg`** attached. Watch it
+in the repo's **Actions** tab; the release appears under **Releases** when green
+(~15–25 min cold).
+
+The version lives in three files kept in lockstep — `package.json`,
+`src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` — which `npm run release`
+bumps together (it refuses to run on a dirty tree, so the commit is exactly the
+bump). Don't hand-edit one and forget the others.
+
+### Turning on code signing (later)
+
+The workflow already has the signing slots wired — it just ships unsigned until
+the secrets exist. With an Apple Developer ID, add these repo secrets and the
+next release signs + notarizes automatically (no workflow change):
+
+| Secret | What |
+|---|---|
+| `APPLE_CERTIFICATE` | base64 of the Developer ID Application `.p12` |
+| `APPLE_CERTIFICATE_PASSWORD` | the `.p12` export password |
+| `APPLE_SIGNING_IDENTITY` | e.g. `Developer ID Application: Name (TEAMID)` |
+| `APPLE_ID` / `APPLE_PASSWORD` | Apple ID + an app-specific password (notarization) |
+| `APPLE_TEAM_ID` | your 10-char Apple Team ID |
+
+Once set, drop the "unsigned" notes from the **Download** section and the release
+body.
 
 ## Recommended IDE Setup
 
