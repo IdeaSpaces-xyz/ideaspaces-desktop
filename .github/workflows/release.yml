@@ -21,6 +21,10 @@ jobs:
     name: Build & publish macOS DMG (universal)
     runs-on: macos-14 # Apple Silicon runner; cross-compiles the Intel slice too.
     timeout-minutes: 45
+    env:
+      # 'true' only when the signing cert secret exists. Evaluates to a plain
+      # 'true'/'false' string — the secret value itself is never exposed here.
+      ENABLE_SIGNING: ${{ secrets.APPLE_CERTIFICATE != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -56,24 +60,35 @@ jobs:
       - name: Frontend checks
         run: npm run typecheck && npm run lint && npm test && npm run build
 
+      # Inject the Apple signing/notarization secrets ONLY when a cert exists —
+      # so adding the secrets flips signing on with no other change. Skipped
+      # today (unsigned): the Tauri bundler treats an empty-but-present
+      # APPLE_CERTIFICATE as "sign me" and fails importing it, so the vars must
+      # be absent entirely, not empty.
+      - name: Configure Apple signing
+        if: env.ENABLE_SIGNING == 'true'
+        run: |
+          {
+            echo "APPLE_CERTIFICATE<<__CERT__"
+            echo "${{ secrets.APPLE_CERTIFICATE }}"
+            echo "__CERT__"
+            echo "APPLE_CERTIFICATE_PASSWORD=${{ secrets.APPLE_CERTIFICATE_PASSWORD }}"
+            echo "APPLE_SIGNING_IDENTITY=${{ secrets.APPLE_SIGNING_IDENTITY }}"
+            echo "APPLE_ID=${{ secrets.APPLE_ID }}"
+            echo "APPLE_PASSWORD=${{ secrets.APPLE_PASSWORD }}"
+            echo "APPLE_TEAM_ID=${{ secrets.APPLE_TEAM_ID }}"
+          } >> "$GITHUB_ENV"
+
       - name: Build & publish release
         # Pinned to a commit SHA (supply-chain hygiene for a release/signing
         # workflow); bump deliberately. action-v0.6.2.
         uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Tells build-sidecar.mjs to produce the lipo'd universal sidecar.
+          # Tells build-sidecar.mjs to produce the universal sidecars.
           SIDECAR_UNIVERSAL: "1"
-          # Code signing + notarization (optional). Set these repo secrets to
-          # flip signing on — tauri-action imports the cert and notarizes when
-          # they're present. Empty (today) = unsigned ad-hoc build; users clear
-          # quarantine with `xattr -dr com.apple.quarantine` (see README).
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Apple signing vars are injected by the step above only when present
+          # (the secrets resolve there); absent today = unsigned build.
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "IdeaSpaces ${{ github.ref_name }}"
