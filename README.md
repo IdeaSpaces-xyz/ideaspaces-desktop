@@ -1,32 +1,49 @@
-# is_desktop
+# IdeaSpaces Desktop
 
-Local-first desktop client for [IdeaSpaces](https://ideaspaces.xyz) — Obsidian's
-on-disk editing fused with GitHub's browse-and-collaborate. Built with Tauri
-(Rust core) + React / Vite / TypeScript.
+A local-first desktop app for [IdeaSpaces](https://ideaspaces.xyz) — your notes
+live as plain Markdown on disk (edit them in anything), with one-click **sync**
+to your IdeaSpace and built-in **conversations** with agents over your repos.
+Think Obsidian's on-disk editing fused with GitHub's browse-and-collaborate.
 
-v1 scope: **login, edit, sync.** Browse/graph/collaboration ride the hosted API;
-a local agent is a later fast-follow.
+<!-- TODO: drop a screenshot/GIF of the app here — it's the single highest-value
+     addition to this README. Save under docs/ and reference it. -->
 
 ## Download
 
-Grab the latest **`.dmg`** from [**Releases**](https://github.com/IdeaSpaces-xyz/is_desktop/releases),
-open it, and drag **IdeaSpaces** to Applications. It's a universal build — runs
-on both Apple Silicon and Intel Macs.
+1. Get the latest **`IdeaSpaces_<version>_universal.dmg`** from
+   [**Releases**](https://github.com/IdeaSpaces-xyz/ideaspaces-desktop/releases/latest).
+   One universal build runs on both Apple Silicon and Intel Macs.
+2. Open the `.dmg` and drag **IdeaSpaces** to your Applications folder.
+3. Launch it, sign in, and point it at a folder to start editing and syncing.
 
-> **Unsigned build — first launch.** The DMG isn't yet code-signed, so macOS
+> **First launch (unsigned build).** The app isn't code-signed yet, so macOS
 > Gatekeeper blocks the first open (*"Apple cannot check it for malicious
-> software"*). Either **right-click the app → Open** and confirm once, or:
-> ```bash
-> xattr -dr com.apple.quarantine /Applications/IdeaSpaces.app
-> ```
-> Signing + notarization (clean double-click) is a tracked follow-up.
+> software"*). **Right-click the app → Open** and confirm once — after that it
+> opens normally. (Or, from a terminal:
+> `xattr -dr com.apple.quarantine /Applications/IdeaSpaces.app`.)
+>
+> Editing notes inside protected folders (Documents / Desktop / Downloads /
+> Dropbox) also triggers a one-time macOS file-access prompt — that's expected;
+> grant access per folder.
+
+Signing + notarization (a clean double-click, no warning) is a tracked
+follow-up.
+
+---
+
+# Development
+
+Built with **Tauri** (Rust core) + **React / Vite / TypeScript**. v1 scope:
+**login, edit, sync, conversations.** Browse/graph collaboration rides the
+hosted API; a local agent is a later fast-follow.
 
 ## Architecture
 
-The desktop is a thin GUI over the bundled [`@ideaspaces/cli`](https://github.com/IdeaSpaces-xyz/cli),
-which owns authentication, git, clone, and sync. The CLI is compiled to a native
-**Tauri sidecar** and invoked from the frontend via the shell plugin; the Rust
-core stays thin (native concerns only — no auth/git logic).
+The desktop is a thin GUI over the bundled
+[`@ideaspaces/cli`](https://github.com/IdeaSpaces-xyz/cli), which owns
+authentication, git, clone, and sync. The CLI is compiled to a native **Tauri
+sidecar** and invoked from the frontend via the shell plugin; the Rust core
+stays thin (native concerns only — no auth/git logic).
 
 ```
 frontend (React) → Command.sidecar("binaries/ideaspaces", […]) → bundled CLI → git / API
@@ -71,22 +88,10 @@ open src-tauri/target/release/bundle/macos/IdeaSpaces.app
 ```
 
 v1 targets **macOS** first. `tauri build` also produces Linux/Windows bundles
-under the same `bundle/` root (packaging steps differ; the Gatekeeper note below
-is macOS-only) — but those platforms aren't tested yet.
+under the same `bundle/` root (packaging steps differ) — but those platforms
+aren't tested yet.
 
-> **Unsigned build — macOS Gatekeeper.** The app you just built runs directly
-> (a locally-built binary carries no quarantine flag). But once the `.app`/`.dmg`
-> is **downloaded or copied to another Mac**, Gatekeeper blocks the first launch
-> with *"IdeaSpaces can't be opened because Apple cannot check it…"* — until we
-> code-sign + notarize (a tracked follow-up). On that machine, either
-> **right-click the app → Open** (confirm once), or clear the quarantine flag:
-> ```bash
-> xattr -dr com.apple.quarantine /path/to/IdeaSpaces.app
-> ```
-> Editing clones inside protected folders (Documents/Desktop/Downloads/Dropbox)
-> also triggers a one-time macOS file-access prompt — expected, grant per folder.
-
-Other checks:
+### Other checks
 
 ```bash
 npm run typecheck      # tsc --noEmit
@@ -119,10 +124,12 @@ git push --follow-tags     # pushes the commit + tag
 
 Pushing the `v*` tag triggers [`.github/workflows/release.yml`](.github/workflows/release.yml),
 which on a macOS runner compiles the universal CLI sidecar (`SIDECAR_UNIVERSAL=1`
-→ aarch64 + x86_64 lipo'd together), builds `--target universal-apple-darwin`,
-and publishes a GitHub Release with the universal **`.dmg`** attached. Watch it
-in the repo's **Actions** tab; the release appears under **Releases** when green
-(~15–25 min cold).
+→ both arches, lipo'd), builds `--target universal-apple-darwin`, and publishes
+a **draft** GitHub Release with the universal **`.dmg`** attached. Open the draft,
+confirm the DMG launches, then click **Publish release**. Watch progress in the
+repo's **Actions** tab (~15–25 min cold). The DMG-packaging step (`bundle_dmg.sh`)
+flakes intermittently on headless runners, so the build auto-retries
+(`retryAttempts`).
 
 The version lives in three files kept in lockstep — `package.json`,
 `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` — which `npm run release`

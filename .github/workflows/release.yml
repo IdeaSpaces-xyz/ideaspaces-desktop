@@ -97,6 +97,9 @@ jobs:
           # battle-tested (and signing lands, so there's nothing to hand-verify).
           releaseDraft: true
           prerelease: false
+          # bundle_dmg.sh flakes intermittently on headless runners (hdiutil /
+          # Finder AppleScript) — re-try the build/upload before failing the run.
+          retryAttempts: 2
           args: --target universal-apple-darwin
           releaseBody: |
             Universal macOS build (Apple Silicon + Intel). Download the `.dmg`,
