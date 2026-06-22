@@ -107,6 +107,22 @@ export function UpdaterProvider({ children }: { children: ReactNode }) {
     if (import.meta.env.PROD) void runCheck(false);
   }, [runCheck]);
 
+  // Re-check when the window regains focus, so an app left open for days still
+  // notices a release without a restart. Throttled to at most hourly; runCheck
+  // already no-ops while a check/install is in flight (busyRef).
+  useEffect(() => {
+    if (!import.meta.env.PROD) return;
+    let last = Date.now();
+    const onFocus = () => {
+      const now = Date.now();
+      if (now - last < 60 * 60 * 1000) return;
+      last = now;
+      void runCheck(false);
+    };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [runCheck]);
+
   // Did we just come up from an update? Read (and clear) the one-shot marker.
   useEffect(() => {
     let alive = true;

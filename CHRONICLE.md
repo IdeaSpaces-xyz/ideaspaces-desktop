@@ -3,6 +3,12 @@
 What we forged, and what it frees — newest first. Written in our house voice
 (see [`_agent/skills/chronicle.md`](https://github.com/IdeaSpaces-xyz/ideaspaces/blob/main/_agent/skills/chronicle.md) in the root ideaspace). Each release's entry is also its GitHub release notes.
 
+## v0.2.1 · A watchful eye, even at rest
+
+The app looked for new releases only at startup — leave it open for days and a fresh edge could pass unnoticed. Now it looks again each time you return to the window, so it never waits long to find what's new.
+
+→ *Stay in the app as long as you like; it still keeps itself current.*
+
 ## v0.2.0 · The blade now sharpens itself
 
 Until now a new version waited for you to fetch it by hand. No longer — IdeaSpaces watches each release, and when one lands it offers the new edge: **Install & Restart** downloads it, checks its seal, sets it in place, and returns you to the same desk one version keener. On the way back it tells you, plainly, what changed.
