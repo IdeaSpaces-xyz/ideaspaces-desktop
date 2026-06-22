@@ -3,6 +3,8 @@ import { Header } from "./components/Header";
 import { LogoSymbol } from "./components/LogoSymbol";
 import { RepoRail } from "./components/RepoRail";
 import { ThemeToggle } from "./components/ThemeToggle";
+import { UpdateBanner } from "./updater/UpdateBanner";
+import { UpdatedNotice } from "./updater/UpdatedNotice";
 import { useAuth } from "./auth/useAuth";
 import { useSpaces } from "./spaces/useSpaces";
 import { useSpaceActions } from "./spaces/useSpaceActions";
@@ -183,16 +185,24 @@ function App() {
   const auth = useAuth();
   const { mode, setMode } = useTheme();
 
-  if (auth.status === "signed-in" || auth.status === "signing-out") {
-    return <SignedInView auth={auth} mode={mode} setMode={setMode} />;
-  }
+  const signedIn = auth.status === "signed-in" || auth.status === "signing-out";
 
+  // The update banner overlays every auth state — rendered once, above the
+  // branch, so a new auth state can never accidentally drop it.
   return (
     <>
-      <div className="fixed right-4 top-4 z-10">
-        <ThemeToggle mode={mode} setMode={setMode} />
-      </div>
-      <CenteredAuth auth={auth} />
+      <UpdateBanner />
+      <UpdatedNotice />
+      {signedIn ? (
+        <SignedInView auth={auth} mode={mode} setMode={setMode} />
+      ) : (
+        <>
+          <div className="fixed right-4 top-4 z-10">
+            <ThemeToggle mode={mode} setMode={setMode} />
+          </div>
+          <CenteredAuth auth={auth} />
+        </>
+      )}
     </>
   );
 }

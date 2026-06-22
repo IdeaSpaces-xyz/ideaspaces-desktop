@@ -79,6 +79,27 @@ jobs:
             echo "APPLE_TEAM_ID=${{ secrets.APPLE_TEAM_ID }}"
           } >> "$GITHUB_ENV"
 
+      # Release notes = this version's CHRONICLE.md entry (the Chronicle voice),
+      # then a `---` and the standard download/Gatekeeper footer. Fails the run
+      # if the tag has no CHRONICLE.md entry — no release ships without its story.
+      - name: Compose release notes
+        id: notes
+        run: |
+          {
+            echo 'body<<__NOTES_EOF__'
+            node scripts/release-notes.mjs "${{ github.ref_name }}"
+            echo ''
+            # Explicit marker the app splits on to drop the footer (a comment —
+            # invisible on GitHub, where the `---` gives the visual break).
+            echo '<!-- release-footer -->'
+            echo '---'
+            echo ''
+            echo 'Universal macOS build (Apple Silicon + Intel). Download the `.dmg`, open it, and drag **IdeaSpaces** to Applications.'
+            echo ''
+            echo '> **Unsigned build.** macOS Gatekeeper blocks the first launch ("Apple cannot check it for malicious software"). Right-click the app → Open and confirm once, or run `xattr -dr com.apple.quarantine /Applications/IdeaSpaces.app`. Signing + notarization is a tracked follow-up.'
+            echo '__NOTES_EOF__'
+          } >> "$GITHUB_OUTPUT"
+
       - name: Build & publish release
         # Pinned to a commit SHA (supply-chain hygiene for a release/signing
         # workflow); bump deliberately. action-v0.6.2.
@@ -89,6 +110,11 @@ jobs:
           SIDECAR_UNIVERSAL: "1"
           # Apple signing vars are injected by the step above only when present
           # (the secrets resolve there); absent today = unsigned build.
+          # Updater signing (minisign — separate from Apple). When these secrets
+          # exist, tauri-action signs the .app.tar.gz and emits latest.json (the
+          # updater manifest) into the release. Empty = no updater artifacts.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "IdeaSpaces ${{ github.ref_name }}"
@@ -101,14 +127,8 @@ jobs:
           # Finder AppleScript) — re-try the build/upload before failing the run.
           retryAttempts: 2
           args: --target universal-apple-darwin
-          releaseBody: |
-            Universal macOS build (Apple Silicon + Intel). Download the `.dmg`,
-            open it, and drag **IdeaSpaces** to Applications.
-
-            > **Unsigned build.** macOS Gatekeeper will block the first launch
-            > ("Apple cannot check it for malicious software"). Either
-            > **right-click the app → Open** and confirm once, or run:
-            > ```
-            > xattr -dr com.apple.quarantine /Applications/IdeaSpaces.app
-            > ```
-            > Signing + notarization is a tracked follow-up.
+          # Body = this tag's CHRONICLE.md entry + a download/Gatekeeper footer,
+          # composed in the step above. The same string becomes latest.json's
+          # `notes`, which the app shows on update (it renders only the part
+          # above the `---`, so the footer stays GitHub-only).
+          releaseBody: ${{ steps.notes.outputs.body }}

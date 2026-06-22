@@ -26,6 +26,10 @@ tauri-plugin-store = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-clipboard-manager = "2"
 tauri-plugin-window-state = "2"
+# Auto-update: check a signed manifest, download + verify + swap the app in
+# place. `process` provides the relaunch into the new version.
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 

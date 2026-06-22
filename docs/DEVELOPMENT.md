@@ -67,6 +67,19 @@ v1 targets **macOS** first. `tauri build` also produces Linux/Windows bundles
 under the same `bundle/` root (packaging steps differ) — but those platforms
 aren't tested yet.
 
+> **Updater signing on local builds.** The app ships an auto-updater, so
+> `tauri build` produces signed updater artifacts (`bundle.createUpdaterArtifacts`)
+> and **requires the updater signing key** — without it the build errors. CI has
+> the key (the `TAURI_SIGNING_PRIVATE_KEY` secret); for a local release build,
+> point at a throwaway key:
+> ```bash
+> npx tauri signer generate -w /tmp/dev-updater.key   # once
+> export TAURI_SIGNING_PRIVATE_KEY="$(cat /tmp/dev-updater.key)"
+> export TAURI_SIGNING_PRIVATE_KEY_PASSWORD=""         # whatever you set
+> npm run tauri build
+> ```
+> `tauri dev` is unaffected — only the `build` bundling step signs.
+
 ### Other checks
 
 ```bash
