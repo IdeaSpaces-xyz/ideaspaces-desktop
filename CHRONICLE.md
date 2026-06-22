@@ -5,9 +5,9 @@ What we forged, and what it frees — newest first. Written in our house voice
 
 ## v0.2.1 · A watchful eye, even at rest
 
-The app looked for new releases only at startup — leave it open for days and a fresh edge could pass unnoticed. Now it looks again each time you return to the window, so it never waits long to find what's new.
+The app looked for new releases only at startup — leave it open for days and a fresh edge could pass unnoticed. Now it looks again each time you return to the window, and you can summon the check yourself any time from **IdeaSpaces → Check for Updates…** in the menu bar.
 
-→ *Stay in the app as long as you like; it still keeps itself current.*
+→ *The app keeps itself current, and answers the moment you ask.*
 
 ## v0.2.0 · The blade now sharpens itself
 

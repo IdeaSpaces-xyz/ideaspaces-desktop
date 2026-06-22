@@ -15,11 +15,24 @@ to your IdeaSpace and built-in **conversations** with agents over your repos.
 2. Open the `.dmg` and drag **IdeaSpaces** to your Applications folder.
 3. Launch it, sign in, and point it at a folder to start editing and syncing.
 
-> **First launch (unsigned build).** macOS Gatekeeper blocks the first open
-> (*"Apple cannot check it for malicious software"*). **Right-click the app →
-> Open** and confirm once — after that it opens normally. Editing notes inside
-> protected folders (Documents / Desktop / Downloads / Dropbox) also prompts for
-> file access once — that's expected; grant per folder.
+> **Heads-up — early unsigned build (work in progress).** It isn't yet
+> signed/notarized by Apple, so macOS Gatekeeper blocks the first launch —
+> *"Apple cannot check it…"* or *"IdeaSpaces is damaged and can't be opened"*.
+> That's expected and safe; Apple notarization is on the way. To open it now,
+> use **one** of these:
+>
+> - **Terminal — most reliable** (recent macOS removed the right-click bypass).
+>   After dragging to Applications:
+>   ```bash
+>   xattr -dr com.apple.quarantine /Applications/IdeaSpaces.app
+>   ```
+>   then double-click as usual.
+> - **System Settings** — try to open once, then **Settings → Privacy &
+>   Security** → scroll down → **Open Anyway**.
+> - **Older macOS** — **right-click the app → Open** → confirm once.
+>
+> Editing notes inside protected folders (Documents / Desktop / Downloads /
+> Dropbox) also prompts for file access once — grant per folder.
 
 ---
 

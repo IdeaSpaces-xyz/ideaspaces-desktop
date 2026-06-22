@@ -123,6 +123,20 @@ export function UpdaterProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("focus", onFocus);
   }, [runCheck]);
 
+  // The native "Check for Updates…" menu item (macOS app menu) emits this.
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    void (async () => {
+      try {
+        const { listen } = await import("@tauri-apps/api/event");
+        unlisten = await listen("menu://check-updates", () => void runCheck(true));
+      } catch {
+        /* no event system (non-Tauri context) */
+      }
+    })();
+    return () => unlisten?.();
+  }, [runCheck]);
+
   // Did we just come up from an update? Read (and clear) the one-shot marker.
   useEffect(() => {
     let alive = true;
