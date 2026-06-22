@@ -89,6 +89,9 @@ jobs:
             echo 'body<<__NOTES_EOF__'
             node scripts/release-notes.mjs "${{ github.ref_name }}"
             echo ''
+            # Explicit marker the app splits on to drop the footer (a comment —
+            # invisible on GitHub, where the `---` gives the visual break).
+            echo '<!-- release-footer -->'
             echo '---'
             echo ''
             echo 'Universal macOS build (Apple Silicon + Intel). Download the `.dmg`, open it, and drag **IdeaSpaces** to Applications.'

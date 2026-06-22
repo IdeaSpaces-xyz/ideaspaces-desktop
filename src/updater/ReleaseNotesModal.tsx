@@ -1,8 +1,13 @@
-import { useEffect, type ComponentPropsWithoutRef } from "react";
+import { useEffect, useRef, type ComponentPropsWithoutRef } from "react";
 import { X } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
+
+// Marker the release workflow emits before the GitHub-only download footer.
+// Explicit (vs. splitting on `---`) so a Chronicle entry can use thematic
+// breaks freely without losing its tail to the split.
+const FOOTER_MARKER = /<!--\s*release-footer\s*-->/;
 
 // The release's story (the Chronicle entry, carried in update.body), rendered
 // as sanitized markdown. Lazy-loaded so react-markdown only loads when someone
@@ -17,17 +22,45 @@ export default function ReleaseNotesModal({
   notes: string;
   onClose: () => void;
 }) {
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  // Escape to close + a focus trap: focus lands in the modal on open and Tab
+  // cycles within it instead of leaking to the app behind.
   useEffect(() => {
+    const card = cardRef.current;
+    if (!card) return;
+    const focusables = () =>
+      Array.from(
+        card.querySelectorAll<HTMLElement>('button, a[href], [tabindex]:not([tabindex="-1"])'),
+      ).filter((el) => !el.hasAttribute("disabled"));
+
+    focusables()[0]?.focus(); // initial focus (the close button)
+
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const items = focusables();
+      if (items.length === 0) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    card.addEventListener("keydown", onKey);
+    return () => card.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  // The release body is "<Chronicle story> --- <download/Gatekeeper footer>".
-  // In-app we only want the story; the footer is for people downloading the DMG.
-  const story = (notes.split(/\n-{3,}\s*\n/)[0] ?? notes).trim();
+  // The release body is "<Chronicle story> <!-- release-footer --> <footer>".
+  // In-app we show only the story; the footer is for people downloading the DMG.
+  const story = notes.split(FOOTER_MARKER)[0].trim();
 
   return (
     <div
@@ -38,6 +71,7 @@ export default function ReleaseNotesModal({
       onClick={onClose}
     >
       <div
+        ref={cardRef}
         className="flex max-h-[80vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-is-border bg-is-surface shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
