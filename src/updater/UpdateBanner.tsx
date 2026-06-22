@@ -5,7 +5,7 @@ import { useUpdater } from "./updater-context";
 // never shifts the app layout. Silent while idle/checking; appears only when
 // there's something to act on.
 export function UpdateBanner() {
-  const { status, install, dismiss } = useUpdater();
+  const { status, install, dismiss, checkForUpdates } = useUpdater();
 
   if (status.phase === "idle" || status.phase === "checking") return null;
 
@@ -53,9 +53,12 @@ export function UpdateBanner() {
           </>
         )}
 
-        {status.phase === "error" && (
+        {status.phase === "installed" && (
           <>
-            <span className="text-is-danger-text">Update failed: {status.message}</span>
+            <Download size={16} strokeWidth={1.75} className="shrink-0 text-is-accent" aria-hidden />
+            <span className="text-is-text">
+              v{status.version} installed — quit and reopen to finish.
+            </span>
             <button
               onClick={dismiss}
               aria-label="Dismiss"
@@ -63,6 +66,27 @@ export function UpdateBanner() {
             >
               <X size={15} />
             </button>
+          </>
+        )}
+
+        {status.phase === "error" && (
+          <>
+            <span className="text-is-danger-text">Update failed: {status.message}</span>
+            <div className="ml-2 flex items-center gap-1.5">
+              <button
+                onClick={checkForUpdates}
+                className="rounded-md border border-is-border px-2.5 py-1 text-[12px] font-medium text-is-text transition hover:bg-is-surface-alt"
+              >
+                Try again
+              </button>
+              <button
+                onClick={dismiss}
+                aria-label="Dismiss"
+                className="shrink-0 rounded-md p-1 text-is-text-tertiary transition hover:text-is-text"
+              >
+                <X size={15} />
+              </button>
+            </div>
           </>
         )}
       </div>

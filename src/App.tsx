@@ -184,22 +184,23 @@ function App() {
   const auth = useAuth();
   const { mode, setMode } = useTheme();
 
-  if (auth.status === "signed-in" || auth.status === "signing-out") {
-    return (
-      <>
-        <UpdateBanner />
-        <SignedInView auth={auth} mode={mode} setMode={setMode} />
-      </>
-    );
-  }
+  const signedIn = auth.status === "signed-in" || auth.status === "signing-out";
 
+  // The update banner overlays every auth state — rendered once, above the
+  // branch, so a new auth state can never accidentally drop it.
   return (
     <>
       <UpdateBanner />
-      <div className="fixed right-4 top-4 z-10">
-        <ThemeToggle mode={mode} setMode={setMode} />
-      </div>
-      <CenteredAuth auth={auth} />
+      {signedIn ? (
+        <SignedInView auth={auth} mode={mode} setMode={setMode} />
+      ) : (
+        <>
+          <div className="fixed right-4 top-4 z-10">
+            <ThemeToggle mode={mode} setMode={setMode} />
+          </div>
+          <CenteredAuth auth={auth} />
+        </>
+      )}
     </>
   );
 }

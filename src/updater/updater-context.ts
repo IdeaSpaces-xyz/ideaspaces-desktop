@@ -6,6 +6,9 @@ export type UpdateStatus =
   | { phase: "available"; version: string; notes?: string }
   | { phase: "downloading"; version: string; pct: number | null }
   | { phase: "ready"; version: string }
+  // Installed in place, but the auto-relaunch failed — the update IS done; the
+  // user just needs to restart manually. Distinct from "error" (install failed).
+  | { phase: "installed"; version: string }
   | { phase: "error"; message: string };
 
 export interface UpdaterApi {

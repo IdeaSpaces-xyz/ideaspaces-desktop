@@ -47,6 +47,8 @@ export function UpdaterProvider({ children }: { children: ReactNode }) {
     const update = updateRef.current;
     if (!update || busyRef.current) return;
     busyRef.current = true;
+
+    // Phase 1: download + install. A failure here means the update did NOT land.
     try {
       let total = 0;
       let received = 0;
@@ -65,12 +67,20 @@ export function UpdaterProvider({ children }: { children: ReactNode }) {
         }
       });
       setStatus({ phase: "ready", version: update.version });
-      // Installed in place — relaunch into the new version.
-      const { relaunch } = await import("@tauri-apps/plugin-process");
-      await relaunch();
     } catch (err) {
-      busyRef.current = false; // relaunch never returns; only reached on failure
+      busyRef.current = false;
       setStatus({ phase: "error", message: err instanceof Error ? err.message : String(err) });
+      return;
+    }
+
+    // Phase 2: relaunch into the new version. The update is already installed,
+    // so if relaunch fails it's NOT an error — the user just restarts manually.
+    try {
+      const { relaunch } = await import("@tauri-apps/plugin-process");
+      await relaunch(); // never returns on success
+    } catch {
+      busyRef.current = false;
+      setStatus({ phase: "installed", version: update.version });
     }
   }, []);
 
