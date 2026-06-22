@@ -7,11 +7,14 @@ import "@fontsource/fragment-mono";
 import "./index.css";
 import App from "./App";
 import { ToastProvider } from "./toast/ToastProvider";
+import { UpdaterProvider } from "./updater/UpdaterProvider";
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
     <ToastProvider>
-      <App />
+      <UpdaterProvider>
+        <App />
+      </UpdaterProvider>
     </ToastProvider>
   </React.StrictMode>,
 );

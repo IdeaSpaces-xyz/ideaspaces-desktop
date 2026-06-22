@@ -3,6 +3,7 @@ import { Header } from "./components/Header";
 import { LogoSymbol } from "./components/LogoSymbol";
 import { RepoRail } from "./components/RepoRail";
 import { ThemeToggle } from "./components/ThemeToggle";
+import { UpdateBanner } from "./updater/UpdateBanner";
 import { useAuth } from "./auth/useAuth";
 import { useSpaces } from "./spaces/useSpaces";
 import { useSpaceActions } from "./spaces/useSpaceActions";
@@ -184,11 +185,17 @@ function App() {
   const { mode, setMode } = useTheme();
 
   if (auth.status === "signed-in" || auth.status === "signing-out") {
-    return <SignedInView auth={auth} mode={mode} setMode={setMode} />;
+    return (
+      <>
+        <UpdateBanner />
+        <SignedInView auth={auth} mode={mode} setMode={setMode} />
+      </>
+    );
   }
 
   return (
     <>
+      <UpdateBanner />
       <div className="fixed right-4 top-4 z-10">
         <ThemeToggle mode={mode} setMode={setMode} />
       </div>

@@ -89,6 +89,11 @@ jobs:
           SIDECAR_UNIVERSAL: "1"
           # Apple signing vars are injected by the step above only when present
           # (the secrets resolve there); absent today = unsigned build.
+          # Updater signing (minisign — separate from Apple). When these secrets
+          # exist, tauri-action signs the .app.tar.gz and emits latest.json (the
+          # updater manifest) into the release. Empty = no updater artifacts.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "IdeaSpaces ${{ github.ref_name }}"

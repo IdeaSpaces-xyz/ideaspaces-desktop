@@ -2,6 +2,7 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { Monitor, Moon, Sun, type LucideIcon } from "lucide-react";
 import { cn } from "../lib/cn";
 import type { ThemeMode } from "../theme/useTheme";
+import { useUpdater } from "../updater/updater-context";
 
 // User menu in the header — identity, theme picker, sign out. Radix-backed
 // (matching ContextSwitcher) so keyboard nav / focus management come for free.
@@ -20,6 +21,8 @@ export function UserMenu({
 }) {
   const label = username ? `@${username}` : "Account";
   const initial = (username ?? "u").slice(0, 1).toUpperCase();
+  const updater = useUpdater();
+  const checking = updater.status.phase === "checking";
 
   return (
     <DropdownMenu.Root>
@@ -76,6 +79,19 @@ export function UserMenu({
           </div>
 
           <DropdownMenu.Separator className="my-1 h-px bg-is-border" />
+
+          <DropdownMenu.Item
+            disabled={checking}
+            // Keep the menu open while the check runs so its result (the "up to
+            // date" toast or the update banner) lands with the menu still there.
+            onSelect={(e) => {
+              e.preventDefault();
+              updater.checkForUpdates();
+            }}
+            className="flex h-11 cursor-pointer items-center px-3 text-sm text-is-text outline-none data-[highlighted]:bg-is-surface-alt data-[disabled]:opacity-50"
+          >
+            {checking ? "Checking…" : "Check for updates"}
+          </DropdownMenu.Item>
 
           <DropdownMenu.Item
             disabled={signingOut}

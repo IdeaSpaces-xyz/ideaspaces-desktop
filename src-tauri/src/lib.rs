@@ -21,6 +21,11 @@ pub fn run() {
         // exit, restores on start) — the config width/height is just the first-run
         // default. No JS/capability needed; the plugin works off window events.
         .plugin(tauri_plugin_window_state::Builder::default().build())
+        // Auto-update — the frontend calls `check()`, downloads + verifies the
+        // signed update, and relaunches via the process plugin. Endpoint +
+        // public key live in tauri.conf.json; signing happens in CI.
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
