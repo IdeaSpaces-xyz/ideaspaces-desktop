@@ -11,13 +11,23 @@ export type UpdateStatus =
   | { phase: "installed"; version: string }
   | { phase: "error"; message: string };
 
+// Recorded right before relaunch so the next launch can confirm the update
+// landed and offer its release notes (the Chronicle entry, from update.body).
+export interface UpdateNotice {
+  version: string;
+  notes: string;
+}
+
 export interface UpdaterApi {
   status: UpdateStatus;
+  /** Set once on launch when we've just come up from an update; cleared on read. */
+  justUpdated: UpdateNotice | null;
   /** Manual check — surfaces a toast on "up to date" / failure. */
   checkForUpdates: () => void;
   /** Download, verify, install the pending update, then relaunch. */
   install: () => void;
   dismiss: () => void;
+  dismissJustUpdated: () => void;
 }
 
 export const UpdaterContext = createContext<UpdaterApi | null>(null);

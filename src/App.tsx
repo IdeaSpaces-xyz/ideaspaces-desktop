@@ -4,6 +4,7 @@ import { LogoSymbol } from "./components/LogoSymbol";
 import { RepoRail } from "./components/RepoRail";
 import { ThemeToggle } from "./components/ThemeToggle";
 import { UpdateBanner } from "./updater/UpdateBanner";
+import { UpdatedNotice } from "./updater/UpdatedNotice";
 import { useAuth } from "./auth/useAuth";
 import { useSpaces } from "./spaces/useSpaces";
 import { useSpaceActions } from "./spaces/useSpaceActions";
@@ -191,6 +192,7 @@ function App() {
   return (
     <>
       <UpdateBanner />
+      <UpdatedNotice />
       {signedIn ? (
         <SignedInView auth={auth} mode={mode} setMode={setMode} />
       ) : (
