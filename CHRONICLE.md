@@ -3,6 +3,12 @@
 What we forged, and what it frees — newest first. Written in our house voice
 (see [`_agent/skills/chronicle.md`](https://github.com/IdeaSpaces-xyz/ideaspaces/blob/main/_agent/skills/chronicle.md) in the root ideaspace). Each release's entry is also its GitHub release notes.
 
+## v0.2.2 · Patience for a sleeping gate
+
+When the space's server had been idle it woke slowly — and the app, asking too sharply, gave up before it answered (`GET /auth/me timed out`). Now a request that times out is asked once more, after that first knock has roused the gate; the wait passes unseen and Sync goes through.
+
+→ *A cold server no longer greets you with an error — the app waits a breath and carries on.*
+
 ## v0.2.1 · A watchful eye, even at rest
 
 The app looked for new releases only at startup — leave it open for days and a fresh edge could pass unnoticed. Now it looks again each time you return to the window, and you can summon the check yourself any time from **IdeaSpaces → Check for Updates…** in the menu bar.
