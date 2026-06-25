@@ -390,7 +390,7 @@ function ConversationDetail({
                         disabled={syncing}
                         className="shrink-0 rounded-md px-2 py-1 font-medium text-is-accent-text transition hover:bg-is-surface-alt disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
                       >
-                        {syncing ? "Syncing…" : "Sync to pull"}
+                        {syncing ? "Downloading…" : "Download"}
                       </button>
                     )}
                     <button
