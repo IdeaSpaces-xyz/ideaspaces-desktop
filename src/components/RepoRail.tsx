@@ -6,10 +6,12 @@ import {
   Cloud,
   Download,
   FolderInput,
+  FolderOpen,
   FolderPlus,
   Link2,
   MoreHorizontal,
   RefreshCw,
+  Trash2,
 } from "lucide-react";
 import type { Space } from "../lib/cli";
 import type { RepoEntries, RepoEntry } from "../lib/repo-entry";
@@ -77,11 +79,15 @@ function DiskRow({
   busy,
   onOpen,
   onSync,
+  onReveal,
+  onFreeUpSpace,
 }: {
   entry: RepoEntry;
   busy: boolean;
   onOpen: (entry: RepoEntry) => void;
   onSync: (repoId: string, path: string, slug: string) => void;
+  onReveal: (path: string) => void;
+  onFreeUpSpace: (repoId: string, path: string, slug: string) => void;
 }) {
   const badge = entry.sync;
   const sync = !!badge && !badge.synced;
@@ -125,6 +131,21 @@ function DiskRow({
             <RefreshCw size={13} strokeWidth={1.333} aria-hidden="true" />
           </button>
         ))}
+      {clonePath && (
+        <RowMenu label={`Actions for ${entry.slug}`}>
+          <DropdownMenu.Item className={rowMenuItem} onSelect={() => onReveal(clonePath)}>
+            <FolderOpen size={14} strokeWidth={1.333} className="text-is-text-tertiary" aria-hidden="true" />
+            Reveal in Finder
+          </DropdownMenu.Item>
+          <DropdownMenu.Item
+            className={rowMenuItem}
+            onSelect={() => onFreeUpSpace(entry.repoId, clonePath, entry.slug)}
+          >
+            <Trash2 size={14} strokeWidth={1.333} className="text-is-text-tertiary" aria-hidden="true" />
+            Free up space
+          </DropdownMenu.Item>
+        </RowMenu>
+      )}
     </li>
   );
 }
@@ -184,6 +205,8 @@ function RepoRow({
   onCloneTo,
   onLinkExisting,
   onSync,
+  onReveal,
+  onFreeUpSpace,
 }: {
   entry: RepoEntry;
   busy: boolean;
@@ -192,9 +215,20 @@ function RepoRow({
   onCloneTo: (space: Space) => void;
   onLinkExisting: (space: Space) => void;
   onSync: (repoId: string, path: string, slug: string) => void;
+  onReveal: (path: string) => void;
+  onFreeUpSpace: (repoId: string, path: string, slug: string) => void;
 }) {
   if (entry.clone) {
-    return <DiskRow entry={entry} busy={busy} onOpen={onOpen} onSync={onSync} />;
+    return (
+      <DiskRow
+        entry={entry}
+        busy={busy}
+        onOpen={onOpen}
+        onSync={onSync}
+        onReveal={onReveal}
+        onFreeUpSpace={onFreeUpSpace}
+      />
+    );
   }
   return (
     <CloudRow
@@ -220,6 +254,8 @@ export function RepoRail({
   onCloneTo,
   onLinkExisting,
   onSync,
+  onReveal,
+  onFreeUpSpace,
   onLinkFolder,
   linking,
   onRefresh,
@@ -235,6 +271,8 @@ export function RepoRail({
   onCloneTo: (space: Space) => void;
   onLinkExisting: (space: Space) => void;
   onSync: (repoId: string, path: string, slug: string) => void;
+  onReveal: (path: string) => void;
+  onFreeUpSpace: (repoId: string, path: string, slug: string) => void;
   onLinkFolder: () => void;
   linking: boolean;
   onRefresh: () => void;
@@ -253,6 +291,8 @@ export function RepoRail({
       onCloneTo={onCloneTo}
       onLinkExisting={onLinkExisting}
       onSync={onSync}
+      onReveal={onReveal}
+      onFreeUpSpace={onFreeUpSpace}
     />
   );
 

@@ -1,7 +1,8 @@
 import { useCallback, useState } from "react";
 import { join } from "@tauri-apps/api/path";
-import { open } from "@tauri-apps/plugin-dialog";
-import { cloneSpace, linkClone, syncClone, type Space } from "../lib/cli";
+import { ask, open } from "@tauri-apps/plugin-dialog";
+import { revealItemInDir } from "@tauri-apps/plugin-opener";
+import { cloneSpace, forgetClone, linkClone, syncClone, type Space } from "../lib/cli";
 import { defaultWorkspaceDir } from "../lib/workspace";
 import { useToast } from "../toast/toast-context";
 
@@ -128,5 +129,51 @@ export function useSpaceActions(reload: () => Promise<void> | void) {
     [reload, setBusy, toast],
   );
 
-  return { busyIds, linking, clone, cloneTo, linkExisting, linkFolder, sync };
+  // Show the clone's folder in the OS file manager.
+  const revealInFinder = useCallback(
+    async (path: string) => {
+      try {
+        await revealItemInDir(path);
+      } catch (err) {
+        toast(errMessage(err), "error");
+      }
+    },
+    [toast],
+  );
+
+  // "Free up space" — delete the local folder (the space stays online). Destructive
+  // and unconditional by design, so it's gated behind an explicit confirm that
+  // names the unsynced-loss risk. The CLI still blocks a home/root catastrophe.
+  const freeUpSpace = useCallback(
+    async (repoId: string, path: string, slug: string) => {
+      const ok = await ask(
+        `Delete the local copy of "${slug}"? This removes the folder from your disk and any changes not yet synced will be lost. The space stays online — you can make it available offline again later.`,
+        { title: "Free up space", kind: "warning", okLabel: "Delete", cancelLabel: "Cancel" },
+      );
+      if (!ok) return;
+      setBusy(repoId, true);
+      try {
+        await forgetClone(path, true);
+        await reload();
+        toast(`Freed up space — ${slug} is online-only again`);
+      } catch (err) {
+        toast(errMessage(err), "error");
+      } finally {
+        setBusy(repoId, false);
+      }
+    },
+    [reload, setBusy, toast],
+  );
+
+  return {
+    busyIds,
+    linking,
+    clone,
+    cloneTo,
+    linkExisting,
+    linkFolder,
+    sync,
+    revealInFinder,
+    freeUpSpace,
+  };
 }

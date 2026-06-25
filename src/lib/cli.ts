@@ -179,6 +179,27 @@ export async function syncClone(dir: string): Promise<SyncResult> {
   return parseJson<SyncResult>(stdout, "sync");
 }
 
+export interface ForgetResult {
+  forgotten: boolean;
+  /** True when `--delete` removed the folder, not just the binding. */
+  deleted: boolean;
+  path: string;
+}
+
+/**
+ * Stop tracking a clone (drives `forget`). With `del`, also deletes the folder
+ * — backs the rail's "Free up space". Deletion is unconditional (the caller
+ * confirms); the CLI only blocks a home/root catastrophe.
+ */
+export async function forgetClone(path: string, del = false): Promise<ForgetResult> {
+  const args = del ? ["forget", path, "--delete", "--json"] : ["forget", path, "--json"];
+  const { code, stdout, stderr } = await runCli(args);
+  if (code !== 0) {
+    throw new Error(stderr.trim() || `Forget failed (exit ${code ?? "unknown"}).`);
+  }
+  return parseJson<ForgetResult>(stdout, "forget");
+}
+
 export interface Conversation {
   conversation_id: string;
   name: string;
