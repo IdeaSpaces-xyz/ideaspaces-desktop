@@ -1,4 +1,4 @@
-import { lazy, Suspense, useMemo, useState, type ReactNode } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Header } from "./components/Header";
 import { LogoSymbol } from "./components/LogoSymbol";
 import { RepoRail } from "./components/RepoRail";
@@ -11,6 +11,8 @@ import { useSpaceActions } from "./spaces/useSpaceActions";
 import { useCloneStatuses } from "./spaces/useCloneStatuses";
 import { useTheme, type ThemeMode } from "./theme/useTheme";
 import { deriveSpaceContexts, resolveContext, spacesForContext } from "./lib/space-context";
+import { deriveRepoEntries } from "./lib/repo-entry";
+import { getActiveContextRef, setActiveContextRef } from "./lib/active-context";
 import type { CloneRecord } from "./lib/cli";
 
 // Code-split: CodeMirror + the live-preview layer load only when a note opens,
@@ -52,6 +54,18 @@ function SignedInView({
   const [activeRef, setActiveRef] = useState<string | undefined>(undefined);
   const [editingClone, setEditingClone] = useState<CloneRecord | undefined>(undefined);
 
+  // Restore the last-used context once on mount; never clobber a selection the
+  // user has already made (cur ?? stored). Saved on every switch below.
+  useEffect(() => {
+    void getActiveContextRef().then((ref) => {
+      if (ref) setActiveRef((cur) => cur ?? ref);
+    });
+  }, []);
+  const selectContext = useCallback((ref: string) => {
+    setActiveRef(ref);
+    void setActiveContextRef(ref);
+  }, []);
+
   const contexts = useMemo(
     () => deriveSpaceContexts(spaces.username, spaces.spaces),
     [spaces.username, spaces.spaces],
@@ -61,11 +75,18 @@ function SignedInView({
     () => (activeContext ? spacesForContext(spaces.spaces, activeContext) : spaces.spaces),
     [activeContext, spaces.spaces],
   );
-  const cloneIndex = useMemo(
-    () => new Map(spaces.clones.map((c) => [c.repo_id, c])),
-    [spaces.clones],
-  );
   const cloneStatuses = useCloneStatuses(spaces.clones);
+  const repoEntries = useMemo(
+    () =>
+      deriveRepoEntries({
+        visibleSpaces,
+        allSpaces: spaces.spaces,
+        clones: spaces.clones,
+        statuses: cloneStatuses.statuses,
+        failed: cloneStatuses.failed,
+      }),
+    [visibleSpaces, spaces.spaces, spaces.clones, cloneStatuses.statuses, cloneStatuses.failed],
+  );
 
   return (
     // Fixed viewport height + overflow-hidden so inner panes (the repos list,
@@ -75,7 +96,7 @@ function SignedInView({
       <Header
         contexts={contexts}
         activeContext={activeContext}
-        onSelectContext={setActiveRef}
+        onSelectContext={selectContext}
         onHome={() => setEditingClone(undefined)}
         username={spaces.username ?? undefined}
         mode={mode}
@@ -98,15 +119,12 @@ function SignedInView({
         // main surface. Clicking a repo opens the editor (above).
         <div className="flex min-h-0 flex-1">
           <RepoRail
-            spaces={visibleSpaces}
-            cloneIndex={cloneIndex}
-            statuses={cloneStatuses.statuses}
-            failedStatuses={cloneStatuses.failed}
+            entries={repoEntries}
             busyIds={actions.busyIds}
             status={spaces.status}
             error={spaces.error}
             onReload={() => void spaces.reload()}
-            onOpen={setEditingClone}
+            onOpen={(entry) => entry.clone && setEditingClone(entry.clone)}
             onClone={actions.clone}
             onCloneTo={actions.cloneTo}
             onLinkExisting={actions.linkExisting}
