@@ -4,6 +4,7 @@ import {
   ArrowRight,
   Check,
   ChevronRight,
+  DownloadCloud,
   FilePlus,
   FileText,
   Folder,
@@ -40,6 +41,7 @@ import { bucketByTime, relativeTime } from "../lib/time";
 import { ask } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { cloneStatus, commitClone, syncClone, type CloneRecord } from "../lib/cli";
+import { deriveSyncBadge, type SyncBadge } from "../lib/sync-state";
 import { useToast } from "../toast/toast-context";
 import { Resizer } from "./Resizer";
 import { CopyButton } from "./CopyButton";
@@ -64,7 +66,21 @@ function stripFrontmatter(content: string): string {
   return content.split("\n").slice(fm.endLine).join("\n").replace(/^\n+/, "");
 }
 
-type SyncState = "loading" | "synced" | "unsynced" | "syncing";
+// The sync indicator's view: "loading" before git status seeds (renders
+// nothing), "syncing" mid-operation, else a directional SyncBadge (synced shows
+// a quiet check; otherwise an Upload/Download/Sync button). This is the
+// local→remote axis only — the draft→disk axis is the separate `saving` flag.
+type SyncView = "loading" | "syncing" | SyncBadge;
+
+// Optimistic badge after a local edit: there's now uncommitted work to send up,
+// without re-reading git. The real ahead/behind resurfaces on the next seed.
+const LOCAL_EDITS_BADGE = deriveSyncBadge({ branch: null, ahead: null, behind: null, dirty: true });
+const NOTHING_PENDING_BADGE = deriveSyncBadge({
+  branch: null,
+  ahead: 0,
+  behind: 0,
+  dirty: false,
+});
 
 // One opened note: loads its content, autosaves edits to disk (debounced), and
 // syncs (commit + push, commit hidden) via the CLI. No Save button — it's 2026.
@@ -106,7 +122,7 @@ function NotePane({
   // Sync = whether local edits have reached the remote. Starts "loading" (the
   // pill renders nothing) until seeded from git on open — the clone may already
   // carry unsynced work; an edit flips it to "unsynced".
-  const [syncState, setSyncState] = useState<SyncState>("loading");
+  const [syncView, setSyncView] = useState<SyncView>("loading");
   // An operation (retitle or sync) is in flight — blocks navigation + inputs.
   const [busy, setBusy] = useState(false);
   // A .docx export is generating — disables the Export menu (no double-export).
@@ -166,15 +182,14 @@ function NotePane({
     cloneStatus(clone.path)
       .then((s) => {
         if (!alive) return;
-        const seeded: SyncState = (s.ahead ?? 0) > 0 || s.dirty ? "unsynced" : "synced";
         // Only resolve the initial "loading" — never clobber a state the user
         // already drove (e.g. typed while the status call was in flight).
-        setSyncState((cur) => (cur === "loading" ? seeded : cur));
+        setSyncView((cur) => (cur === "loading" ? deriveSyncBadge(s) : cur));
       })
       .catch(() => {
-        // Status unavailable — err toward showing Sync rather than hiding it, so
-        // genuinely unsynced work is never silently masked as "synced".
-        if (alive) setSyncState((cur) => (cur === "loading" ? "unsynced" : cur));
+        // Status unavailable — err toward showing an action rather than hiding
+        // it, so genuinely unsynced work is never silently masked as "synced".
+        if (alive) setSyncView((cur) => (cur === "loading" ? LOCAL_EDITS_BADGE : cur));
       });
     return () => {
       alive = false;
@@ -228,7 +243,7 @@ function NotePane({
   // user only sees "Sync". Flushes the latest edit first, then commit + push.
   const sync = useCallback(async () => {
     setBusy(true);
-    setSyncState("syncing");
+    setSyncView("syncing");
     try {
       await flushSave();
       // The content this sync publishes. If the user keeps typing mid-sync, the
@@ -246,7 +261,7 @@ function NotePane({
       }
       const res = await syncClone(clone.path);
       // Edits that landed during the sync leave the note unsynced again.
-      setSyncState(draftRef.current === syncedContent ? "synced" : "unsynced");
+      setSyncView(draftRef.current === syncedContent ? NOTHING_PENDING_BADGE : LOCAL_EDITS_BADGE);
       toast(
         res.pushed
           ? `Synced — pushed ${res.pushed} change${res.pushed === 1 ? "" : "s"}`
@@ -254,7 +269,7 @@ function NotePane({
       );
     } catch (err) {
       toast(errMessage(err), "error");
-      setSyncState("unsynced");
+      setSyncView(LOCAL_EDITS_BADGE);
     } finally {
       setBusy(false);
     }
@@ -269,22 +284,35 @@ function NotePane({
           <CopyButton value={note.relPath} label="note path" />
         </p>
         <div className="flex shrink-0 items-center gap-2">
-          {syncState === "syncing" ? (
+          {syncView === "syncing" ? (
             <span className="inline-flex items-center gap-1.5 px-2 py-1.5 text-xs text-is-text-tertiary">
               <RefreshCw size={14} strokeWidth={1.333} className="animate-spin" aria-hidden="true" />
               Syncing…
             </span>
-          ) : syncState === "unsynced" ? (
-            <button type="button" className={barBtn} disabled={busy} onClick={() => void sync()}>
-              <UploadCloud size={14} strokeWidth={1.333} aria-hidden="true" />
-              Sync
-            </button>
-          ) : syncState === "synced" ? (
+          ) : syncView === "loading" ? null /* render nothing until git status resolves */ : syncView.synced ? (
             <span className="inline-flex items-center gap-1.5 px-2 py-1.5 text-xs text-is-text-tertiary">
               <Check size={14} strokeWidth={1.5} aria-hidden="true" />
               Synced
             </span>
-          ) : null /* loading — render nothing until git status resolves */}
+          ) : (
+            // Directional: Upload (push) / Download (pull) / Sync (diverged).
+            <button
+              type="button"
+              className={barBtn}
+              disabled={busy}
+              onClick={() => void sync()}
+              title={syncView.label}
+            >
+              {syncView.direction === "pull" ? (
+                <DownloadCloud size={14} strokeWidth={1.333} aria-hidden="true" />
+              ) : syncView.direction === "both" ? (
+                <RefreshCw size={14} strokeWidth={1.333} aria-hidden="true" />
+              ) : (
+                <UploadCloud size={14} strokeWidth={1.333} aria-hidden="true" />
+              )}
+              {syncView.verb}
+            </button>
+          )}
           {!isReadme && (
             <ExportMenu
               disabled={busy || exporting}
@@ -367,8 +395,8 @@ function NotePane({
               onChange={(doc) => {
                 draftRef.current = doc;
                 if (doc !== savedRef.current) {
-                  // An edit means local is ahead of remote until the next Sync.
-                  setSyncState((s) => (s === "syncing" ? s : "unsynced"));
+                  // An edit means there's local work to send up until the next sync.
+                  setSyncView((s) => (s === "syncing" ? s : LOCAL_EDITS_BADGE));
                   scheduleSave();
                 }
               }}

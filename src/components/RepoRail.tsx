@@ -1,5 +1,8 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
   Download,
   FolderInput,
   FolderPlus,
@@ -8,39 +11,36 @@ import {
   RefreshCw,
 } from "lucide-react";
 import type { CloneRecord, CloneStatus, Space } from "../lib/cli";
-import { cn } from "../lib/cn";
+import { deriveSyncBadge, type SyncBadge } from "../lib/sync-state";
 
 // The left rail: your repos for the active context (it reacts to the header
 // context switcher). A cloned repo opens the editor on click, with a sync dot;
 // a remote-only repo clones via its row menu. The full repo management lives in
 // a per-row "⋯" menu so the list stays legible (the "clean sidebar" choice).
 
-function needsSync(status: CloneStatus | undefined): boolean {
-  return !!status && (!!status.ahead || !!status.behind || status.dirty);
+function badgeOf(status: CloneStatus | undefined): SyncBadge | undefined {
+  return status ? deriveSyncBadge(status) : undefined;
 }
 
-function syncTitle(status: CloneStatus | undefined, failed: boolean): string {
-  if (!status) return failed ? "status unavailable" : "checking…";
-  if (!needsSync(status)) return "synced";
-  const parts: string[] = [];
-  if (status.behind) parts.push(`${status.behind} behind`);
-  if (status.ahead) parts.push(`${status.ahead} ahead`);
-  if (status.dirty) parts.push("uncommitted changes");
-  return parts.join(", ");
-}
-
-// A small status dot: accent when there's something to sync, faint otherwise.
-function SyncDot({ status, failed }: { status: CloneStatus | undefined; failed: boolean }) {
-  return (
-    <span
-      title={syncTitle(status, failed)}
-      aria-hidden="true"
-      className={cn(
-        "h-1.5 w-1.5 shrink-0 rounded-full",
-        needsSync(status) ? "bg-is-accent" : "bg-is-text-tertiary/30",
-      )}
-    />
-  );
+// Directional sync glyph, silent when synced: ↑ upload, ↓ download, ↕ diverged.
+// A failed status (unknown) shows a faint neutral dot so genuinely-unsynced work
+// is never masked as clean; a still-checking status stays silent (optimistic).
+// Rendered in a fixed-width slot so synced and unsynced rows stay aligned.
+function SyncIndicator({ badge, failed }: { badge: SyncBadge | undefined; failed: boolean }) {
+  if (!badge) {
+    if (!failed) return null;
+    return (
+      <span
+        title="status unavailable"
+        aria-hidden="true"
+        className="h-1.5 w-1.5 rounded-full bg-is-text-tertiary/30"
+      />
+    );
+  }
+  if (badge.synced) return null; // silent-synced — the good state earns no glyph
+  const Icon =
+    badge.direction === "pull" ? ArrowDown : badge.direction === "both" ? ArrowUpDown : ArrowUp;
+  return <Icon size={13} strokeWidth={1.5} className="text-is-accent" aria-label={badge.label} />;
 }
 
 const rowMenuItem =
@@ -95,20 +95,24 @@ function RepoRow({
   onSync: (repoId: string, path: string, slug: string) => void;
 }) {
   if (clone) {
-    const sync = needsSync(status);
+    const badge = badgeOf(status);
+    const sync = !!badge && !badge.synced;
     return (
       <li
         title={clone.path}
         className="group relative flex items-center gap-2.5 rounded-md px-2.5 py-2 transition hover:bg-is-surface-alt"
       >
-        {/* Whole-row open; the dot/name pass clicks through to it. */}
+        {/* Whole-row open; the glyph/name pass clicks through to it. */}
         <button
           type="button"
           onClick={() => onOpen(clone)}
           aria-label={`Open ${space.slug}`}
           className="absolute inset-0 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
         />
-        <SyncDot status={status} failed={failed} />
+        {/* Fixed slot so silent-synced rows align with unsynced ones. */}
+        <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center">
+          <SyncIndicator badge={badge} failed={failed} />
+        </span>
         <span className="pointer-events-none min-w-0 flex-1 truncate text-[13px] tracking-[-0.01em] text-is-text">
           {space.slug}
         </span>
@@ -124,8 +128,8 @@ function RepoRow({
             <button
               type="button"
               onClick={() => onSync(space.repo_id, clone.path, space.slug)}
-              title={syncTitle(status, failed)}
-              aria-label={`Sync ${space.slug}`}
+              title={badge.label}
+              aria-label={`${badge.verb} ${space.slug}`}
               className="relative shrink-0 rounded p-1 text-is-text-tertiary opacity-0 transition hover:text-is-text focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring group-hover:opacity-100"
             >
               <RefreshCw size={13} strokeWidth={1.333} aria-hidden="true" />
