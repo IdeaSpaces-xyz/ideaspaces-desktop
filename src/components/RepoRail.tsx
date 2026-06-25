@@ -3,6 +3,7 @@ import {
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
+  Cloud,
   Download,
   FolderInput,
   FolderPlus,
@@ -10,17 +11,15 @@ import {
   MoreHorizontal,
   RefreshCw,
 } from "lucide-react";
-import type { CloneRecord, CloneStatus, Space } from "../lib/cli";
-import { deriveSyncBadge, type SyncBadge } from "../lib/sync-state";
+import type { Space } from "../lib/cli";
+import type { RepoEntries, RepoEntry } from "../lib/repo-entry";
+import type { SyncBadge } from "../lib/sync-state";
 
 // The left rail: your repos for the active context (it reacts to the header
-// context switcher). A cloned repo opens the editor on click, with a sync dot;
-// a remote-only repo clones via its row menu. The full repo management lives in
-// a per-row "⋯" menu so the list stays legible (the "clean sidebar" choice).
-
-function badgeOf(status: CloneStatus | undefined): SyncBadge | undefined {
-  return status ? deriveSyncBadge(status) : undefined;
-}
+// context switcher). On-disk repos open the editor on click, with a directional
+// sync glyph; online-only repos are made available offline from a "⋯" menu.
+// Clones outside the active context surface in an "On this device" group so a
+// repo you have offline is never lost behind the context filter.
 
 // Directional sync glyph, silent when synced: ↑ upload, ↓ download, ↕ diverged.
 // A failed status (unknown) shows a faint neutral dot so genuinely-unsynced work
@@ -62,7 +61,7 @@ function RowMenu({ children, label }: { children: React.ReactNode; label: string
         <DropdownMenu.Content
           align="end"
           sideOffset={4}
-          className="z-50 min-w-[11rem] rounded-lg border border-is-border bg-is-surface p-1 shadow-md"
+          className="z-50 min-w-[13rem] rounded-lg border border-is-border bg-is-surface p-1 shadow-md"
         >
           {children}
         </DropdownMenu.Content>
@@ -71,11 +70,114 @@ function RowMenu({ children, label }: { children: React.ReactNode; label: string
   );
 }
 
+// A repo that's on disk (available or local-only): opens on click, shows a
+// directional sync glyph, and offers Sync on hover when there's work.
+function DiskRow({
+  entry,
+  busy,
+  onOpen,
+  onSync,
+}: {
+  entry: RepoEntry;
+  busy: boolean;
+  onOpen: (entry: RepoEntry) => void;
+  onSync: (repoId: string, path: string, slug: string) => void;
+}) {
+  const badge = entry.sync;
+  const sync = !!badge && !badge.synced;
+  const clonePath = entry.clone?.path;
+  return (
+    <li
+      title={clonePath}
+      className="group relative flex items-center gap-2.5 rounded-md px-2.5 py-2 transition hover:bg-is-surface-alt"
+    >
+      {/* Whole-row open; the glyph/name pass clicks through to it. */}
+      <button
+        type="button"
+        onClick={() => onOpen(entry)}
+        aria-label={`Open ${entry.slug}`}
+        className="absolute inset-0 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
+      />
+      {/* Fixed slot so silent-synced rows align with unsynced ones. */}
+      <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center">
+        <SyncIndicator badge={badge} failed={entry.statusFailed} />
+      </span>
+      <span className="pointer-events-none min-w-0 flex-1 truncate text-[13px] tracking-[-0.01em] text-is-text">
+        {entry.slug}
+      </span>
+      {sync &&
+        clonePath &&
+        (busy ? (
+          <RefreshCw
+            size={13}
+            strokeWidth={1.333}
+            className="relative shrink-0 animate-spin text-is-text-tertiary"
+            aria-hidden="true"
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => onSync(entry.repoId, clonePath, entry.slug)}
+            title={badge.label}
+            aria-label={`${badge.verb} ${entry.slug}`}
+            className="relative shrink-0 rounded p-1 text-is-text-tertiary opacity-0 transition hover:text-is-text focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring group-hover:opacity-100"
+          >
+            <RefreshCw size={13} strokeWidth={1.333} aria-hidden="true" />
+          </button>
+        ))}
+    </li>
+  );
+}
+
+// An online-only repo: not on disk. A faded name + cloud glyph; make it
+// available offline (or pick a folder / link one you already have) from the menu.
+function CloudRow({
+  entry,
+  busy,
+  onClone,
+  onCloneTo,
+  onLinkExisting,
+}: {
+  entry: RepoEntry;
+  busy: boolean;
+  onClone: (space: Space) => void;
+  onCloneTo: (space: Space) => void;
+  onLinkExisting: (space: Space) => void;
+}) {
+  const space = entry.space;
+  return (
+    <li className="group flex items-center gap-2.5 rounded-md px-2.5 py-2 hover:bg-is-surface-alt">
+      <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center">
+        <Cloud size={13} strokeWidth={1.5} className="text-is-text-tertiary/70" aria-label="online only" />
+      </span>
+      <span className="min-w-0 flex-1 truncate text-[13px] tracking-[-0.01em] text-is-text-secondary">
+        {entry.slug}
+      </span>
+      {space &&
+        (busy ? (
+          <RefreshCw size={13} strokeWidth={1.333} className="shrink-0 animate-spin text-is-text-tertiary" aria-hidden="true" />
+        ) : (
+          <RowMenu label={`Actions for ${entry.slug}`}>
+            <DropdownMenu.Item className={rowMenuItem} onSelect={() => onClone(space)}>
+              <Download size={14} strokeWidth={1.333} className="text-is-text-tertiary" aria-hidden="true" />
+              Make available offline
+            </DropdownMenu.Item>
+            <DropdownMenu.Item className={rowMenuItem} onSelect={() => onCloneTo(space)}>
+              <FolderInput size={14} strokeWidth={1.333} className="text-is-text-tertiary" aria-hidden="true" />
+              Make available offline at…
+            </DropdownMenu.Item>
+            <DropdownMenu.Item className={rowMenuItem} onSelect={() => onLinkExisting(space)}>
+              <Link2 size={14} strokeWidth={1.333} className="text-is-text-tertiary" aria-hidden="true" />
+              Link a folder I already have…
+            </DropdownMenu.Item>
+          </RowMenu>
+        ))}
+    </li>
+  );
+}
+
 function RepoRow({
-  space,
-  clone,
-  status,
-  failed,
+  entry,
   busy,
   onOpen,
   onClone,
@@ -83,99 +185,32 @@ function RepoRow({
   onLinkExisting,
   onSync,
 }: {
-  space: Space;
-  clone: CloneRecord | undefined;
-  status: CloneStatus | undefined;
-  failed: boolean;
+  entry: RepoEntry;
   busy: boolean;
-  onOpen: (clone: CloneRecord) => void;
+  onOpen: (entry: RepoEntry) => void;
   onClone: (space: Space) => void;
   onCloneTo: (space: Space) => void;
   onLinkExisting: (space: Space) => void;
   onSync: (repoId: string, path: string, slug: string) => void;
 }) {
-  if (clone) {
-    const badge = badgeOf(status);
-    const sync = !!badge && !badge.synced;
-    return (
-      <li
-        title={clone.path}
-        className="group relative flex items-center gap-2.5 rounded-md px-2.5 py-2 transition hover:bg-is-surface-alt"
-      >
-        {/* Whole-row open; the glyph/name pass clicks through to it. */}
-        <button
-          type="button"
-          onClick={() => onOpen(clone)}
-          aria-label={`Open ${space.slug}`}
-          className="absolute inset-0 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
-        />
-        {/* Fixed slot so silent-synced rows align with unsynced ones. */}
-        <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center">
-          <SyncIndicator badge={badge} failed={failed} />
-        </span>
-        <span className="pointer-events-none min-w-0 flex-1 truncate text-[13px] tracking-[-0.01em] text-is-text">
-          {space.slug}
-        </span>
-        {sync &&
-          (busy ? (
-            <RefreshCw
-              size={13}
-              strokeWidth={1.333}
-              className="relative shrink-0 animate-spin text-is-text-tertiary"
-              aria-hidden="true"
-            />
-          ) : (
-            <button
-              type="button"
-              onClick={() => onSync(space.repo_id, clone.path, space.slug)}
-              title={badge.label}
-              aria-label={`${badge.verb} ${space.slug}`}
-              className="relative shrink-0 rounded p-1 text-is-text-tertiary opacity-0 transition hover:text-is-text focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring group-hover:opacity-100"
-            >
-              <RefreshCw size={13} strokeWidth={1.333} aria-hidden="true" />
-            </button>
-          ))}
-      </li>
-    );
+  if (entry.clone) {
+    return <DiskRow entry={entry} busy={busy} onOpen={onOpen} onSync={onSync} />;
   }
-
-  // Remote-only: not on disk. Clone (or clone-to / link) from the row menu.
   return (
-    <li className="group flex items-center gap-2.5 rounded-md px-2.5 py-2 hover:bg-is-surface-alt">
-      <span
-        className="h-1.5 w-1.5 shrink-0 rounded-full border border-is-text-tertiary/40"
-        aria-hidden="true"
-      />
-      <span className="min-w-0 flex-1 truncate text-[13px] tracking-[-0.01em] text-is-text-secondary">
-        {space.slug}
-      </span>
-      {busy ? (
-        <RefreshCw size={13} strokeWidth={1.333} className="shrink-0 animate-spin text-is-text-tertiary" aria-hidden="true" />
-      ) : (
-        <RowMenu label={`Actions for ${space.slug}`}>
-          <DropdownMenu.Item className={rowMenuItem} onSelect={() => onClone(space)}>
-            <Download size={14} strokeWidth={1.333} className="text-is-text-tertiary" aria-hidden="true" />
-            Clone
-          </DropdownMenu.Item>
-          <DropdownMenu.Item className={rowMenuItem} onSelect={() => onCloneTo(space)}>
-            <FolderInput size={14} strokeWidth={1.333} className="text-is-text-tertiary" aria-hidden="true" />
-            Clone to…
-          </DropdownMenu.Item>
-          <DropdownMenu.Item className={rowMenuItem} onSelect={() => onLinkExisting(space)}>
-            <Link2 size={14} strokeWidth={1.333} className="text-is-text-tertiary" aria-hidden="true" />
-            Link an existing folder…
-          </DropdownMenu.Item>
-        </RowMenu>
-      )}
-    </li>
+    <CloudRow
+      entry={entry}
+      busy={busy}
+      onClone={onClone}
+      onCloneTo={onCloneTo}
+      onLinkExisting={onLinkExisting}
+    />
   );
 }
 
+const sectionLabel = "px-2.5 pb-1 pt-2 text-[11px] uppercase tracking-[0.1em] text-is-text-tertiary";
+
 export function RepoRail({
-  spaces,
-  cloneIndex,
-  statuses,
-  failedStatuses,
+  entries,
   busyIds,
   status,
   error,
@@ -190,15 +225,12 @@ export function RepoRail({
   onRefresh,
   refreshing,
 }: {
-  spaces: Space[];
-  cloneIndex: Map<string, CloneRecord>;
-  statuses: Record<string, CloneStatus>;
-  failedStatuses: Set<string>;
+  entries: RepoEntries;
   busyIds: Set<string>;
   status: "loading" | "loaded" | "error";
   error?: string;
   onReload: () => void;
-  onOpen: (clone: CloneRecord) => void;
+  onOpen: (entry: RepoEntry) => void;
   onClone: (space: Space) => void;
   onCloneTo: (space: Space) => void;
   onLinkExisting: (space: Space) => void;
@@ -208,7 +240,21 @@ export function RepoRail({
   onRefresh: () => void;
   refreshing: boolean;
 }) {
-  const hasClones = spaces.some((s) => cloneIndex.has(s.repo_id));
+  const { inContext, onDevice } = entries;
+  const hasClones = inContext.some((e) => e.clone) || onDevice.length > 0;
+
+  const renderRow = (entry: RepoEntry) => (
+    <RepoRow
+      key={entry.repoId}
+      entry={entry}
+      busy={busyIds.has(entry.repoId)}
+      onOpen={onOpen}
+      onClone={onClone}
+      onCloneTo={onCloneTo}
+      onLinkExisting={onLinkExisting}
+      onSync={onSync}
+    />
+  );
 
   return (
     // Fragment Mono throughout — a clean, technical repo list.
@@ -250,28 +296,23 @@ export function RepoRail({
             </button>
           </p>
         )}
-        {status === "loaded" &&
-          (spaces.length === 0 ? (
-            <p className="px-2 py-2 text-xs text-is-text-tertiary">No repos in this context.</p>
-          ) : (
-            <ul className="flex flex-col gap-0.5">
-              {spaces.map((space) => (
-                <RepoRow
-                  key={space.repo_id}
-                  space={space}
-                  clone={cloneIndex.get(space.repo_id)}
-                  status={statuses[space.repo_id]}
-                  failed={failedStatuses.has(space.repo_id)}
-                  busy={busyIds.has(space.repo_id)}
-                  onOpen={onOpen}
-                  onClone={onClone}
-                  onCloneTo={onCloneTo}
-                  onLinkExisting={onLinkExisting}
-                  onSync={onSync}
-                />
-              ))}
-            </ul>
-          ))}
+        {status === "loaded" && (
+          <>
+            {inContext.length === 0 ? (
+              <p className="px-2 py-2 text-xs text-is-text-tertiary">No repos in this context.</p>
+            ) : (
+              <ul className="flex flex-col gap-0.5">{inContext.map(renderRow)}</ul>
+            )}
+            {onDevice.length > 0 && (
+              <>
+                <h3 className={sectionLabel} title="Repos you have offline, from other contexts">
+                  On this device
+                </h3>
+                <ul className="flex flex-col gap-0.5">{onDevice.map(renderRow)}</ul>
+              </>
+            )}
+          </>
+        )}
       </nav>
 
       <div className="border-t border-is-border p-2">
