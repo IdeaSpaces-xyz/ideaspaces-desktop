@@ -1,6 +1,7 @@
-// The chat compose box — v2 look: a rounded card with the textarea on top and a
-// controls row beneath (model tier + Think toggle on the left, Send / Stop on
-// the right). Owns its draft + model-tier + thinking state and hands a trimmed
+// The chat compose box — v2 look: textarea on top and a controls row beneath
+// (model tier + Think toggle on the left, Send / Stop on the right). Rendered
+// inside ComposerShell, which owns the card chrome (border/background) so the
+// workspace strip can share it. Owns its draft + model-tier + thinking state and hands a trimmed
 // message plus the chosen options to `onSend`. @-mentions / voice are still
 // deferred (the bigger MentionComposer features in is_web).
 
@@ -61,7 +62,9 @@ export function Compose({
     "rounded px-2 py-1 font-chrome text-[11px] uppercase tracking-[0.04em] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-is-focus-ring disabled:opacity-50";
 
   return (
-    <div className="rounded-2xl border border-is-border bg-is-surface p-3.5 shadow-[0_8px_24px_rgba(0,0,0,0.06)]">
+    // No card here — the parent ComposerShell owns the border/background so the
+    // workspace strip above shares the same opaque container (is_web parity).
+    <div className="p-3.5">
       <textarea
         ref={taRef}
         rows={1}

@@ -23,6 +23,7 @@ import { formatAbsoluteDate } from "../conversation/transcript-format";
 import { Compose, type SendOptions } from "../conversation/Compose";
 import { useNodeCache } from "../conversation/useNodeCache";
 import { WorkspaceStrip, type PreviewTarget } from "../conversation/WorkspaceStrip";
+import { ComposerShell } from "../conversation/ComposerShell";
 import { PreviewPane } from "../conversation/PreviewPane";
 import { Resizer } from "./Resizer";
 import { ConversationAssembly } from "./ConversationAssembly";
@@ -403,18 +404,20 @@ function ConversationDetail({
                     </button>
                   </div>
                 )}
-                <WorkspaceStrip
-                  workspace={detail.workspace}
-                  cache={nodeCacheMap}
-                  resolve={resolveNode}
-                  onOpen={openPreview}
-                />
-                <Compose
-                  onSend={(t, opts) => void send(t, opts)}
-                  onStop={stop}
-                  streaming={streaming}
-                  disabled={sending && !streaming}
-                />
+                <ComposerShell>
+                  <WorkspaceStrip
+                    workspace={detail.workspace}
+                    cache={nodeCacheMap}
+                    resolve={resolveNode}
+                    onOpen={openPreview}
+                  />
+                  <Compose
+                    onSend={(t, opts) => void send(t, opts)}
+                    onStop={stop}
+                    streaming={streaming}
+                    disabled={sending && !streaming}
+                  />
+                </ComposerShell>
               </div>
             </div>
           )}
