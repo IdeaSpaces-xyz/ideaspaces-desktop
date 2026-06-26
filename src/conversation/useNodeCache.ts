@@ -54,8 +54,9 @@ export function useNodeCache(repoId: string) {
     [fetchInto],
   );
 
-  // Force a re-fetch (bypassing the requested-once guard) — used after an edit
-  // saves, so the read view reflects the new content.
+  // Force a re-fetch — used after an edit saves, so the read view reflects the
+  // new content. `fetchInto` is the bypass (it doesn't consult `requested`); the
+  // `add` just keeps the set marked for an id that was never resolved first.
   const refresh = useCallback(
     (nodeId: string) => {
       requested.current.add(nodeId);

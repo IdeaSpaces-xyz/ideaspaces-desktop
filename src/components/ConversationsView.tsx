@@ -23,11 +23,11 @@ import { V2Transcript } from "../conversation/V2Transcript";
 import { useChatScroll } from "../conversation/useChatScroll";
 import { formatAbsoluteDate } from "../conversation/transcript-format";
 import { Compose, type SendOptions } from "../conversation/Compose";
-import { useNodeCache } from "../conversation/useNodeCache";
+import { useNodeCache, type NodeState } from "../conversation/useNodeCache";
 import { NotesTrigger } from "../conversation/NotesTrigger";
 import { NotesPanel } from "../conversation/NotesPanel";
 import { ComposerShell } from "../conversation/ComposerShell";
-import { PreviewPane } from "../conversation/PreviewPane";
+import { PreviewPane, type PreviewEdit } from "../conversation/PreviewPane";
 import type { PreviewTarget } from "../conversation/preview-target";
 import { Resizer } from "./Resizer";
 import { ConversationAssembly } from "./ConversationAssembly";
@@ -449,36 +449,15 @@ function ConversationDetail({
               style={{ width: panelWidth }}
             />
           ) : (
-            (() => {
-              const ns = nodeCacheMap.get(panel.target.nodeId);
-              const nodePath = ns?.status === "loaded" ? ns.node.path : undefined;
-              // Editable only when the conversation's repo is available offline:
-              // load/save go through the local clone (write → commit → sync), the
-              // same path EditorSurface uses. Remote-only repos stay read-only.
-              const abs = clone && nodePath ? `${clone.path}/${nodePath}` : undefined;
-              const edit =
-                clone && nodePath && abs
-                  ? {
-                      load: () => readNote(abs),
-                      save: async (content: string) => {
-                        await writeNote(abs, content);
-                        await commitClone(clone.path, `Edit ${nodePath}`, [nodePath]);
-                        await syncClone(clone.path);
-                      },
-                    }
-                  : undefined;
-              return (
-                <PreviewPane
-                  target={panel.target}
-                  nodeState={ns}
-                  edit={edit}
-                  onClose={() => setPanel(null)}
-                  onBack={panel.fromList ? () => setPanel({ kind: "list" }) : undefined}
-                  onSaved={() => refreshNode(panel.target.nodeId)}
-                  style={{ width: panelWidth }}
-                />
-              );
-            })()
+            <NotePreview
+              target={panel.target}
+              nodeState={nodeCacheMap.get(panel.target.nodeId)}
+              clone={clone}
+              width={panelWidth}
+              onClose={() => setPanel(null)}
+              onBack={panel.fromList ? () => setPanel({ kind: "list" }) : undefined}
+              onSaved={() => refreshNode(panel.target.nodeId)}
+            />
           )}
         </>
       )}
@@ -488,6 +467,54 @@ function ConversationDetail({
 
 function Dot() {
   return <span className="h-0.5 w-0.5 rounded-full bg-is-text-tertiary" />;
+}
+
+// The note view of the right panel: the read/edit preview plus the clone-backed
+// edit adapter. Editable only when the conversation's repo is available offline
+// — load/save go through the local clone (read → write → commit → sync, the
+// same path EditorSurface uses); remote-only repos stay read-only (no adapter).
+function NotePreview({
+  target,
+  nodeState,
+  clone,
+  width,
+  onClose,
+  onBack,
+  onSaved,
+}: {
+  target: PreviewTarget;
+  nodeState: NodeState | undefined;
+  clone: CloneRecord | undefined;
+  width: number;
+  onClose: () => void;
+  onBack?: () => void;
+  onSaved: () => void;
+}) {
+  const nodePath = nodeState?.status === "loaded" ? nodeState.node.path : undefined;
+  const abs = clone && nodePath ? `${clone.path}/${nodePath}` : undefined;
+  const edit: PreviewEdit | undefined =
+    clone && nodePath && abs
+      ? {
+          load: () => readNote(abs),
+          save: async (content: string) => {
+            await writeNote(abs, content);
+            await commitClone(clone.path, `Edit ${nodePath}`, [nodePath]);
+            await syncClone(clone.path);
+          },
+        }
+      : undefined;
+
+  return (
+    <PreviewPane
+      target={target}
+      nodeState={nodeState}
+      edit={edit}
+      onClose={onClose}
+      onBack={onBack}
+      onSaved={onSaved}
+      style={{ width }}
+    />
+  );
 }
 
 // The connected Conversations surface — conversations across the active context's
