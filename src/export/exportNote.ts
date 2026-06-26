@@ -6,7 +6,7 @@
 // export format is ours to define.
 
 import { marked } from "marked";
-import { bodyStartOffset } from "../editor/frontmatter";
+import { bodyStartOffset } from "@ideaspaces/editor/frontmatter";
 
 /** The note's markdown body (frontmatter stripped) with its title as the H1. */
 export function noteToMarkdown(content: string, title: string): string {

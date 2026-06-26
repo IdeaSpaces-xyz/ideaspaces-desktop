@@ -18,7 +18,7 @@ import {
   writeTextFile,
   type DirEntry,
 } from "@tauri-apps/plugin-fs";
-import { parseFrontmatter } from "../editor/frontmatter";
+import { parseFrontmatter } from "@ideaspaces/editor/frontmatter";
 
 export interface NoteFile {
   /** Absolute path on disk. */

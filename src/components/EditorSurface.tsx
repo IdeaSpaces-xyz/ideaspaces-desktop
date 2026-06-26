@@ -19,12 +19,11 @@ import {
 } from "lucide-react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import type { WikiLinkResolvedTarget } from "@atomic-editor/editor";
-import { NoteEditor } from "../editor/NoteEditor";
+import { NoteEditor, parseFrontmatter, setFrontmatterName } from "@ideaspaces/editor";
 import { useDir } from "../editor/useDir";
 import { useRecentNotes } from "../editor/useRecentNotes";
 import { useWikiIndex } from "../editor/useWikiIndex";
 import { classifyLink, webUrl } from "../editor/linkResolve";
-import { parseFrontmatter, setFrontmatterName } from "../editor/frontmatter";
 import {
   createFolder,
   createNote,

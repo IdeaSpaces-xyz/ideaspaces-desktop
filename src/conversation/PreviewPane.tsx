@@ -1,8 +1,7 @@
 import { useCallback, useRef, useState, type CSSProperties } from "react";
 import { ArrowLeft, Pencil, X } from "lucide-react";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { NoteEditor } from "../editor/NoteEditor";
-import { bodyStartOffset } from "../editor/frontmatter";
+import { NoteEditor, bodyStartOffset } from "@ideaspaces/editor";
 import { webUrl } from "../editor/linkResolve";
 import { useToast } from "../toast/toast-context";
 import type { NodeState } from "./useNodeCache";

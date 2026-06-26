@@ -2,8 +2,9 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import "@fontsource-variable/inter";
 import "@fontsource/fragment-mono";
-// Sorts Mill Goudy (serif headings) is only used by the editor — imported in
-// the lazy editor chunk (extensions.ts), not here, to keep initial CSS light.
+// Serif headings (prose surfaces + the editor). Loaded here by the host — the
+// shared @ideaspaces/editor package is font-agnostic, so we provide the font.
+import "@fontsource/sorts-mill-goudy";
 import "./index.css";
 import App from "./App";
 import { ToastProvider } from "./toast/ToastProvider";
