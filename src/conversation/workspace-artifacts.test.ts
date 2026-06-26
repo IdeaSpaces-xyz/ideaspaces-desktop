@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { deriveWorkspaceGroups, workspaceIsEmpty } from "./workspace-artifacts";
+import {
+  deriveWorkspaceGroups,
+  workspaceArtifactCount,
+  workspaceIsEmpty,
+} from "./workspace-artifacts";
 
 const ws = (over: Partial<Record<"created" | "modified" | "deleted" | "read" | "mentioned", string[]>>) => ({
   created: [],
@@ -32,5 +36,12 @@ describe("deriveWorkspaceGroups", () => {
   it("workspaceIsEmpty reflects an all-empty surface", () => {
     expect(workspaceIsEmpty(deriveWorkspaceGroups(ws({})))).toBe(true);
     expect(workspaceIsEmpty(deriveWorkspaceGroups(ws({ created: ["a"] })))).toBe(false);
+  });
+
+  it("workspaceArtifactCount sums distinct notes across groups", () => {
+    expect(workspaceArtifactCount(deriveWorkspaceGroups(ws({})))).toBe(0);
+    // 'a' created + read dedupes to created only → counted once; +b, +c = 3.
+    const g = deriveWorkspaceGroups(ws({ created: ["a"], modified: ["b"], read: ["a", "c"] }));
+    expect(workspaceArtifactCount(g)).toBe(3);
   });
 });
