@@ -3,6 +3,12 @@
 What we forged, and what it frees — newest first. Written in our house voice
 (see [`_agent/skills/chronicle.md`](https://github.com/IdeaSpaces-xyz/ideaspaces/blob/main/_agent/skills/chronicle.md) in the root ideaspace). Each release's entry is also its GitHub release notes.
 
+## v0.3.0 · A lamp over the whole workshop
+
+Press **⌘K** and the light falls across every note in your offline repos — name a few words and the one you sought steps forward, ready to open. And the notes a conversation has touched now hang together in a panel at your right hand: read them there, and when one wants a word changed, take it up and rework it in place — **edit and save without leaving the thread**.
+
+→ *Find any note in a keystroke, and revise it where you stand.*
+
 ## v0.2.2 · Patience for a sleeping gate
 
 When the space's server had been idle it woke slowly — and the app, asking too sharply, gave up before it answered (`GET /auth/me timed out`). Now a request that times out is asked once more, after that first knock has roused the gate; the wait passes unseen and Sync goes through.
