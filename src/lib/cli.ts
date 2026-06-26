@@ -380,6 +380,44 @@ export async function getNode(repoId: string, nodeId: string): Promise<NodeDetai
   return parseJson<NodeDetail>(stdout, "node get");
 }
 
+export interface SearchHit {
+  /** Repo-relative path — what the editor opens on click. */
+  path: string;
+  score: number;
+  body_hits: number;
+  name_hits: number;
+  snippet: string;
+  /** 1-based line of the snippet, or null for a filename-only match. */
+  line: number | null;
+}
+
+export interface SearchResponse {
+  query: string;
+  scanned: number;
+  total: number;
+  results: SearchHit[];
+}
+
+/**
+ * Local, repo-level search over one clone's Markdown (drives `search`). Runs
+ * entirely on disk in the clone — no network. The query goes after `--` so it
+ * is always a positional, even if it begins with a dash.
+ */
+export async function searchRepo(
+  clonePath: string,
+  query: string,
+  limit = 10,
+): Promise<SearchResponse> {
+  const { code, stdout, stderr } = await runCli(
+    ["search", "--limit", String(limit), "--json", "--", query],
+    clonePath,
+  );
+  if (code !== 0) {
+    throw new Error(stderr.trim() || `Search failed (exit ${code ?? "unknown"}).`);
+  }
+  return parseJson<SearchResponse>(stdout, "search");
+}
+
 /** Full conversation detail + message history (drives `conversation get`). */
 export async function getConversation(
   repoId: string,

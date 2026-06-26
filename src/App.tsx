@@ -5,6 +5,8 @@ import { RepoRail } from "./components/RepoRail";
 import { ThemeToggle } from "./components/ThemeToggle";
 import { UpdateBanner } from "./updater/UpdateBanner";
 import { UpdatedNotice } from "./updater/UpdatedNotice";
+import { SearchPalette } from "./search/SearchPalette";
+import type { RankedHit, SearchTarget } from "./search/useRepoSearch";
 import { useAuth } from "./auth/useAuth";
 import { useSpaces } from "./spaces/useSpaces";
 import { useSpaceActions } from "./spaces/useSpaceActions";
@@ -52,7 +54,11 @@ function SignedInView({
   const spaces = useSpaces();
   const actions = useSpaceActions(spaces.reload);
   const [activeRef, setActiveRef] = useState<string | undefined>(undefined);
-  const [editingClone, setEditingClone] = useState<CloneRecord | undefined>(undefined);
+  // The open editor: a clone, optionally jumped to a specific note (from search).
+  const [editing, setEditing] = useState<{ clone: CloneRecord; note?: string } | undefined>(
+    undefined,
+  );
+  const [paletteOpen, setPaletteOpen] = useState(false);
 
   // Restore the last-used context once on mount; never clobber a selection the
   // user has already made (cur ?? stored). Saved on every switch below.
@@ -88,6 +94,41 @@ function SignedInView({
     [visibleSpaces, spaces.spaces, spaces.clones, cloneStatuses.statuses, cloneStatuses.failed],
   );
 
+  // Search targets: every available-offline repo in the active context. Online-
+  // only repos aren't on disk to search — counted so the palette can say so.
+  const searchTargets = useMemo<SearchTarget[]>(
+    () =>
+      repoEntries.inContext
+        .filter((e) => e.location !== "online-only" && e.clone)
+        .map((e) => ({ repoId: e.repoId, slug: e.slug, clonePath: e.clone!.path })),
+    [repoEntries.inContext],
+  );
+  const onlineOnlyCount = useMemo(
+    () => repoEntries.inContext.filter((e) => e.location === "online-only").length,
+    [repoEntries.inContext],
+  );
+
+  // ⌘K / Ctrl-K toggles the search palette from anywhere (home or editor).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPaletteOpen((open) => !open);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  const openHit = useCallback(
+    (hit: RankedHit) => {
+      const clone = spaces.clones.find((c) => c.path === hit.clonePath);
+      if (clone) setEditing({ clone, note: hit.path });
+      setPaletteOpen(false);
+    },
+    [spaces.clones],
+  );
+
   return (
     // Fixed viewport height + overflow-hidden so inner panes (the repos list,
     // and the editor's tree vs. preview) each own their scroll instead of the
@@ -97,21 +138,22 @@ function SignedInView({
         contexts={contexts}
         activeContext={activeContext}
         onSelectContext={selectContext}
-        onHome={() => setEditingClone(undefined)}
+        onHome={() => setEditing(undefined)}
         username={spaces.username ?? undefined}
         mode={mode}
         setMode={setMode}
         onSignOut={auth.signOut}
         signingOut={auth.status === "signing-out"}
       />
-      {editingClone ? (
+      {editing ? (
         <Suspense
           fallback={<div className="flex flex-1 items-center justify-center text-sm text-is-text-tertiary">Loading editor…</div>}
         >
           <EditorSurface
-            key={editingClone.path}
-            clone={editingClone}
-            onClose={() => setEditingClone(undefined)}
+            key={`${editing.clone.path}::${editing.note ?? ""}`}
+            clone={editing.clone}
+            initialRelPath={editing.note}
+            onClose={() => setEditing(undefined)}
           />
         </Suspense>
       ) : (
@@ -124,7 +166,7 @@ function SignedInView({
             status={spaces.status}
             error={spaces.error}
             onReload={() => void spaces.reload()}
-            onOpen={(entry) => entry.clone && setEditingClone(entry.clone)}
+            onOpen={(entry) => entry.clone && setEditing({ clone: entry.clone })}
             onClone={actions.clone}
             onCloneTo={actions.cloneTo}
             onLinkExisting={actions.linkExisting}
@@ -152,6 +194,14 @@ function SignedInView({
             </Suspense>
           </main>
         </div>
+      )}
+      {paletteOpen && (
+        <SearchPalette
+          targets={searchTargets}
+          onlineOnlyCount={onlineOnlyCount}
+          onOpen={openHit}
+          onClose={() => setPaletteOpen(false)}
+        />
       )}
       {auth.error && (
         <p className="fixed bottom-3 left-3 z-20 rounded-md border border-is-border bg-is-surface px-3 py-2 text-xs text-is-danger-text shadow-md">
