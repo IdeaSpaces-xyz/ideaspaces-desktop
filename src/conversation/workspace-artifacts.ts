@@ -34,3 +34,8 @@ export function deriveWorkspaceGroups(ws: KeeperWorkspaceSurface): WorkspaceGrou
 export function workspaceIsEmpty(g: WorkspaceGroups): boolean {
   return g.created.length === 0 && g.modified.length === 0 && g.referenced.length === 0;
 }
+
+/** Total distinct notes across the groups — the "Notes · N" count. */
+export function workspaceArtifactCount(g: WorkspaceGroups): number {
+  return g.created.length + g.modified.length + g.referenced.length;
+}

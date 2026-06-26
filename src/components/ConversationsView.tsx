@@ -22,9 +22,11 @@ import { useChatScroll } from "../conversation/useChatScroll";
 import { formatAbsoluteDate } from "../conversation/transcript-format";
 import { Compose, type SendOptions } from "../conversation/Compose";
 import { useNodeCache } from "../conversation/useNodeCache";
-import { WorkspaceStrip, type PreviewTarget } from "../conversation/WorkspaceStrip";
+import { NotesTrigger } from "../conversation/NotesTrigger";
+import { NotesPanel } from "../conversation/NotesPanel";
 import { ComposerShell } from "../conversation/ComposerShell";
 import { PreviewPane } from "../conversation/PreviewPane";
+import type { PreviewTarget } from "../conversation/preview-target";
 import { Resizer } from "./Resizer";
 import { ConversationAssembly } from "./ConversationAssembly";
 import { useToast } from "../toast/toast-context";
@@ -253,23 +255,26 @@ function ConversationDetail({
     return () => ro.disconnect();
   }, []);
 
-  // Workspace preview: resolve the conversation's touched nodes (names for the
-  // strip, content for the pane) and open one in a resizable right-side pane.
+  // Right notes panel — an observability surface that frees the conversation
+  // column (is_web v2 parity). A small state machine: closed, the notes *list*,
+  // or one note's *preview* (with back-to-list when it came from the list).
   const { cache: nodeCacheMap, resolve: resolveNode } = useNodeCache(repoId);
-  const [preview, setPreview] = useState<PreviewTarget | null>(null);
-  const [previewWidth, setPreviewWidth] = useState(380);
-  const previewContainerRef = useRef<HTMLDivElement>(null);
-  useEffect(() => setPreview(null), [convId]);
-  const openPreview = useCallback(
-    (t: PreviewTarget) => {
-      resolveNode(t.nodeId);
-      setPreview(t);
+  const [panel, setPanel] = useState<
+    null | { kind: "list" } | { kind: "note"; target: PreviewTarget; fromList: boolean }
+  >(null);
+  const [panelWidth, setPanelWidth] = useState(380);
+  const panelContainerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => setPanel(null), [convId]);
+  const openNote = useCallback(
+    (target: PreviewTarget, fromList: boolean) => {
+      resolveNode(target.nodeId);
+      setPanel({ kind: "note", target, fromList });
     },
     [resolveNode],
   );
 
   return (
-    <div ref={previewContainerRef} className="flex h-full min-h-0">
+    <div ref={panelContainerRef} className="flex h-full min-h-0">
       <div className="flex min-h-0 flex-1 flex-col">
         {/* Header — collapses to a thin bar once the thread scrolls. */}
         <div className="shrink-0 border-b border-is-border/60 px-4 sm:px-6">
@@ -405,11 +410,9 @@ function ConversationDetail({
                   </div>
                 )}
                 <ComposerShell>
-                  <WorkspaceStrip
+                  <NotesTrigger
                     workspace={detail.workspace}
-                    cache={nodeCacheMap}
-                    resolve={resolveNode}
-                    onOpen={openPreview}
+                    onOpen={() => setPanel({ kind: "list" })}
                   />
                   <Compose
                     onSend={(t, opts) => void send(t, opts)}
@@ -423,23 +426,35 @@ function ConversationDetail({
           )}
         </div>
       </div>
-      {preview && (
+      {detail && panel && (
         <>
           <Resizer
             side="right"
             min={320}
             max={640}
-            label="Preview width"
-            containerRef={previewContainerRef}
-            width={previewWidth}
-            onResize={setPreviewWidth}
+            label="Notes panel width"
+            containerRef={panelContainerRef}
+            width={panelWidth}
+            onResize={setPanelWidth}
           />
-          <PreviewPane
-            target={preview}
-            nodeState={nodeCacheMap.get(preview.nodeId)}
-            onClose={() => setPreview(null)}
-            style={{ width: previewWidth }}
-          />
+          {panel.kind === "list" ? (
+            <NotesPanel
+              workspace={detail.workspace}
+              cache={nodeCacheMap}
+              resolve={resolveNode}
+              onOpenNote={(t) => openNote(t, true)}
+              onClose={() => setPanel(null)}
+              style={{ width: panelWidth }}
+            />
+          ) : (
+            <PreviewPane
+              target={panel.target}
+              nodeState={nodeCacheMap.get(panel.target.nodeId)}
+              onClose={() => setPanel(null)}
+              onBack={panel.fromList ? () => setPanel({ kind: "list" }) : undefined}
+              style={{ width: panelWidth }}
+            />
+          )}
         </>
       )}
     </div>

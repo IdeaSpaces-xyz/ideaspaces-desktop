@@ -1,12 +1,12 @@
 import { useCallback, type CSSProperties } from "react";
-import { X } from "lucide-react";
+import { ArrowLeft, X } from "lucide-react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { NoteEditor } from "../editor/NoteEditor";
 import { bodyStartOffset } from "../editor/frontmatter";
 import { webUrl } from "../editor/linkResolve";
 import { useToast } from "../toast/toast-context";
 import type { NodeState } from "./useNodeCache";
-import type { PreviewTarget } from "./WorkspaceStrip";
+import type { PreviewTarget } from "./preview-target";
 
 const noop = () => {};
 
@@ -24,11 +24,14 @@ export function PreviewPane({
   target,
   nodeState,
   onClose,
+  onBack,
   style,
 }: {
   target: PreviewTarget;
   nodeState: NodeState | undefined;
   onClose: () => void;
+  /** Return to the notes list (present only when opened from it). */
+  onBack?: () => void;
   style?: CSSProperties;
 }) {
   const toast = useToast();
@@ -55,9 +58,21 @@ export function PreviewPane({
       className="flex min-h-0 shrink-0 flex-col border-l border-is-border bg-is-surface"
     >
       <header className="flex items-center justify-between gap-2 border-b border-is-border px-4 py-2.5">
-        <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-is-text">{title}</p>
-          {node && <p className="truncate text-xs text-is-text-tertiary">{node.path}</p>}
+        <div className="flex min-w-0 items-center gap-2">
+          {onBack && (
+            <button
+              type="button"
+              onClick={onBack}
+              aria-label="Back to notes"
+              className="shrink-0 rounded-md p-1.5 text-is-text-tertiary transition hover:bg-is-surface-alt hover:text-is-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
+            >
+              <ArrowLeft size={16} strokeWidth={1.5} aria-hidden="true" />
+            </button>
+          )}
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium text-is-text">{title}</p>
+            {node && <p className="truncate text-xs text-is-text-tertiary">{node.path}</p>}
+          </div>
         </div>
         <button
           type="button"
