@@ -4,6 +4,7 @@ import { useConversations, type ConversationRow } from "../spaces/useConversatio
 import { NewConversation } from "./NewConversation";
 import { bucketByTime, relativeTime } from "../lib/time";
 import {
+  commitClone,
   getConversation,
   listClones,
   streamConversation,
@@ -12,6 +13,7 @@ import {
   type Space,
   type StreamHandle,
 } from "../lib/cli";
+import { readNote, writeNote } from "../lib/notes";
 import type { KeeperConversationDetail } from "../conversation/keeper-types";
 import {
   createInitialKeeperStreamState,
@@ -258,7 +260,7 @@ function ConversationDetail({
   // Right notes panel — an observability surface that frees the conversation
   // column (is_web v2 parity). A small state machine: closed, the notes *list*,
   // or one note's *preview* (with back-to-list when it came from the list).
-  const { cache: nodeCacheMap, resolve: resolveNode } = useNodeCache(repoId);
+  const { cache: nodeCacheMap, resolve: resolveNode, refresh: refreshNode } = useNodeCache(repoId);
   const [panel, setPanel] = useState<
     null | { kind: "list" } | { kind: "note"; target: PreviewTarget; fromList: boolean }
   >(null);
@@ -447,13 +449,36 @@ function ConversationDetail({
               style={{ width: panelWidth }}
             />
           ) : (
-            <PreviewPane
-              target={panel.target}
-              nodeState={nodeCacheMap.get(panel.target.nodeId)}
-              onClose={() => setPanel(null)}
-              onBack={panel.fromList ? () => setPanel({ kind: "list" }) : undefined}
-              style={{ width: panelWidth }}
-            />
+            (() => {
+              const ns = nodeCacheMap.get(panel.target.nodeId);
+              const nodePath = ns?.status === "loaded" ? ns.node.path : undefined;
+              // Editable only when the conversation's repo is available offline:
+              // load/save go through the local clone (write → commit → sync), the
+              // same path EditorSurface uses. Remote-only repos stay read-only.
+              const abs = clone && nodePath ? `${clone.path}/${nodePath}` : undefined;
+              const edit =
+                clone && nodePath && abs
+                  ? {
+                      load: () => readNote(abs),
+                      save: async (content: string) => {
+                        await writeNote(abs, content);
+                        await commitClone(clone.path, `Edit ${nodePath}`, [nodePath]);
+                        await syncClone(clone.path);
+                      },
+                    }
+                  : undefined;
+              return (
+                <PreviewPane
+                  target={panel.target}
+                  nodeState={ns}
+                  edit={edit}
+                  onClose={() => setPanel(null)}
+                  onBack={panel.fromList ? () => setPanel({ kind: "list" }) : undefined}
+                  onSaved={() => refreshNode(panel.target.nodeId)}
+                  style={{ width: panelWidth }}
+                />
+              );
+            })()
           )}
         </>
       )}

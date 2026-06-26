@@ -24,10 +24,8 @@ export function useNodeCache(repoId: string) {
     requested.current = new Set();
   }, [repoId]);
 
-  const resolve = useCallback(
+  const fetchInto = useCallback(
     (nodeId: string) => {
-      if (requested.current.has(nodeId)) return; // already fetched / in flight
-      requested.current.add(nodeId);
       setCache((c) => new Map(c).set(nodeId, { status: "loading" }));
       getNode(repoId, nodeId)
         .then((node) => {
@@ -47,5 +45,24 @@ export function useNodeCache(repoId: string) {
     [repoId],
   );
 
-  return { cache, resolve };
+  const resolve = useCallback(
+    (nodeId: string) => {
+      if (requested.current.has(nodeId)) return; // already fetched / in flight
+      requested.current.add(nodeId);
+      fetchInto(nodeId);
+    },
+    [fetchInto],
+  );
+
+  // Force a re-fetch (bypassing the requested-once guard) — used after an edit
+  // saves, so the read view reflects the new content.
+  const refresh = useCallback(
+    (nodeId: string) => {
+      requested.current.add(nodeId);
+      fetchInto(nodeId);
+    },
+    [fetchInto],
+  );
+
+  return { cache, resolve, refresh };
 }
