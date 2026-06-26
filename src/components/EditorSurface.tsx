@@ -981,10 +981,28 @@ function FolderNotes({
 // live-preview editor pane on the right. Mirrors is_web v2's repo browser, with
 // the desktop twist that the right pane *is* the editor (no read-only → edit
 // toggle — the live-preview surface is editable in place).
-export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose: () => void }) {
+export function EditorSurface({
+  clone,
+  onClose,
+  initialRelPath,
+}: {
+  clone: CloneRecord;
+  onClose: () => void;
+  /** Open straight to this note (repo-relative path), e.g. from search. */
+  initialRelPath?: string;
+}) {
   const toast = useToast();
-  const [path, setPath] = useState("");
+  // Start in the target note's directory so useDir loads the files we need to
+  // select it; "" (root) otherwise.
+  const [path, setPath] = useState(() => {
+    if (!initialRelPath) return "";
+    const slash = initialRelPath.lastIndexOf("/");
+    return slash === -1 ? "" : initialRelPath.slice(0, slash);
+  });
   const [selected, setSelected] = useState<NoteFile | undefined>(undefined);
+  // One-shot: select the initial note once its directory's files have loaded.
+  // A ref (not state) so navigating away within this mount never re-opens it.
+  const didInitialSelect = useRef(false);
   // Width of the persistent file rail (folders + notes); content takes the rest.
   const [railWidth, setRailWidth] = useState(256);
   // The file rail folds away for full-width content (Obsidian-style).
@@ -1017,6 +1035,15 @@ export function EditorSurface({ clone, onClose }: { clone: CloneRecord; onClose:
   const { index: wikiIndex, reload: reloadWiki } = useWikiIndex(clone.path);
   // Loaded lazily — only while Recent is the active browse view and no note is open.
   const recent = useRecentNotes(clone.path, !selected && browseMode === "recent");
+
+  // Open the initial note (from search) once its directory has loaded — reuses
+  // the exact NoteFile the tree builds, so its title/frontmatter come for free.
+  useEffect(() => {
+    if (didInitialSelect.current || !initialRelPath || status !== "loaded") return;
+    didInitialSelect.current = true;
+    const match = files.find((f) => f.relPath === initialRelPath);
+    if (match) setSelected(match);
+  }, [initialRelPath, status, files]);
 
   // Guard navigation: never leave mid-sync/retitle. There's no unsaved-edits
   // prompt anymore — autosave has already persisted the draft to disk.
