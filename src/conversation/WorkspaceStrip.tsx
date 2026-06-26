@@ -95,7 +95,9 @@ export function WorkspaceStrip({
   };
 
   return (
-    <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+    // A top section of the ComposerShell — its own bottom-border separator (is_web
+    // parity). The shell is opaque, so the thread no longer shows through here.
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-is-border/80 px-3.5 py-2.5">
       <Group label="Created" ids={groups.created} Icon={FilePlus2} labelOf={labelOf} onOpen={onOpen} />
       <Group label="Modified" ids={groups.modified} Icon={FilePen} labelOf={labelOf} onOpen={onOpen} />
       <Group label="Referenced" ids={groups.referenced} Icon={Eye} labelOf={labelOf} onOpen={onOpen} />
