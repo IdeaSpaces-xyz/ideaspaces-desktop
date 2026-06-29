@@ -27,8 +27,9 @@ import { useNodeCache, type NodeState } from "../conversation/useNodeCache";
 import { NotesTrigger } from "../conversation/NotesTrigger";
 import { NotesPanel } from "../conversation/NotesPanel";
 import { ComposerShell } from "../conversation/ComposerShell";
-import { PreviewPane, type PreviewEdit } from "../conversation/PreviewPane";
-import type { PreviewTarget } from "../conversation/preview-target";
+import { PreviewPane, type PreviewEdit, type PreviewTarget } from "@ideaspaces/conversation-ui";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { webUrl } from "../editor/linkResolve";
 import { Resizer } from "./Resizer";
 import { ConversationAssembly } from "./ConversationAssembly";
 import { useToast } from "../toast/toast-context";
@@ -269,7 +270,7 @@ function ConversationDetail({
   useEffect(() => setPanel(null), [convId]);
   const openNote = useCallback(
     (target: PreviewTarget, fromList: boolean) => {
-      resolveNode(target.nodeId);
+      resolveNode(target.id);
       setPanel({ kind: "note", target, fromList });
     },
     [resolveNode],
@@ -451,12 +452,12 @@ function ConversationDetail({
           ) : (
             <NotePreview
               target={panel.target}
-              nodeState={nodeCacheMap.get(panel.target.nodeId)}
+              nodeState={nodeCacheMap.get(panel.target.id)}
               clone={clone}
               width={panelWidth}
               onClose={() => setPanel(null)}
               onBack={panel.fromList ? () => setPanel({ kind: "list" }) : undefined}
-              onSaved={() => refreshNode(panel.target.nodeId)}
+              onSaved={() => refreshNode(panel.target.id)}
             />
           )}
         </>
@@ -490,6 +491,7 @@ function NotePreview({
   onBack?: () => void;
   onSaved: () => void;
 }) {
+  const toast = useToast();
   const nodePath = nodeState?.status === "loaded" ? nodeState.node.path : undefined;
   const abs = clone && nodePath ? `${clone.path}/${nodePath}` : undefined;
   const edit: PreviewEdit | undefined =
@@ -504,6 +506,22 @@ function NotePreview({
         }
       : undefined;
 
+  // Links in the read-only preview: a web address opens the browser; an internal
+  // note link can't be followed here, so say so rather than no-op silently.
+  const onLinkClick = useCallback(
+    (url: string) => {
+      const web = webUrl(url);
+      if (web) {
+        void openUrl(web).catch((err) =>
+          toast(err instanceof Error ? err.message : String(err), "error"),
+        );
+      } else {
+        toast("Open the note in the editor to follow this link.");
+      }
+    },
+    [toast],
+  );
+
   return (
     <PreviewPane
       target={target}
@@ -512,6 +530,8 @@ function NotePreview({
       onClose={onClose}
       onBack={onBack}
       onSaved={onSaved}
+      onLinkClick={onLinkClick}
+      onError={(message) => toast(message, "error")}
       style={{ width }}
     />
   );
