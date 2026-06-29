@@ -58,8 +58,8 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
-    "@ideaspaces/editor": "github:IdeaSpaces-xyz/editor",
     "@ideaspaces/cli": "github:IdeaSpaces-xyz/cli",
+    "@ideaspaces/editor": "github:IdeaSpaces-xyz/editor",
     "@tauri-apps/cli": "^2",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
