@@ -7,7 +7,7 @@ import {
   type WorkspaceGroups,
 } from "./workspace-artifacts";
 import type { NodeState } from "./useNodeCache";
-import type { PreviewTarget } from "./preview-target";
+import type { PreviewTarget } from "@ideaspaces/conversation-ui";
 
 // The right-side notes panel (list mode): every note the conversation touched,
 // grouped Referenced / Modified / Created, as a scrollable observability
@@ -41,7 +41,7 @@ function Group({
             <li key={id}>
               <button
                 type="button"
-                onClick={() => onOpenNote({ nodeId: id, label: name })}
+                onClick={() => onOpenNote({ id, label: name })}
                 title={name}
                 className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left transition-colors hover:bg-is-surface-alt focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
               >
