@@ -29,7 +29,12 @@ export function useNoteTimes(clonePath: string): Map<string, NoteTimeEntry> {
         for (const t of times) next.set(t.path, { createdAt: t.created_at, updatedAt: t.updated_at });
         setMap(next);
       })
-      .catch(() => {
+      .catch((err) => {
+        // Don't fail the list — date sorts just fall back to "no date" ordering.
+        // But surface it: a swallowed error here looks exactly like dead sort
+        // buttons (e.g. a sidecar without the `times` verb). Common cause: a
+        // running dev session still on the pre-`times` sidecar — fully restart.
+        console.error("note times unavailable (date sort will be inert):", err);
         if (alive) setMap(new Map());
       });
     return () => {
