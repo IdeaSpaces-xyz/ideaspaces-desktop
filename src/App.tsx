@@ -58,6 +58,9 @@ function SignedInView({
   const [editing, setEditing] = useState<{ clone: CloneRecord; note?: string } | undefined>(
     undefined,
   );
+  // Repo to preselect in the home composer — set when "Start conversation" is
+  // hit from inside a repo's tree, so the draft opens already scoped to it.
+  const [convoRepoId, setConvoRepoId] = useState<string | undefined>(undefined);
   const [paletteOpen, setPaletteOpen] = useState(false);
 
   // Restore the last-used context once on mount; never clobber a selection the
@@ -70,6 +73,7 @@ function SignedInView({
   const selectContext = useCallback((ref: string) => {
     setActiveRef(ref);
     void setActiveContextRef(ref);
+    setConvoRepoId(undefined); // a pending preselect belongs to the old context
   }, []);
 
   const contexts = useMemo(
@@ -154,6 +158,10 @@ function SignedInView({
             clone={editing.clone}
             initialRelPath={editing.note}
             onClose={() => setEditing(undefined)}
+            onStartConversation={() => {
+              setConvoRepoId(editing.clone.repo_id);
+              setEditing(undefined);
+            }}
           />
         </Suspense>
       ) : (
@@ -190,6 +198,7 @@ function SignedInView({
                 repos={visibleSpaces}
                 reposLoading={spaces.status !== "loaded"}
                 username={spaces.username ?? "you"}
+                preselectRepoId={convoRepoId}
               />
             </Suspense>
           </main>
