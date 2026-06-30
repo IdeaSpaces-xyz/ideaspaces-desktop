@@ -14,7 +14,6 @@ import {
   readTextFile,
   remove,
   rename,
-  stat,
   writeTextFile,
   type DirEntry,
 } from "@tauri-apps/plugin-fs";
@@ -31,8 +30,6 @@ export interface NoteFile {
   title?: string;
   /** Frontmatter `summary`, surfaced as the list subtitle (when present). */
   summary?: string;
-  /** Last-saved time (file mtime) in epoch ms, when listed with `listDir`. */
-  updatedAt?: number;
 }
 
 export interface FolderEntry {
@@ -118,14 +115,9 @@ export async function listDir(cloneDir: string, relPath: string): Promise<DirLis
         return { folder: { name: entry.name, relPath: rel, fileCount: await countMarkdown(abs) } };
       }
       if (entry.isFile && isMarkdown(entry.name)) {
-        const [content, updatedAt] = await Promise.all([
-          readTextFile(abs).catch(() => ""),
-          stat(abs)
-            .then((s) => (s.mtime ? s.mtime.getTime() : 0))
-            .catch(() => 0),
-        ]);
+        const content = await readTextFile(abs).catch(() => "");
         return {
-          file: { path: abs, relPath: rel, name: baseName(entry.name), updatedAt, ...noteMeta(content) },
+          file: { path: abs, relPath: rel, name: baseName(entry.name), ...noteMeta(content) },
         };
       }
       return {};
@@ -170,48 +162,6 @@ export async function listAllNotes(cloneDir: string): Promise<NoteFile[]> {
 
   await walk(root, "");
   return out;
-}
-
-export interface RecentNote extends NoteFile {
-  /** Last-saved time (file mtime) in epoch ms; 0 when unavailable. */
-  updatedAt: number;
-}
-
-/**
- * Every note in the clone with its last-saved mtime and frontmatter title/
- * summary, newest first — the data behind the Recent timeline. Walks like
- * listAllNotes, then reads + stats each file (in parallel across files).
- *
- * Uses file mtime ("last saved") rather than git commit time, by design: it
- * reflects local edits instantly and survives offline work. Reads each note's
- * full content for its title/summary (like listDir) — fine for typical spaces;
- * a head-only read is the follow-up if repos grow large.
- *
- * Notes whose mtime can't be read (permissions/TCC) are omitted — there's no
- * meaningful time to place them on a timeline, and they stay reachable via the
- * folder tree. Avoids a bogus "January 1970" (epoch-0) bucket.
- */
-export async function listRecentNotes(cloneDir: string): Promise<RecentNote[]> {
-  const notes = await listAllNotes(cloneDir);
-  const enriched = await Promise.all(
-    notes.map(async (n): Promise<RecentNote> => {
-      let meta: { title?: string; summary?: string } = {};
-      let updatedAt = 0;
-      try {
-        meta = noteMeta(await readTextFile(n.path));
-      } catch {
-        // Unreadable content — keep the path, skip title/summary.
-      }
-      try {
-        const info = await stat(n.path);
-        updatedAt = info.mtime ? info.mtime.getTime() : 0;
-      } catch {
-        // No mtime (permissions/TCC) — filtered out below.
-      }
-      return { ...n, ...meta, updatedAt };
-    }),
-  );
-  return enriched.filter((n) => n.updatedAt > 0).sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
 /** Read a note's raw content from disk. */

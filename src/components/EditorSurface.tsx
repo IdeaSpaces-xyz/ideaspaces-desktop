@@ -21,7 +21,7 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import type { WikiLinkResolvedTarget } from "@atomic-editor/editor";
 import { NoteEditor, parseFrontmatter, setFrontmatterName } from "@ideaspaces/editor";
 import { useDir } from "../editor/useDir";
-import { useRecentNotes } from "../editor/useRecentNotes";
+import { useNoteTimes, type NoteTimeEntry } from "../editor/useNoteTimes";
 import { useWikiIndex } from "../editor/useWikiIndex";
 import { classifyLink, webUrl } from "../editor/linkResolve";
 import {
@@ -34,9 +34,8 @@ import {
   writeNote,
   type FolderEntry,
   type NoteFile,
-  type RecentNote,
 } from "../lib/notes";
-import { bucketByTime, relativeTime } from "../lib/time";
+import { relativeTime } from "../lib/time";
 import { ask } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { cloneStatus, commitClone, syncClone, type CloneRecord } from "../lib/cli";
@@ -843,92 +842,55 @@ function CreateRow({ onSubmit, onCancel }: { onSubmit: (name: string) => void; o
   );
 }
 
-// The Recent timeline — every note in the clone, grouped by last-saved time
-// (Today / Yesterday / This week / …, is_web v2 parity) newest first. The
-// cross-folder "what changed when" feed; a row opens the note in the editor.
-function RecentTimeline({
-  notes,
-  status,
-  error,
-  disabled,
-  onSelect,
-  onReload,
-}: {
-  notes: RecentNote[];
-  status: "idle" | "loading" | "loaded" | "error";
-  error?: string;
-  disabled: boolean;
-  onSelect: (note: RecentNote) => void;
-  onReload: () => void;
-}) {
-  const buckets = useMemo(() => bucketByTime(notes, (n) => n.updatedAt), [notes]);
+// How the folder's note list is ordered. Name is A→Z; the date sorts use git
+// history (created = first commit, updated = last) — the filesystem can't give
+// these on a clone (mtime/birthtime are the checkout moment).
+type NoteSort = "name" | "updated" | "created";
 
-  if (status === "idle" || status === "loading") {
-    return <p className="text-sm text-is-text-tertiary">Loading…</p>;
-  }
-  if (status === "error") {
-    return (
-      <p className="text-sm text-is-danger-text">
-        {error}{" "}
-        <button
-          type="button"
-          className="underline underline-offset-2 hover:text-is-text"
-          onClick={onReload}
-        >
-          Retry
-        </button>
-      </p>
-    );
-  }
-  if (notes.length === 0) {
-    return <p className="text-sm text-is-text-tertiary">No notes in this space yet.</p>;
-  }
-
+// The sort toggle shown beside the folder's Notes list. Replaces the old
+// Browse/Recent mode switch.
+function SortControl({ value, onChange }: { value: NoteSort; onChange: (s: NoteSort) => void }) {
   return (
-    <div className="flex flex-col gap-8">
-      {buckets.map((bucket) => (
-        <section key={bucket.key}>
-          <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.08em] text-is-text-tertiary">
-            {bucket.label}
-          </p>
-          <ul className="flex flex-col gap-1.5">
-            {bucket.items.map((note) => {
-              const slash = note.relPath.lastIndexOf("/");
-              const dir = slash === -1 ? "" : note.relPath.slice(0, slash);
-              return (
-                <li key={note.relPath}>
-                  <button
-                    type="button"
-                    disabled={disabled}
-                    onClick={() => onSelect(note)}
-                    className="flex w-full items-center gap-3 rounded-lg border border-transparent px-3.5 py-2.5 text-left transition hover:border-is-border hover:bg-is-surface-alt disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
-                  >
-                    <FileText
-                      size={16}
-                      strokeWidth={1.333}
-                      className="shrink-0 text-is-text-tertiary"
-                      aria-hidden="true"
-                    />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[15px] text-is-text">
-                        {note.title || note.name}
-                      </span>
-                      {dir && (
-                        <span className="mt-0.5 block truncate text-xs text-is-text-tertiary">{dir}</span>
-                      )}
-                    </span>
-                    <span className="shrink-0 text-xs text-is-text-tertiary">
-                      {relativeTime(note.updatedAt)}
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
+    <div className="flex shrink-0 items-center rounded-md border border-is-border p-0.5 text-xs">
+      {(["name", "updated", "created"] as const).map((opt) => (
+        <button
+          key={opt}
+          type="button"
+          onClick={() => onChange(opt)}
+          aria-pressed={value === opt}
+          className={cn(
+            "rounded px-2 py-0.5 capitalize transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring",
+            value === opt
+              ? "bg-is-surface-alt text-is-text"
+              : "text-is-text-tertiary hover:text-is-text",
+          )}
+        >
+          {opt}
+        </button>
       ))}
     </div>
   );
+}
+
+// Order a folder's notes by the chosen key. Name is A→Z (case-insensitive);
+// date sorts are newest-first, with undated notes (no git history yet — e.g.
+// just created, not committed) sinking to the bottom.
+function sortNotes(
+  notes: NoteFile[],
+  sort: NoteSort,
+  times: Map<string, NoteTimeEntry>,
+): NoteFile[] {
+  const arr = [...notes];
+  if (sort === "name") {
+    arr.sort((a, b) => (a.title || a.name).localeCompare(b.title || b.name));
+    return arr;
+  }
+  const key = (n: NoteFile) => {
+    const t = times.get(n.relPath);
+    return (sort === "created" ? t?.createdAt : t?.updatedAt) ?? 0;
+  };
+  arr.sort((a, b) => key(b) - key(a));
+  return arr;
 }
 
 // The folder's notes on the landing (no note open), newest-edited first — a
@@ -938,39 +900,46 @@ function FolderNotes({
   notes,
   disabled,
   onSelect,
+  dateOf,
 }: {
   notes: NoteFile[];
   disabled: boolean;
   onSelect: (note: NoteFile) => void;
+  // The timestamp (epoch ms) to show on each row — the git created/updated date
+  // for the active sort, or undefined to show none.
+  dateOf: (note: NoteFile) => number | undefined;
 }) {
   return (
     <ul className="flex flex-col gap-1.5">
-      {notes.map((note) => (
-        <li key={note.relPath}>
-          <button
-            type="button"
-            disabled={disabled}
-            onClick={() => onSelect(note)}
-            className="flex w-full items-center gap-3 rounded-lg border border-transparent px-3.5 py-3 text-left transition hover:border-is-border hover:bg-is-surface-alt disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
-          >
-            <FileText
-              size={16}
-              strokeWidth={1.333}
-              className="shrink-0 text-is-text-tertiary"
-              aria-hidden="true"
-            />
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-[15px] text-is-text">{note.title || note.name}</span>
-              {note.summary && (
-                <span className="mt-0.5 block truncate text-xs text-is-text-tertiary">{note.summary}</span>
-              )}
-            </span>
-            {note.updatedAt ? (
-              <span className="shrink-0 text-xs text-is-text-tertiary">{relativeTime(note.updatedAt)}</span>
-            ) : null}
-          </button>
-        </li>
-      ))}
+      {notes.map((note) => {
+        const date = dateOf(note);
+        return (
+          <li key={note.relPath}>
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => onSelect(note)}
+              className="flex w-full items-center gap-3 rounded-lg border border-transparent px-3.5 py-3 text-left transition hover:border-is-border hover:bg-is-surface-alt disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
+            >
+              <FileText
+                size={16}
+                strokeWidth={1.333}
+                className="shrink-0 text-is-text-tertiary"
+                aria-hidden="true"
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[15px] text-is-text">{note.title || note.name}</span>
+                {note.summary && (
+                  <span className="mt-0.5 block truncate text-xs text-is-text-tertiary">{note.summary}</span>
+                )}
+              </span>
+              {date ? (
+                <span className="shrink-0 text-xs text-is-text-tertiary">{relativeTime(date)}</span>
+              ) : null}
+            </button>
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -1021,8 +990,8 @@ export function EditorSurface({
   const [renaming, setRenaming] = useState<{ relPath: string; kind: "folder" | "note" } | null>(
     null,
   );
-  // Browse the folder tree, or the Recent timeline (all notes by last-saved).
-  const [browseMode, setBrowseMode] = useState<"tree" | "recent">("tree");
+  // How the folder's Notes list is ordered (name / updated / created).
+  const [sort, setSort] = useState<NoteSort>("name");
   const containerRef = useRef<HTMLDivElement>(null);
   // The open note's autosave-flush, registered by NotePane — used to persist its
   // draft before a rename reads the file from disk.
@@ -1032,8 +1001,9 @@ export function EditorSurface({
   }, []);
   const { status, folders, files, error, reload } = useDir(clone.path, path);
   const { index: wikiIndex, reload: reloadWiki } = useWikiIndex(clone.path);
-  // Loaded lazily — only while Recent is the active browse view and no note is open.
-  const recent = useRecentNotes(clone.path, !selected && browseMode === "recent");
+  // Per-note git created/updated times (one cached `git log` pass per clone),
+  // for the date sorts. Empty until it resolves.
+  const noteTimesMap = useNoteTimes(clone.path);
 
   // Open the initial note (from search) once its directory has loaded — reuses
   // the exact NoteFile the tree builds, so its title/frontmatter come for free.
@@ -1269,14 +1239,12 @@ export function EditorSurface({
     if (busy) return; // mid commit/sync — match the Back button's disabled state
     if (selected) {
       await closeNote();
-    } else if (browseMode === "recent") {
-      setBrowseMode("tree"); // Recent → back to the folder tree
     } else if (path) {
       await navigate(path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "");
     } else if (await confirmLeave()) {
       onClose();
     }
-  }, [busy, selected, browseMode, path, closeNote, navigate, confirmLeave, onClose]);
+  }, [busy, selected, path, closeNote, navigate, confirmLeave, onClose]);
 
   // Hardware/keyboard "back": the mouse back button (X1) and ⌘/Ctrl+[.
   useEffect(() => {
@@ -1312,12 +1280,22 @@ export function EditorSurface({
     [files, readme],
   );
   const empty = folders.length === 0 && files.length === 0;
-  // Newest-edited first for the landing. `noteFiles` is memoized above, so this
-  // keys off a stable ref — no duplicated README filter (vs re-deriving here),
-  // and no re-sort on unrelated re-renders (busy / sync / rail toggles).
-  const notesByRecency = useMemo(
-    () => [...noteFiles].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0)),
-    [noteFiles],
+  // The landing's note list, ordered by the active sort (name / git updated /
+  // git created). `noteFiles` and `noteTimesMap` are stable refs, so this only
+  // re-sorts when the listing, the times, or the sort actually change.
+  const sortedNotes = useMemo(
+    () => sortNotes(noteFiles, sort, noteTimesMap),
+    [noteFiles, sort, noteTimesMap],
+  );
+  // The date a row shows, following the sort: created date under "created",
+  // otherwise the updated date (also under plain "name" sort, as a quiet recency
+  // hint). undefined → the row shows no date.
+  const dateOf = useCallback(
+    (note: NoteFile) => {
+      const t = noteTimesMap.get(note.relPath);
+      return sort === "created" ? t?.createdAt : t?.updatedAt;
+    },
+    [noteTimesMap, sort],
   );
 
   return (
@@ -1346,26 +1324,6 @@ export function EditorSurface({
         <div className="min-w-0 flex-1">
           <Breadcrumb slug={clone.slug} segments={segments} onNavigate={(p) => void navigate(p)} />
         </div>
-        {!selected && (
-          <div className="flex shrink-0 items-center rounded-md border border-is-border p-0.5 text-xs">
-            {(["tree", "recent"] as const).map((mode) => (
-              <button
-                key={mode}
-                type="button"
-                onClick={() => setBrowseMode(mode)}
-                aria-pressed={browseMode === mode}
-                className={cn(
-                  "rounded px-2 py-1 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring",
-                  browseMode === mode
-                    ? "bg-is-surface-alt text-is-text"
-                    : "text-is-text-tertiary hover:text-is-text",
-                )}
-              >
-                {mode === "tree" ? "Browse" : "Recent"}
-              </button>
-            ))}
-          </div>
-        )}
         <AddMenu
           onNewNote={() => void createNewNote()}
           onNewFolder={() => void startCreateFolder()}
@@ -1472,7 +1430,7 @@ export function EditorSurface({
           />
         )}
 
-        {/* Content — the open note, the Recent feed, or the folder's README. */}
+        {/* Content — the open note, or the folder's README + sortable notes. */}
         <section
           aria-label="Content"
           className={cn("flex min-w-0 flex-1 overflow-hidden", !selected && "max-md:hidden")}
@@ -1490,20 +1448,6 @@ export function EditorSurface({
               autoFocusTitle={selected.path === newNotePath}
               resolveWiki={resolveWiki}
             />
-          ) : browseMode === "recent" ? (
-            <div className="min-w-0 flex-1 overflow-y-auto">
-              <div className="mx-auto w-full max-w-3xl px-6 py-6">
-                <h1 className="mb-5 text-xl font-medium text-is-text">Recent</h1>
-                <RecentTimeline
-                  notes={recent.notes}
-                  status={recent.status}
-                  error={recent.error}
-                  disabled={busy}
-                  onSelect={(n) => void openNote(n)}
-                  onReload={() => void recent.reload()}
-                />
-              </div>
-            </div>
           ) : (
             <div className="min-w-0 flex-1 overflow-y-auto">
               <div className="mx-auto w-full max-w-3xl px-6 py-8">
@@ -1533,11 +1477,15 @@ export function EditorSurface({
                     )}
                     {noteFiles.length > 0 ? (
                       <>
-                        <SectionLabel>Notes</SectionLabel>
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <SectionLabel>Notes</SectionLabel>
+                          <SortControl value={sort} onChange={setSort} />
+                        </div>
                         <FolderNotes
-                          notes={notesByRecency}
+                          notes={sortedNotes}
                           disabled={busy}
                           onSelect={(n) => void selectNote(n)}
+                          dateOf={dateOf}
                         />
                       </>
                     ) : (
