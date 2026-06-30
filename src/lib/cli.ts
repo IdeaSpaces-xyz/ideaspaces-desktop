@@ -418,6 +418,92 @@ export async function putNode(repoId: string, path: string, content: string): Pr
   }
 }
 
+// ── Sharing (drives the `share` verbs) ────────────────────────────────────────
+export type InviteRole = "MEMBER" | "CLONER" | "READER";
+export type MemberRole = "OWNER" | InviteRole;
+export type CopyAccessLevel = "owner" | "member" | "reader" | "public";
+
+export interface Member {
+  user_id: number;
+  username: string | null;
+  email: string | null;
+  role: MemberRole;
+}
+export interface PendingInvite {
+  invite_id: string;
+  invited_email: string;
+  role: InviteRole;
+}
+export interface InviteResult {
+  email: string;
+  status: string;
+  reason?: string;
+}
+export interface SpaceAccess {
+  root_node_id: string;
+  read_public: boolean;
+  copy_access: CopyAccessLevel;
+}
+
+// Owner-gated verbs surface a 403 as a plain "owner only" message.
+function shareError(stderr: string, code: number | null, verb: string): Error {
+  const msg = stderr.trim();
+  if (/\b403\b|forbidden|permission/i.test(msg)) {
+    return new Error("Only the repo owner can manage sharing.");
+  }
+  return new Error(msg || `${verb} failed (exit ${code ?? "unknown"}).`);
+}
+
+export async function shareAccess(repoId: string): Promise<SpaceAccess> {
+  const { code, stdout, stderr } = await runCli(["share", "access", repoId, "--json"]);
+  if (code !== 0) throw shareError(stderr, code, "share access");
+  return parseJson<SpaceAccess>(stdout, "share access");
+}
+
+export async function shareSetAccess(
+  repoId: string,
+  readPublic: boolean,
+  copy: CopyAccessLevel,
+): Promise<SpaceAccess> {
+  const args = ["share", "set-access", repoId, "--public", String(readPublic), "--copy", copy, "--json"];
+  const { code, stdout, stderr } = await runCli(args);
+  if (code !== 0) throw shareError(stderr, code, "share set-access");
+  return parseJson<SpaceAccess>(stdout, "share set-access");
+}
+
+export async function shareMembers(repoId: string): Promise<Member[]> {
+  const { code, stdout, stderr } = await runCli(["share", "members", repoId, "--json"]);
+  if (code !== 0) throw shareError(stderr, code, "share members");
+  return parseJson<{ members: Member[] }>(stdout, "share members").members;
+}
+
+export async function shareRemoveMember(repoId: string, userId: number): Promise<void> {
+  const { code, stderr } = await runCli(["share", "remove", repoId, String(userId), "--json"]);
+  if (code !== 0) throw shareError(stderr, code, "share remove");
+}
+
+export async function shareInvites(repoId: string): Promise<PendingInvite[]> {
+  const { code, stdout, stderr } = await runCli(["share", "invites", repoId, "--json"]);
+  if (code !== 0) throw shareError(stderr, code, "share invites");
+  return parseJson<{ invites: PendingInvite[] }>(stdout, "share invites").invites;
+}
+
+export async function shareInvite(
+  repoId: string,
+  emails: string[],
+  role: InviteRole,
+): Promise<InviteResult[]> {
+  const args = ["share", "invite", repoId, ...emails, "--role", role, "--json"];
+  const { code, stdout, stderr } = await runCli(args);
+  if (code !== 0) throw shareError(stderr, code, "share invite");
+  return parseJson<{ results: InviteResult[] }>(stdout, "share invite").results;
+}
+
+export async function shareRevoke(repoId: string, inviteId: string): Promise<void> {
+  const { code, stderr } = await runCli(["share", "revoke", repoId, inviteId, "--json"]);
+  if (code !== 0) throw shareError(stderr, code, "share revoke");
+}
+
 export interface SearchHit {
   /** Repo-relative path — what the editor opens on click. */
   path: string;

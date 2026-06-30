@@ -162,6 +162,10 @@ function SignedInView({
               setConvoRepoId(editing.clone.repo_id);
               setEditing(undefined);
             }}
+            canShare={
+              spaces.spaces.find((s) => s.repo_id === editing.clone.repo_id)?.role?.toLowerCase() ===
+              "owner"
+            }
           />
         </Suspense>
       ) : (

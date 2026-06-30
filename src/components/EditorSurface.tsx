@@ -12,6 +12,7 @@ import {
   Link2,
   MessageSquarePlus,
   PanelLeft,
+  Share2,
   PanelLeftClose,
   Pencil,
   Plus,
@@ -48,6 +49,7 @@ import { useToast } from "../toast/toast-context";
 import { Resizer } from "./Resizer";
 import { CopyButton } from "./CopyButton";
 import { ExportMenu } from "./ExportMenu";
+import { ShareDialog } from "./ShareDialog";
 import { printNoteAsPdf, saveNoteAsDocx } from "../export/exportNote";
 import { cn } from "../lib/cn";
 
@@ -958,6 +960,7 @@ export function EditorSurface({
   onClose,
   initialRelPath,
   onStartConversation,
+  canShare,
 }: {
   clone: CloneRecord;
   onClose: () => void;
@@ -965,6 +968,8 @@ export function EditorSurface({
   initialRelPath?: string;
   /** Start a conversation scoped to this repo (hands off to the home draft). */
   onStartConversation: () => void;
+  /** The user owns this repo → show the Share button (access management). */
+  canShare: boolean;
 }) {
   const toast = useToast();
   // Start in the target note's directory so useDir loads the files we need to
@@ -1277,6 +1282,9 @@ export function EditorSurface({
     };
   }, [goBack]);
 
+  // Share dialog (access management) — opened from the toolbar by owners.
+  const [sharing, setSharing] = useState(false);
+
   // Copy the public web link for the current location — the open note, else the
   // folder. `clone.namespace` is the owner handle; the /space/ path route is public.
   const copyLink = useCallback(async () => {
@@ -1318,6 +1326,9 @@ export function EditorSurface({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      {sharing && (
+        <ShareDialog repoId={clone.repo_id} repoLabel={clone.slug} onClose={() => setSharing(false)} />
+      )}
       <div className="flex items-center gap-2 border-b border-is-border px-3 py-2.5">
         {railCollapsed && (
           <button
@@ -1361,6 +1372,18 @@ export function EditorSurface({
           <MessageSquarePlus size={14} strokeWidth={1.5} aria-hidden="true" />
           Discuss
         </button>
+        {canShare && (
+          <button
+            type="button"
+            onClick={() => setSharing(true)}
+            aria-label="Share"
+            title="Manage who can access this repo"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1.5 text-xs text-is-text-tertiary transition hover:bg-is-surface-alt hover:text-is-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
+          >
+            <Share2 size={14} strokeWidth={1.5} aria-hidden="true" />
+            Share
+          </button>
+        )}
         <AddMenu
           onNewNote={() => void createNewNote()}
           onNewFolder={() => void startCreateFolder()}
