@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Lock, MessageSquare, Plus, RefreshCw, X } from "lucide-react";
+import { ArrowLeft, Lock, MessageSquare, RefreshCw, X } from "lucide-react";
 import { useConversations, type ConversationRow } from "../spaces/useConversations";
 import { NewConversation } from "./NewConversation";
 import { bucketByTime, relativeTime } from "../lib/time";
@@ -550,17 +550,15 @@ export function ConversationsView({
 }) {
   const { status, rows, error, truncated, reload } = useConversations(repos);
   const [selected, setSelected] = useState<ConversationRow | null>(null);
-  const [creating, setCreating] = useState(false);
   // Set only for a just-created conversation, to auto-send its first message
   // with the model tier / Think chosen in the draft.
   const [initialSend, setInitialSend] = useState<({ message: string } & SendOptions) | undefined>(
     undefined,
   );
-  // An open conversation belongs to the context it was opened in — drop it (and
-  // any draft) on a context/repo switch so we never show one that's out of scope.
+  // An open conversation belongs to the context it was opened in — drop it on a
+  // context/repo switch so we never show one that's out of scope.
   useEffect(() => {
     setSelected(null);
-    setCreating(false);
     setInitialSend(undefined);
   }, [repos]);
   // Repos still loading → repos is [] and conversations resolve to a false
@@ -581,19 +579,13 @@ export function ConversationsView({
   // message (with the chosen model tier / Think); refresh the list so it appears
   // when you go back.
   const handleCreated = (row: ConversationRow, firstMessage: string, opts: SendOptions) => {
-    setCreating(false);
     setInitialSend({ message: firstMessage, ...opts });
     setSelected(row);
     void reload();
   };
 
-  // The draft and a selected conversation each take the full height (own scroll
-  // + pinned compose), so they render outside the padded list page.
-  if (creating) {
-    return (
-      <NewConversation repos={repos} onBack={() => setCreating(false)} onCreated={handleCreated} />
-    );
-  }
+  // A selected conversation takes the full height (own scroll + pinned compose),
+  // so it renders outside the padded list page.
   if (selected) {
     return (
       <ConversationDetail
@@ -607,19 +599,11 @@ export function ConversationsView({
 
   return (
     <div className="mx-auto w-full max-w-2xl px-6 py-8">
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-sm font-medium text-is-text-secondary">Conversations</h2>
-        {repos.length > 0 && (
-          <button
-            type="button"
-            onClick={() => setCreating(true)}
-            className="inline-flex items-center gap-1.5 rounded-md border border-is-border bg-is-surface px-2.5 py-1.5 text-xs text-is-text-secondary transition hover:border-is-accent hover:text-is-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
-          >
-            <Plus size={14} strokeWidth={1.5} aria-hidden="true" />
-            New conversation
-          </button>
-        )}
-      </div>
+      {repos.length > 0 && <NewConversation repos={repos} onCreated={handleCreated} />}
+
+      <h2 className="mb-3 font-chrome text-[11px] uppercase tracking-[0.08em] text-is-text-tertiary">
+        Conversations
+      </h2>
 
           {effectiveStatus === "loading" && (
             <p className="text-sm text-is-text-tertiary">Loading conversations…</p>
@@ -663,33 +647,41 @@ export function ConversationsView({
                   </p>
                 </div>
               ) : (
-                <div className="flex flex-col gap-8">
+                <div className="flex flex-col gap-10">
                   {buckets.map((bucket) => (
                     <section key={bucket.key}>
-                      <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.08em] text-is-text-tertiary">
+                      <p className="mb-3 font-chrome text-[11px] uppercase tracking-[0.08em] text-is-text-tertiary">
                         {bucket.label}
                       </p>
-                      <ul className="flex flex-col gap-2">
+                      <ul className="space-y-2">
                         {bucket.items.map((c) => (
                           <li key={c.conversation_id}>
                             <button
                               type="button"
                               onClick={() => setSelected(c)}
-                              className="block w-full rounded-lg border border-is-border bg-is-surface px-4 py-3 text-left transition hover:border-is-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
+                              className="block w-full rounded-lg border border-is-border bg-is-surface px-4 py-3.5 text-left transition-colors hover:bg-is-surface-alt focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
                             >
                               <span className="flex items-baseline justify-between gap-3">
-                                <span className="truncate font-medium text-is-text">{c.name || "Untitled"}</span>
-                                <span className="shrink-0 text-xs text-is-text-tertiary">
+                                <span className="truncate font-prose text-base leading-snug text-is-text">
+                                  {c.name || "Untitled"}
+                                </span>
+                                <span className="shrink-0 font-chrome text-[11px] text-is-text-tertiary">
                                   {relativeTime(c.updated_at)}
                                 </span>
                               </span>
                               {c.summary && (
-                                <span className="mt-0.5 block line-clamp-2 text-xs text-is-text-secondary">
+                                <span className="mt-1 block truncate text-sm leading-snug text-is-text-secondary">
                                   {c.summary}
                                 </span>
                               )}
-                              <span className="mt-1 block text-xs text-is-text-tertiary">
-                                {c.repoSlug} · {c.message_count} message{c.message_count === 1 ? "" : "s"}
+                              <span className="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1 font-chrome text-[11px] text-is-text-tertiary">
+                                <span>{c.repoSlug}</span>
+                                {c.message_count > 0 && (
+                                  <>
+                                    <span className="h-0.5 w-0.5 rounded-full bg-is-text-tertiary" aria-hidden="true" />
+                                    <span>{c.message_count} msg</span>
+                                  </>
+                                )}
                               </span>
                             </button>
                           </li>

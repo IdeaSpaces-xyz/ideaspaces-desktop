@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { ArrowLeft, Bot, Check, ChevronsUpDown, FolderGit2 } from "lucide-react";
+import { Bot, Check, ChevronsUpDown, FolderGit2 } from "lucide-react";
 import { createConversation, listAgents, type Agent, type Space } from "../lib/cli";
 import type { ConversationRow } from "../spaces/useConversations";
 import { useToast } from "../toast/toast-context";
@@ -12,14 +12,13 @@ import { Compose, type SendOptions } from "../conversation/Compose";
 // the parent hands off to the live ConversationDetail (which auto-sends the
 // message). The pickers are only here, in the draft; once created the repo is
 // locked (the "locked at first message" decision). Mirrors is_web's
-// NewConversationDraft (repo + agent ChipPicker + composer).
+// NewConversationDraft: an inline block (repo + agent ChipPicker + composer) at
+// the top of the conversation list, not a separate screen.
 export function NewConversation({
   repos,
-  onBack,
   onCreated,
 }: {
   repos: Space[];
-  onBack: () => void;
   onCreated: (row: ConversationRow, firstMessage: string, opts: SendOptions) => void;
 }) {
   const toast = useToast();
@@ -80,18 +79,8 @@ export function NewConversation({
   };
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-3xl flex-col px-6">
-      <header className="shrink-0 pb-3 pt-6">
-        <button
-          type="button"
-          onClick={onBack}
-          className="mb-3 inline-flex items-center gap-1 text-xs text-is-text-tertiary transition hover:text-is-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
-        >
-          <ArrowLeft size={14} strokeWidth={1.333} aria-hidden="true" />
-          Conversations
-        </button>
-        <h2 className="text-lg font-medium text-is-text">New conversation</h2>
-        <div className="mt-2 flex flex-wrap items-center gap-2">
+    <section aria-label="Start a conversation" className="mb-10">
+      <div className="mb-2 flex flex-wrap items-center gap-2">
           <ChipPicker
             ariaLabel="Context repo"
             heading="Context repo"
@@ -122,23 +111,20 @@ export function NewConversation({
             footer={agentsNote ? <Note>{agentsNote}</Note> : undefined}
           />
         </div>
-      </header>
-
-      <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-6 text-center">
-        <p className="max-w-sm text-sm text-is-text-tertiary">
-          {repoId
-            ? "Send the first message. The context repo is the agent's point of view, and locks once the conversation starts."
-            : "Pick a context repo above — the agent's point of view — to begin."}
-        </p>
+      <div className="rounded-2xl border border-is-border bg-is-surface">
+        <Compose
+          onSend={(t, opts) => void send(t, opts)}
+          onStop={() => {}}
+          streaming={false}
+          disabled={busy || !repoId}
+        />
       </div>
-
-      <Compose
-        onSend={(t, opts) => void send(t, opts)}
-        onStop={() => {}}
-        streaming={false}
-        disabled={busy || !repoId}
-      />
-    </div>
+      {!repoId && (
+        <p className="mt-2 font-chrome text-[11px] text-is-text-tertiary">
+          Pick a context repo above to begin — the agent’s point of view, locked once the conversation starts.
+        </p>
+      )}
+    </section>
   );
 }
 
