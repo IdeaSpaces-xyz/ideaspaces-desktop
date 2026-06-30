@@ -402,6 +402,22 @@ export async function noteTimes(clonePath: string): Promise<NoteTimes[]> {
   return parseJson<{ files: NoteTimes[] }>(stdout, "times").files;
 }
 
+/**
+ * Write a note's content on the server (drives `node put`) — the conversation
+ * preview's online edit. No clone needed, so online-only notes are editable;
+ * 403 (no write access) surfaces as a friendly read-only message.
+ */
+export async function putNode(repoId: string, path: string, content: string): Promise<void> {
+  const { code, stderr } = await runCli(["node", "put", repoId, path, "--content", content]);
+  if (code !== 0) {
+    const msg = stderr.trim();
+    if (/\b403\b|forbidden|permission|access/i.test(msg)) {
+      throw new Error("You don't have write access to this repo.");
+    }
+    throw new Error(msg || `Could not save note (exit ${code ?? "unknown"}).`);
+  }
+}
+
 export interface SearchHit {
   /** Repo-relative path — what the editor opens on click. */
   path: string;
