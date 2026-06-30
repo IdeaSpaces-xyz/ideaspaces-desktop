@@ -9,6 +9,7 @@ import {
   FileText,
   Folder,
   FolderPlus,
+  Link2,
   MessageSquarePlus,
   PanelLeft,
   PanelLeftClose,
@@ -39,6 +40,8 @@ import {
 import { relativeTime } from "../lib/time";
 import { ask } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { writeText } from "@tauri-apps/plugin-clipboard-manager";
+import { spaceUrl } from "../lib/web";
 import { cloneStatus, commitClone, syncClone, type CloneRecord } from "../lib/cli";
 import { deriveSyncBadge, type SyncBadge } from "../lib/sync-state";
 import { useToast } from "../toast/toast-context";
@@ -1274,6 +1277,17 @@ export function EditorSurface({
     };
   }, [goBack]);
 
+  // Copy the public web link for the current location — the open note, else the
+  // folder. `clone.namespace` is the owner handle; the /space/ path route is public.
+  const copyLink = useCallback(async () => {
+    try {
+      await writeText(spaceUrl(clone.namespace, clone.slug, selected?.relPath ?? path));
+      toast("Link copied");
+    } catch (err) {
+      toast(errMessage(err), "error");
+    }
+  }, [clone.namespace, clone.slug, selected, path, toast]);
+
   const segments = path ? path.split("/") : [];
   // Title is the current folder name, or the repo itself at the root.
   const title = segments.length ? segments[segments.length - 1] : clone.slug;
@@ -1328,6 +1342,15 @@ export function EditorSurface({
         <div className="min-w-0 flex-1">
           <Breadcrumb slug={clone.slug} segments={segments} onNavigate={(p) => void navigate(p)} />
         </div>
+        <button
+          type="button"
+          onClick={() => void copyLink()}
+          aria-label="Copy link"
+          title={`Copy link to ${selected ? "this note" : "this folder"} on the web`}
+          className="inline-flex shrink-0 items-center rounded-md p-1.5 text-is-text-tertiary transition hover:bg-is-surface-alt hover:text-is-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
+        >
+          <Link2 size={15} strokeWidth={1.5} aria-hidden="true" />
+        </button>
         <button
           type="button"
           onClick={onStartConversation}
