@@ -541,10 +541,13 @@ export function ConversationsView({
   repos,
   reposLoading,
   username,
+  preselectRepoId,
 }: {
   repos: Space[];
   reposLoading: boolean;
   username: string;
+  /** Repo to preselect in the start-conversation draft (e.g. from a repo tree). */
+  preselectRepoId?: string;
 }) {
   const { status, rows, error, truncated, reload } = useConversations(repos);
   const [selected, setSelected] = useState<ConversationRow | null>(null);
@@ -597,7 +600,9 @@ export function ConversationsView({
 
   return (
     <div className="mx-auto w-full max-w-2xl px-6 py-8">
-      {repos.length > 0 && <NewConversation repos={repos} onCreated={handleCreated} />}
+      {repos.length > 0 && (
+        <NewConversation repos={repos} preselectRepoId={preselectRepoId} onCreated={handleCreated} />
+      )}
 
       <h2 className="mb-3 font-chrome text-[11px] uppercase tracking-[0.08em] text-is-text-tertiary">
         Conversations

@@ -16,14 +16,20 @@ import { Compose, type SendOptions } from "../conversation/Compose";
 // the top of the conversation list, not a separate screen.
 export function NewConversation({
   repos,
+  preselectRepoId,
   onCreated,
 }: {
   repos: Space[];
+  /** Open already scoped to this repo (e.g. "Start conversation" from its tree). */
+  preselectRepoId?: string;
   onCreated: (row: ConversationRow, firstMessage: string, opts: SendOptions) => void;
 }) {
   const toast = useToast();
-  // Single-repo contexts have no real choice — preselect it.
-  const [repoId, setRepoId] = useState(repos.length === 1 ? repos[0].repo_id : "");
+  // Preselect the repo we were sent from, else the only repo, else none.
+  const [repoId, setRepoId] = useState(
+    (preselectRepoId && repos.some((r) => r.repo_id === preselectRepoId) && preselectRepoId) ||
+      (repos.length === 1 ? repos[0].repo_id : ""),
+  );
   const [agentNodeId, setAgentNodeId] = useState("");
   const [agents, setAgents] = useState<Agent[]>([]);
   const [agentsNote, setAgentsNote] = useState<string | undefined>("Loading agents…");

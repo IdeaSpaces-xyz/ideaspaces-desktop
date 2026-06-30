@@ -9,6 +9,7 @@ import {
   FileText,
   Folder,
   FolderPlus,
+  MessageSquarePlus,
   PanelLeft,
   PanelLeftClose,
   Pencil,
@@ -953,11 +954,14 @@ export function EditorSurface({
   clone,
   onClose,
   initialRelPath,
+  onStartConversation,
 }: {
   clone: CloneRecord;
   onClose: () => void;
   /** Open straight to this note (repo-relative path), e.g. from search. */
   initialRelPath?: string;
+  /** Start a conversation scoped to this repo (hands off to the home draft). */
+  onStartConversation: () => void;
 }) {
   const toast = useToast();
   // Start in the target note's directory so useDir loads the files we need to
@@ -1324,6 +1328,16 @@ export function EditorSurface({
         <div className="min-w-0 flex-1">
           <Breadcrumb slug={clone.slug} segments={segments} onNavigate={(p) => void navigate(p)} />
         </div>
+        <button
+          type="button"
+          onClick={onStartConversation}
+          aria-label="Start a conversation"
+          title="Start a conversation in this repo"
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1.5 text-xs text-is-text-tertiary transition hover:bg-is-surface-alt hover:text-is-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
+        >
+          <MessageSquarePlus size={14} strokeWidth={1.5} aria-hidden="true" />
+          Discuss
+        </button>
         <AddMenu
           onNewNote={() => void createNewNote()}
           onNewFolder={() => void startCreateFolder()}
