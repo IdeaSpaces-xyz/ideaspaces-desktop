@@ -380,6 +380,28 @@ export async function getNode(repoId: string, nodeId: string): Promise<NodeDetai
   return parseJson<NodeDetail>(stdout, "node get");
 }
 
+export interface NoteTimes {
+  /** Repo-relative path (POSIX separators), matching NoteFile.relPath. */
+  path: string;
+  /** First commit that added the note — epoch ms. */
+  created_at: number;
+  /** Most recent commit that touched it — epoch ms. */
+  updated_at: number;
+}
+
+/**
+ * Per-note git created/updated times for a clone (drives the note-list date
+ * sort). From git history, not the filesystem — a clone's mtime/birthtime are
+ * all the checkout moment. Run with the clone as cwd.
+ */
+export async function noteTimes(clonePath: string): Promise<NoteTimes[]> {
+  const { code, stdout, stderr } = await runCli(["times", "--json"], clonePath);
+  if (code !== 0) {
+    throw new Error(stderr.trim() || `Could not read note times (exit ${code ?? "unknown"}).`);
+  }
+  return parseJson<{ files: NoteTimes[] }>(stdout, "times").files;
+}
+
 export interface SearchHit {
   /** Repo-relative path — what the editor opens on click. */
   path: string;
