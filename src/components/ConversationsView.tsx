@@ -4,16 +4,15 @@ import { useConversations, type ConversationRow } from "../spaces/useConversatio
 import { NewConversation } from "./NewConversation";
 import { bucketByTime, relativeTime } from "../lib/time";
 import {
-  commitClone,
   getConversation,
   listClones,
+  putNode,
   streamConversation,
   syncClone,
   type CloneRecord,
   type Space,
   type StreamHandle,
 } from "../lib/cli";
-import { readNote, writeNote } from "../lib/notes";
 import type { KeeperConversationDetail } from "../conversation/keeper-types";
 import {
   createInitialKeeperStreamState,
@@ -453,7 +452,7 @@ function ConversationDetail({
             <NotePreview
               target={panel.target}
               nodeState={nodeCacheMap.get(panel.target.id)}
-              clone={clone}
+              repoId={repoId}
               width={panelWidth}
               onClose={() => setPanel(null)}
               onBack={panel.fromList ? () => setPanel({ kind: "list" }) : undefined}
@@ -470,14 +469,15 @@ function Dot() {
   return <span className="h-0.5 w-0.5 rounded-full bg-is-text-tertiary" />;
 }
 
-// The note view of the right panel: the read/edit preview plus the clone-backed
-// edit adapter. Editable only when the conversation's repo is available offline
-// — load/save go through the local clone (read → write → commit → sync, the
-// same path EditorSurface uses); remote-only repos stay read-only (no adapter).
+// The note view of the right panel: the read/edit preview plus its online edit
+// adapter. The preview reads note content from the server (node get), so edits
+// save back to the server (node put) — no clone needed. That makes online-only
+// notes editable and avoids a clone-vs-server mismatch; the only read-only case
+// left is no write access (a 403 on save, surfaced plainly).
 function NotePreview({
   target,
   nodeState,
-  clone,
+  repoId,
   width,
   onClose,
   onBack,
@@ -485,26 +485,24 @@ function NotePreview({
 }: {
   target: PreviewTarget;
   nodeState: NodeState | undefined;
-  clone: CloneRecord | undefined;
+  repoId: string;
   width: number;
   onClose: () => void;
   onBack?: () => void;
   onSaved: () => void;
 }) {
   const toast = useToast();
-  const nodePath = nodeState?.status === "loaded" ? nodeState.node.path : undefined;
-  const abs = clone && nodePath ? `${clone.path}/${nodePath}` : undefined;
-  const edit: PreviewEdit | undefined =
-    clone && nodePath && abs
-      ? {
-          load: () => readNote(abs),
-          save: async (content: string) => {
-            await writeNote(abs, content);
-            await commitClone(clone.path, `Edit ${nodePath}`, [nodePath]);
-            await syncClone(clone.path);
-          },
-        }
-      : undefined;
+  const node = nodeState?.status === "loaded" ? nodeState.node : undefined;
+  const edit: PreviewEdit | undefined = node
+    ? {
+        // The editor's source is the server content already in hand; save PUTs
+        // the edited doc (frontmatter included) back to the same file.
+        load: async () => node.content,
+        save: async (content: string) => {
+          await putNode(repoId, node.path, content);
+        },
+      }
+    : undefined;
 
   // Links in the read-only preview: a web address opens the browser; an internal
   // note link can't be followed here, so say so rather than no-op silently.
