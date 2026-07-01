@@ -181,7 +181,7 @@ export function ShareDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-[8vh]"
+      className="fixed inset-0 z-50 flex items-start justify-center bg-is-overlay p-4 pt-[8vh]"
       onClick={onClose}
     >
       <div

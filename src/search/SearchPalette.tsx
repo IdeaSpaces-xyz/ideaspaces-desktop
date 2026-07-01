@@ -60,7 +60,7 @@ export function SearchPalette({
       role="dialog"
       aria-modal="true"
       aria-label="Search notes"
-      className="fixed inset-0 z-[60] flex items-start justify-center bg-black/40 p-4 pt-[12vh]"
+      className="fixed inset-0 z-[60] flex items-start justify-center bg-is-overlay p-4 pt-[12vh]"
       onClick={onClose}
     >
       <div
