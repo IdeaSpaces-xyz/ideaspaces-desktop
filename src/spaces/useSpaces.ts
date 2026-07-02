@@ -3,6 +3,19 @@ import { listClones, listSpaces, type CloneRecord, type Space } from "../lib/cli
 
 type SpacesStatus = "loading" | "loaded" | "error";
 
+/** Drop duplicate rows by repo_id, keeping first occurrence. The API can return
+ *  the same repo twice (e.g. surfaced under two memberships); a repo maps to one
+ *  context, so a dup is never a distinct row — it only breaks React list keys
+ *  (duplicate-key warning) downstream. Dedupe once, at the source. */
+function dedupeByRepoId<T extends { repo_id: string }>(items: T[]): T[] {
+  const seen = new Set<string>();
+  return items.filter((it) => {
+    if (seen.has(it.repo_id)) return false;
+    seen.add(it.repo_id);
+    return true;
+  });
+}
+
 export interface SpacesState {
   status: SpacesStatus;
   spaces: Space[];
@@ -35,8 +48,8 @@ export function useSpaces() {
       if (spacesResult.status === "rejected") throw spacesResult.reason;
       setState({
         status: "loaded",
-        spaces: spacesResult.value.repos,
-        clones: clonesResult.status === "fulfilled" ? clonesResult.value : [],
+        spaces: dedupeByRepoId(spacesResult.value.repos),
+        clones: clonesResult.status === "fulfilled" ? dedupeByRepoId(clonesResult.value) : [],
         username: spacesResult.value.username,
       });
     } catch (err) {

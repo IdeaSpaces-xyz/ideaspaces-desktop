@@ -906,19 +906,19 @@ function FolderNotes({
   notes,
   disabled,
   onSelect,
-  dateOf,
+  timesOf,
 }: {
   notes: NoteFile[];
   disabled: boolean;
   onSelect: (note: NoteFile) => void;
-  // The timestamp (epoch ms) to show on each row — the git created/updated date
-  // for the active sort, or undefined to show none.
-  dateOf: (note: NoteFile) => number | undefined;
+  // The git created + updated dates (epoch ms) to show on each row; either is
+  // undefined when history is unknown.
+  timesOf: (note: NoteFile) => { created?: number; updated?: number };
 }) {
   return (
     <ul className="flex flex-col gap-1.5">
       {notes.map((note) => {
-        const date = dateOf(note);
+        const { created, updated } = timesOf(note);
         return (
           <li key={note.relPath}>
             <button
@@ -939,14 +939,25 @@ function FolderNotes({
                   <span className="mt-0.5 block truncate text-xs text-is-text-tertiary">{note.summary}</span>
                 )}
               </span>
-              {date ? (
-                <span className="shrink-0 text-xs text-is-text-tertiary">{relativeTime(date)}</span>
-              ) : null}
+              <NoteDates created={created} updated={updated} />
             </button>
           </li>
         );
       })}
     </ul>
+  );
+}
+
+// A note row's git dates — "created 2mo ago · updated 3d ago". Collapses to a
+// single "created …" when both point at the same commit (created === updated),
+// shows only the one that's known, and renders nothing when neither is.
+function NoteDates({ created, updated }: { created?: number; updated?: number }) {
+  const parts: string[] = [];
+  if (created) parts.push(`created ${relativeTime(created)}`);
+  if (updated && updated !== created) parts.push(`updated ${relativeTime(updated)}`);
+  if (parts.length === 0) return null;
+  return (
+    <span className="shrink-0 font-chrome text-[11px] text-is-text-tertiary">{parts.join(" · ")}</span>
   );
 }
 
@@ -1313,15 +1324,14 @@ export function EditorSurface({
     () => sortNotes(noteFiles, sort, noteTimesMap),
     [noteFiles, sort, noteTimesMap],
   );
-  // The date a row shows, following the sort: created date under "created",
-  // otherwise the updated date (also under plain "name" sort, as a quiet recency
-  // hint). undefined → the row shows no date.
-  const dateOf = useCallback(
+  // Both git dates for a row — created (first commit) and updated (last). The
+  // row shows them side by side; either is undefined when history is unknown.
+  const timesOf = useCallback(
     (note: NoteFile) => {
       const t = noteTimesMap.get(note.relPath);
-      return sort === "created" ? t?.createdAt : t?.updatedAt;
+      return { created: t?.createdAt, updated: t?.updatedAt };
     },
-    [noteTimesMap, sort],
+    [noteTimesMap],
   );
 
   return (
@@ -1545,7 +1555,7 @@ export function EditorSurface({
                           notes={sortedNotes}
                           disabled={busy}
                           onSelect={(n) => void selectNote(n)}
-                          dateOf={dateOf}
+                          timesOf={timesOf}
                         />
                       </>
                     ) : (

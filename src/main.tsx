@@ -1,3 +1,6 @@
+// Must run before any module that assumes Node's `global` (e.g. the UMD docx
+// lib used for export). Keep this the first import.
+import "./lib/node-global-shim";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import "@fontsource-variable/inter";
