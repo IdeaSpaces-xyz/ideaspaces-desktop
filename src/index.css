@@ -225,6 +225,30 @@ body {
     top: auto;
     width: auto;
   }
+  /* Force visible dark-on-white for the exported PDF. The dark theme otherwise
+     leaves the note text light (via color / -webkit-text-fill-color), which is
+     invisible on the white print page — white pages with the right page count.
+     Pin both properties, transparent block backgrounds, and re-assert links +
+     code so they read regardless of the active theme. */
+  #pdf-print-root,
+  #pdf-print-root * {
+    color: #18181b !important;
+    -webkit-text-fill-color: #18181b !important;
+    background-color: transparent !important;
+    border-color: #d4d4d8 !important;
+  }
+  #pdf-print-root {
+    background-color: #ffffff !important;
+  }
+  #pdf-print-root a,
+  #pdf-print-root a * {
+    color: #2563eb !important;
+    -webkit-text-fill-color: #2563eb !important;
+  }
+  #pdf-print-root pre,
+  #pdf-print-root code {
+    background-color: #f4f4f5 !important;
+  }
 }
 
 .pdf-prose {
