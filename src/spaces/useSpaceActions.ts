@@ -2,7 +2,8 @@ import { useCallback, useState } from "react";
 import { join } from "@tauri-apps/api/path";
 import { ask, open } from "@tauri-apps/plugin-dialog";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
-import { cloneSpace, forgetClone, linkClone, syncClone, type Space } from "../lib/cli";
+import { cloneSpace, forgetClone, linkClone, pullClone, pushClone, type Space } from "../lib/cli";
+import { pullThenPush } from "../lib/sync";
 import { defaultWorkspaceDir } from "../lib/workspace";
 import { useToast } from "../toast/toast-context";
 
@@ -109,17 +110,23 @@ export function useSpaceActions(reload: () => Promise<void> | void) {
     }
   }, [reload, toast]);
 
-  const sync = useCallback(
-    async (repoId: string, path: string, slug: string) => {
+  // One runner for the three directional actions (pull / push / sync-both). Each
+  // op returns how many commits moved each way; the toast names the direction so
+  // the user learns push vs pull, not a vague "synced".
+  const runSync = useCallback(
+    async (
+      repoId: string,
+      slug: string,
+      op: () => Promise<{ integrated?: number; pushed?: number }>,
+    ) => {
       setBusy(repoId, true);
       try {
-        const result = await syncClone(path);
+        const r = await op();
         await reload();
-        toast(
-          result.pushed || result.integrated
-            ? `Synced ${slug} — pulled ${result.integrated}, pushed ${result.pushed}`
-            : `${slug} is already up to date`,
-        );
+        const parts: string[] = [];
+        if (r.integrated) parts.push(`pulled ${r.integrated}`);
+        if (r.pushed) parts.push(`pushed ${r.pushed}`);
+        toast(parts.length ? `${slug} — ${parts.join(", ")}` : `${slug} is already up to date`);
       } catch (err) {
         toast(errMessage(err), "error");
       } finally {
@@ -127,6 +134,22 @@ export function useSpaceActions(reload: () => Promise<void> | void) {
       }
     },
     [reload, setBusy, toast],
+  );
+
+  const pull = useCallback(
+    (repoId: string, path: string, slug: string) =>
+      runSync(repoId, slug, () => pullClone(path)),
+    [runSync],
+  );
+  const push = useCallback(
+    (repoId: string, path: string, slug: string) =>
+      runSync(repoId, slug, () => pushClone(path)),
+    [runSync],
+  );
+  const sync = useCallback(
+    (repoId: string, path: string, slug: string) =>
+      runSync(repoId, slug, () => pullThenPush(path)),
+    [runSync],
   );
 
   // Show the clone's folder in the OS file manager.
@@ -172,6 +195,8 @@ export function useSpaceActions(reload: () => Promise<void> | void) {
     cloneTo,
     linkExisting,
     linkFolder,
+    pull,
+    push,
     sync,
     revealInFinder,
     freeUpSpace,

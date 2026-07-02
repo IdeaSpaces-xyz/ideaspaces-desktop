@@ -27,6 +27,12 @@ export interface SyncBadge {
   label: string;
   /** True when nothing is pending — render silently (no glyph). */
   synced: boolean;
+  /** Raw counts behind the labels, so a UI can offer directional actions
+   *  (Pull ↓{behind} / Push ↑{ahead}) and disable the one with nothing to do.
+   *  `dirty` is uncommitted local work, which pushes up alongside `ahead`. */
+  ahead: number;
+  behind: number;
+  dirty: boolean;
 }
 
 const SYNCED: SyncBadge = {
@@ -35,6 +41,9 @@ const SYNCED: SyncBadge = {
   verb: "",
   label: "Synced",
   synced: true,
+  ahead: 0,
+  behind: 0,
+  dirty: false,
 };
 
 /**
@@ -56,6 +65,7 @@ export function deriveSyncBadge(status: CloneStatus): SyncBadge {
 
   const up = upLabel(ahead, status.dirty);
   const down = `${behind} to download`;
+  const counts = { ahead, behind, dirty: status.dirty };
 
   if (hasUp && hasDown) {
     return {
@@ -64,15 +74,16 @@ export function deriveSyncBadge(status: CloneStatus): SyncBadge {
       verb: "Sync",
       label: `${up}, ${down}`,
       synced: false,
+      ...counts,
     };
   }
   if (hasUp) {
     // Uncommitted edits are the "more local" state; surface that when there's
     // no committed-ahead work, since it reads more truthfully to the user.
     const kind: SyncKind = ahead > 0 ? "ahead" : "uncommitted";
-    return { kind, direction: "push", verb: "Upload", label: up, synced: false };
+    return { kind, direction: "push", verb: "Upload", label: up, synced: false, ...counts };
   }
-  return { kind: "behind", direction: "pull", verb: "Download", label: down, synced: false };
+  return { kind: "behind", direction: "pull", verb: "Download", label: down, synced: false, ...counts };
 }
 
 function upLabel(ahead: number, dirty: boolean): string {

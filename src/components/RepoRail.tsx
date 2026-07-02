@@ -72,12 +72,39 @@ function RowMenu({ children, label }: { children: React.ReactNode; label: string
   );
 }
 
+// A menu row that carries a right-aligned count chip (e.g. "Pull  ↓2"). Disabled
+// when there's nothing to move in that direction.
+function SyncMenuItem({
+  icon,
+  label,
+  count,
+  disabled,
+  onSelect,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  count?: number;
+  disabled: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <DropdownMenu.Item className={rowMenuItem} disabled={disabled} onSelect={onSelect}>
+      {icon}
+      {label}
+      {count ? <span className="ml-auto tabular-nums text-is-text-tertiary">{count}</span> : null}
+    </DropdownMenu.Item>
+  );
+}
+
 // A repo that's on disk (available or local-only): opens on click, shows a
-// directional sync glyph, and offers Sync on hover when there's work.
+// directional sync glyph, and offers explicit Pull / Push / Sync in the ⋯ menu
+// so the two directions across the remote boundary stay legible.
 function DiskRow({
   entry,
   busy,
   onOpen,
+  onPull,
+  onPush,
   onSync,
   onReveal,
   onFreeUpSpace,
@@ -85,13 +112,18 @@ function DiskRow({
   entry: RepoEntry;
   busy: boolean;
   onOpen: (entry: RepoEntry) => void;
+  onPull: (repoId: string, path: string, slug: string) => void;
+  onPush: (repoId: string, path: string, slug: string) => void;
   onSync: (repoId: string, path: string, slug: string) => void;
   onReveal: (path: string) => void;
   onFreeUpSpace: (repoId: string, path: string, slug: string) => void;
 }) {
   const badge = entry.sync;
-  const sync = !!badge && !badge.synced;
   const clonePath = entry.clone?.path;
+  // Direction availability from the badge's raw counts. Push covers committed-
+  // ahead *and* uncommitted local work; pull is remote-ahead; sync is both.
+  const canPull = (badge?.behind ?? 0) > 0;
+  const canPush = (badge?.ahead ?? 0) > 0 || !!badge?.dirty;
   return (
     <li
       title={clonePath}
@@ -104,35 +136,46 @@ function DiskRow({
         aria-label={`Open ${entry.slug}`}
         className="absolute inset-0 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
       />
-      {/* Fixed slot so silent-synced rows align with unsynced ones. */}
+      {/* Fixed slot so silent-synced rows align with unsynced ones. A busy row
+          shows a spinner here in place of the directional glyph. */}
       <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center">
-        <SyncIndicator badge={badge} failed={entry.statusFailed} />
+        {busy ? (
+          <RefreshCw
+            size={13}
+            strokeWidth={1.333}
+            className="animate-spin text-is-text-tertiary"
+            aria-hidden="true"
+          />
+        ) : (
+          <SyncIndicator badge={badge} failed={entry.statusFailed} />
+        )}
       </span>
       <span className="pointer-events-none min-w-0 flex-1 truncate text-[13px] tracking-[-0.01em] text-is-text">
         {entry.slug}
       </span>
-      {sync &&
-        clonePath &&
-        (busy ? (
-          <RefreshCw
-            size={13}
-            strokeWidth={1.333}
-            className="relative shrink-0 animate-spin text-is-text-tertiary"
-            aria-hidden="true"
-          />
-        ) : (
-          <button
-            type="button"
-            onClick={() => onSync(entry.repoId, clonePath, entry.slug)}
-            title={badge.label}
-            aria-label={`${badge.verb} ${entry.slug}`}
-            className="relative shrink-0 rounded p-1 text-is-text-tertiary opacity-0 transition hover:text-is-text focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring group-hover:opacity-100"
-          >
-            <RefreshCw size={13} strokeWidth={1.333} aria-hidden="true" />
-          </button>
-        ))}
       {clonePath && (
         <RowMenu label={`Actions for ${entry.slug}`}>
+          <SyncMenuItem
+            icon={<ArrowDown size={14} strokeWidth={1.333} className="text-is-text-tertiary" aria-hidden="true" />}
+            label="Pull"
+            count={badge?.behind}
+            disabled={busy || !canPull}
+            onSelect={() => onPull(entry.repoId, clonePath, entry.slug)}
+          />
+          <SyncMenuItem
+            icon={<ArrowUp size={14} strokeWidth={1.333} className="text-is-text-tertiary" aria-hidden="true" />}
+            label="Push"
+            count={badge?.ahead}
+            disabled={busy || !canPush}
+            onSelect={() => onPush(entry.repoId, clonePath, entry.slug)}
+          />
+          <SyncMenuItem
+            icon={<ArrowUpDown size={14} strokeWidth={1.333} className="text-is-text-tertiary" aria-hidden="true" />}
+            label="Sync"
+            disabled={busy || (!canPull && !canPush)}
+            onSelect={() => onSync(entry.repoId, clonePath, entry.slug)}
+          />
+          <DropdownMenu.Separator className="my-1 h-px bg-is-border" />
           <DropdownMenu.Item className={rowMenuItem} onSelect={() => onReveal(clonePath)}>
             <FolderOpen size={14} strokeWidth={1.333} className="text-is-text-tertiary" aria-hidden="true" />
             Reveal in Finder
@@ -204,6 +247,8 @@ function RepoRow({
   onClone,
   onCloneTo,
   onLinkExisting,
+  onPull,
+  onPush,
   onSync,
   onReveal,
   onFreeUpSpace,
@@ -214,6 +259,8 @@ function RepoRow({
   onClone: (space: Space) => void;
   onCloneTo: (space: Space) => void;
   onLinkExisting: (space: Space) => void;
+  onPull: (repoId: string, path: string, slug: string) => void;
+  onPush: (repoId: string, path: string, slug: string) => void;
   onSync: (repoId: string, path: string, slug: string) => void;
   onReveal: (path: string) => void;
   onFreeUpSpace: (repoId: string, path: string, slug: string) => void;
@@ -224,6 +271,8 @@ function RepoRow({
         entry={entry}
         busy={busy}
         onOpen={onOpen}
+        onPull={onPull}
+        onPush={onPush}
         onSync={onSync}
         onReveal={onReveal}
         onFreeUpSpace={onFreeUpSpace}
@@ -253,6 +302,8 @@ export function RepoRail({
   onClone,
   onCloneTo,
   onLinkExisting,
+  onPull,
+  onPush,
   onSync,
   onReveal,
   onFreeUpSpace,
@@ -270,6 +321,8 @@ export function RepoRail({
   onClone: (space: Space) => void;
   onCloneTo: (space: Space) => void;
   onLinkExisting: (space: Space) => void;
+  onPull: (repoId: string, path: string, slug: string) => void;
+  onPush: (repoId: string, path: string, slug: string) => void;
   onSync: (repoId: string, path: string, slug: string) => void;
   onReveal: (path: string) => void;
   onFreeUpSpace: (repoId: string, path: string, slug: string) => void;
@@ -290,6 +343,8 @@ export function RepoRail({
       onClone={onClone}
       onCloneTo={onCloneTo}
       onLinkExisting={onLinkExisting}
+      onPull={onPull}
+      onPush={onPush}
       onSync={onSync}
       onReveal={onReveal}
       onFreeUpSpace={onFreeUpSpace}

@@ -1,7 +1,8 @@
 // Raw note-file IO over a local clone, via the Tauri fs plugin.
 //
 // The editor edits file *content* only — listing, reading, writing markdown.
-// Git (commit/push) stays in the CLI sidecar (see commitClone/syncClone). The
+// Git (commit/pull/push) stays in the CLI sidecar (see commitClone/pullClone/
+// pushClone). The
 // fs capability is scoped to the home tree; macOS TCC gates protected folders.
 //
 // Listing is per-level (folders + files at one path), mirroring is_web v2's

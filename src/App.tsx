@@ -182,6 +182,8 @@ function SignedInView({
             onClone={actions.clone}
             onCloneTo={actions.cloneTo}
             onLinkExisting={actions.linkExisting}
+            onPull={actions.pull}
+            onPush={actions.push}
             onSync={actions.sync}
             onReveal={actions.revealInFinder}
             onFreeUpSpace={actions.freeUpSpace}

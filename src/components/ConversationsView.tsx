@@ -6,9 +6,9 @@ import { bucketByTime, relativeTime } from "../lib/time";
 import {
   getConversation,
   listClones,
+  pullClone,
   putNode,
   streamConversation,
-  syncClone,
   type CloneRecord,
   type Space,
   type StreamHandle,
@@ -207,11 +207,11 @@ function ConversationDetail({
     if (!clone) return; // the button is disabled while syncing, so no re-entry guard needed
     setSyncing(true);
     try {
-      const res = await syncClone(clone.path);
+      const res = await pullClone(clone.path);
       toast(
         res.integrated
-          ? `Synced — pulled ${res.integrated} change${res.integrated === 1 ? "" : "s"}`
-          : "Synced — already up to date",
+          ? `Pulled ${res.integrated} change${res.integrated === 1 ? "" : "s"}`
+          : "Already up to date",
       );
       if (mounted.current) setPendingSync(null);
     } catch (err) {
