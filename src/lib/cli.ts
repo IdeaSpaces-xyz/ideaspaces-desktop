@@ -130,12 +130,16 @@ export async function cloneStatus(dir: string, fetch = false): Promise<CloneStat
   return parseJson<CloneStatus>(stdout, "status");
 }
 
-export interface SyncResult {
+export interface PullResult {
+  upstream: string | null;
+  /** Commits integrated from the remote. */
+  integrated: number;
+}
+
+export interface PushResult {
   upstream: string | null;
   /** Commits pushed to the remote. */
   pushed: number;
-  /** Commits integrated from the remote. */
-  integrated: number;
 }
 
 export interface CommitResult {
@@ -170,13 +174,24 @@ export async function commitClone(
   return parseJson<CommitResult>(stdout, "commit");
 }
 
-/** Sync a local clone — fetch/rebase/push, run in the clone's folder. */
-export async function syncClone(dir: string): Promise<SyncResult> {
-  const { code, stdout, stderr } = await runCli(["sync", "--json"], dir);
+/** Pull — integrate remote changes into a local clone (never pushes). Run in the
+ *  clone's folder. Refuses on a dirty/uncommitted tree (the CLI's message). */
+export async function pullClone(dir: string): Promise<PullResult> {
+  const { code, stdout, stderr } = await runCli(["pull", "--json"], dir);
   if (code !== 0) {
-    throw new Error(stderr.trim() || `Sync failed (exit ${code ?? "unknown"}).`);
+    throw new Error(stderr.trim() || `Pull failed (exit ${code ?? "unknown"}).`);
   }
-  return parseJson<SyncResult>(stdout, "sync");
+  return parseJson<PullResult>(stdout, "pull");
+}
+
+/** Push — send committed changes up (never integrates). Run in the clone's
+ *  folder. Refuses when behind ("pull first") — surfaced from the CLI. */
+export async function pushClone(dir: string): Promise<PushResult> {
+  const { code, stdout, stderr } = await runCli(["push", "--json"], dir);
+  if (code !== 0) {
+    throw new Error(stderr.trim() || `Push failed (exit ${code ?? "unknown"}).`);
+  }
+  return parseJson<PushResult>(stdout, "push");
 }
 
 export interface ForgetResult {

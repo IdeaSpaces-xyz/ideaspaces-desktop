@@ -43,7 +43,8 @@ import { ask } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { spaceUrl } from "../lib/web";
-import { cloneStatus, commitClone, syncClone, type CloneRecord } from "../lib/cli";
+import { cloneStatus, commitClone, type CloneRecord } from "../lib/cli";
+import { pullThenPush } from "../lib/sync";
 import { deriveSyncBadge, type SyncBadge } from "../lib/sync-state";
 import { useToast } from "../toast/toast-context";
 import { Resizer } from "./Resizer";
@@ -263,7 +264,7 @@ function NotePane({
         // locale-robust. Tracked in roadmap/plans/desktop/_agent/now.md.
         if (!/nothing to commit|no changes/i.test(errMessage(err))) throw err;
       }
-      const res = await syncClone(clone.path);
+      const res = await pullThenPush(clone.path);
       // Edits that landed during the sync leave the note unsynced again.
       setSyncView(draftRef.current === syncedContent ? NOTHING_PENDING_BADGE : LOCAL_EDITS_BADGE);
       toast(

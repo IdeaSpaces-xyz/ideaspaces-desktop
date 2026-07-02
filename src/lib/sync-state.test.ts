@@ -51,6 +51,16 @@ describe("deriveSyncBadge", () => {
     expect(b.label).toBe("1 to upload, 2 to download");
   });
 
+  it("carries raw counts so a UI can offer directional Pull/Push", () => {
+    const b = deriveSyncBadge(status({ ahead: 1, behind: 2, dirty: true }));
+    expect(b.ahead).toBe(1);
+    expect(b.behind).toBe(2);
+    expect(b.dirty).toBe(true);
+    // synced badge zeroes them
+    const s = deriveSyncBadge(status({}));
+    expect(s).toMatchObject({ ahead: 0, behind: 0, dirty: false });
+  });
+
   it("dirty + behind also diverges (local edits + remote work)", () => {
     const b = deriveSyncBadge(status({ dirty: true, behind: 1 }));
     expect(b.kind).toBe("diverged");
