@@ -3,6 +3,12 @@
 What we forged, and what it frees — newest first. Written in our house voice
 (see [`_agent/skills/chronicle.md`](https://github.com/IdeaSpaces-xyz/ideaspaces/blob/main/_agent/skills/chronicle.md) in the root ideaspace). Each release's entry is also its GitHub release notes.
 
+## v0.4.0 · The walls learn to open
+
+Your space was a sealed room; now it has a door. **Share** a repo from the tree — invite people by email with a role, or set a public link anyone can read. The exchange with the server is named at last: no lone *Sync*, but **Pull** to bring others' work down and **Push** to send yours up, each counted so you see which way the knowledge moves. And a note can now leave the room whole — **Save as PDF or Word**.
+
+→ *Invite people into your space, move work in and out by name, and carry any note out as a document.*
+
 ## v0.3.0 · A lamp over the whole workshop
 
 Press **⌘K** and the light falls across every note in your offline repos — name a few words and the one you sought steps forward, ready to open. And the notes a conversation has touched now hang together in a panel at your right hand: read them there, and when one wants a word changed, take it up and rework it in place — **edit and save without leaving the thread**.
