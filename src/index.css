@@ -180,3 +180,135 @@ body {
     opacity: 0.7;
   }
 }
+
+/* --- PDF export (native print of the offscreen note host) ---
+ * printPdf.tsx renders the note into #pdf-print-root, then triggers the OS
+ * print panel via the Rust `print_page` command. On screen the host is parked
+ * offscreen (but laid out, so the print operation can measure it); in print it
+ * becomes the only visible content and the app chrome is hidden. Colors are
+ * fixed dark-on-light so the PDF reads the same regardless of app theme. */
+#pdf-print-root {
+  position: fixed;
+  left: -10000px;
+  top: 0;
+  width: 8.5in;
+  background: #fff;
+  color: #18181b;
+}
+
+@media print {
+  @page {
+    margin: 2cm;
+  }
+  html {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  /* Hide the app (and any body-level portals); print only the note host. */
+  body > *:not(#pdf-print-root) {
+    display: none !important;
+  }
+  #pdf-print-root {
+    position: static;
+    left: auto;
+    top: auto;
+    width: auto;
+  }
+}
+
+.pdf-prose {
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.7;
+  color: #18181b;
+}
+.pdf-prose h1,
+.pdf-prose h2,
+.pdf-prose h3 {
+  font-family: var(--font-prose);
+  font-weight: 400;
+  color: #111;
+  line-height: 1.2;
+}
+.pdf-prose h1 {
+  margin: 0 0 1rem;
+  font-size: 2.2rem;
+}
+.pdf-prose h2 {
+  margin: 2rem 0 0.75rem;
+  font-size: 1.6rem;
+}
+.pdf-prose h3 {
+  margin: 1.5rem 0 0.5rem;
+  font-size: 1.3rem;
+}
+.pdf-prose h4,
+.pdf-prose h5,
+.pdf-prose h6 {
+  margin: 1.25rem 0 0.5rem;
+  font-weight: 600;
+}
+.pdf-prose p {
+  margin: 0 0 1rem;
+}
+.pdf-prose ul,
+.pdf-prose ol {
+  margin: 0 0 1rem;
+  padding-left: 1.5rem;
+}
+.pdf-prose ul {
+  list-style: disc;
+}
+.pdf-prose ol {
+  list-style: decimal;
+}
+.pdf-prose li {
+  margin: 0.25rem 0;
+}
+.pdf-prose blockquote {
+  margin: 0 0 1rem;
+  border-left: 3px solid #d4d4d8;
+  padding-left: 1rem;
+  color: #52525b;
+  font-style: italic;
+}
+.pdf-prose code {
+  border-radius: 4px;
+  background: #f4f4f5;
+  padding: 0.1em 0.35em;
+  font-family: var(--font-chrome);
+  font-size: 0.9em;
+}
+.pdf-prose pre {
+  overflow: auto;
+  border-radius: 8px;
+  background: #f4f4f5;
+  padding: 1rem;
+}
+.pdf-prose pre code {
+  background: none;
+  padding: 0;
+}
+.pdf-prose a {
+  color: #2563eb;
+  text-decoration: underline;
+}
+.pdf-prose img {
+  max-width: 100%;
+}
+.pdf-prose table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 1rem;
+}
+.pdf-prose th,
+.pdf-prose td {
+  border: 1px solid #d4d4d8;
+  padding: 0.4rem 0.6rem;
+  text-align: left;
+}
+.pdf-prose hr {
+  margin: 1.5rem 0;
+  border: none;
+  border-top: 1px solid #d4d4d8;
+}

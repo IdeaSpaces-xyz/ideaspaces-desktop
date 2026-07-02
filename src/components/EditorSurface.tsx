@@ -51,7 +51,8 @@ import { Resizer } from "./Resizer";
 import { CopyButton } from "./CopyButton";
 import { ExportMenu } from "./ExportMenu";
 import { ShareDialog } from "./ShareDialog";
-import { printNoteAsPdf, saveNoteAsDocx } from "../export/exportNote";
+import { saveNoteAsDocx } from "../export/exportNote";
+import { printNoteAsPdf } from "../export/printPdf";
 import { cn } from "../lib/cn";
 
 // Ghost toolbar button — no border/fill, just text that lifts on hover. Keeps
@@ -322,14 +323,14 @@ function NotePane({
             <ExportMenu
               disabled={busy || exporting}
               onPdf={() => {
-                try {
-                  toast("Preparing PDF…");
-                  printNoteAsPdf(draftRef.current, note.title || note.name, (err) =>
-                    toast(errMessage(err), "error"),
-                  );
-                } catch (err) {
-                  toast(errMessage(err), "error");
-                }
+                void (async () => {
+                  try {
+                    toast("Opening print…");
+                    await printNoteAsPdf(draftRef.current, note.title || note.name);
+                  } catch (err) {
+                    toast(errMessage(err), "error");
+                  }
+                })();
               }}
               onDocx={() => {
                 void (async () => {

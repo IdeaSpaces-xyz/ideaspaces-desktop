@@ -1,9 +1,20 @@
 use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::Emitter;
 
+/// Open the OS print panel for the calling window. The frontend renders the
+/// note into an offscreen `#pdf-print-root` and flips it visible under
+/// `@media print`, so the panel prints just the note (with "Save as PDF").
+/// The webview's own `window.print()` is a no-op in WKWebView, so this native
+/// path is the only way to reach the print dialog on macOS.
+#[tauri::command]
+fn print_page(window: tauri::WebviewWindow) -> Result<(), String> {
+    window.print().map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .invoke_handler(tauri::generate_handler![print_page])
         // Native macOS menu bar. We set a custom menu to add "Check for
         // Updates…" under the app menu — so we MUST re-add the standard Edit
         // roles (copy/paste/undo) the editor relies on, plus Window. The
