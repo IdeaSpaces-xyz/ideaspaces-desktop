@@ -200,7 +200,18 @@ body {
   @page {
     margin: 2cm;
   }
-  html {
+  /* Force a light document for the PDF regardless of app theme. In dark mode the
+     app's body background is near-black (--is-bg #050505); WKWebView's PDF export
+     rasterizes that dark canvas (black page + black blocks over the text) even
+     though the print *preview* looks light. Pinning color-scheme + white bg +
+     dark text keeps the exported PDF readable in either theme. */
+  :root {
+    color-scheme: light !important;
+  }
+  html,
+  body {
+    background: #ffffff !important;
+    color: #18181b !important;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }

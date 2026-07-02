@@ -16,15 +16,23 @@ export async function printNoteAsPdf(content: string, title: string): Promise<vo
   document.body.appendChild(host);
   const root = createRoot(host);
 
+  // macOS uses the document title as the default "Save as PDF" filename. Point
+  // it at the note (the app's static <title> would otherwise name every export
+  // "Tauri + React + Typescript"). Restored after the panel has read it.
+  const prevTitle = document.title;
+  document.title = title.trim() || "note";
+
   try {
     await new Promise<void>((resolve) => {
       root.render(<PrintDocument markdown={markdown} onReady={resolve} />);
     });
     await invoke("print_page");
   } finally {
-    // The native print operation can render on a separate thread; give it a beat
-    // to snapshot the DOM before we tear the host down.
+    // The native print operation can render on a separate thread and reads the
+    // title when the save panel opens; give it a beat before restoring + tearing
+    // the host down.
     setTimeout(() => {
+      document.title = prevTitle;
       root.unmount();
       host.remove();
     }, 1500);
