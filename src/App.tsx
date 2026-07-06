@@ -327,7 +327,17 @@ function ConnectCard({
 // The signed-out empty state: the three connectors (IdeaSpace live; Open folder
 // and Connect Pi shown as coming soon). The sign-in flow (button label, cancel,
 // error) lives in the IdeaSpace card.
-function ConnectPanel({ auth, onOpenFolder }: { auth: Auth; onOpenFolder: () => void }) {
+function ConnectPanel({
+  auth,
+  onOpenFolder,
+  folderContexts,
+  onSelectContext,
+}: {
+  auth: Auth;
+  onOpenFolder: () => void;
+  folderContexts: SpaceContext[];
+  onSelectContext: (ref: string) => void;
+}) {
   const signingIn = auth.status === "signing-in";
   return (
     <div className="w-full max-w-sm">
@@ -373,6 +383,27 @@ function ConnectPanel({ auth, onOpenFolder }: { auth: Auth; onOpenFolder: () => 
           disabled
         />
       </div>
+      {folderContexts.length > 0 && (
+        <div className="mt-6">
+          <h3 className="mb-2 font-chrome text-[10px] uppercase tracking-[0.08em] text-is-text-tertiary">
+            Your folders
+          </h3>
+          <div className="space-y-1.5">
+            {folderContexts.map((ctx) => (
+              <button
+                key={ctx.ref}
+                type="button"
+                onClick={() => onSelectContext(ctx.ref)}
+                title={ctx.path}
+                className="flex w-full items-center gap-2 rounded-lg border border-is-border bg-is-surface px-3 py-2 text-left text-sm text-is-text transition hover:bg-is-surface-alt focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
+              >
+                <FolderOpen size={16} strokeWidth={1.333} className="shrink-0 text-is-text-tertiary" aria-hidden="true" />
+                <span className="min-w-0 flex-1 truncate">{ctx.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -403,7 +434,19 @@ function SignedOutView({
       <header className="shrink-0 border-b border-is-border bg-is-bg px-4 py-1.5 font-chrome sm:px-6">
         <div className="flex items-center justify-between gap-4">
           <div className="flex min-w-0 items-center gap-2.5">
-            <LogoSymbol className="h-6 w-7 text-is-text" />
+            {activeFolder ? (
+              <button
+                type="button"
+                onClick={onLeaveFolder}
+                aria-label="Home"
+                title="Home"
+                className="inline-flex shrink-0 items-center rounded text-is-text transition hover:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
+              >
+                <LogoSymbol className="h-6 w-7" />
+              </button>
+            ) : (
+              <LogoSymbol className="h-6 w-7 text-is-text" />
+            )}
             {activeFolder && (
               <>
                 <span className="h-4 w-px shrink-0 bg-is-border" />
@@ -417,7 +460,17 @@ function SignedOutView({
               </>
             )}
           </div>
-          <ThemeToggle mode={mode} setMode={setMode} />
+          <div className="flex shrink-0 items-center gap-1.5">
+            <button
+              type="button"
+              onClick={auth.signIn}
+              disabled={auth.status === "signing-in"}
+              className="rounded-md px-2.5 py-1 text-xs font-medium text-is-text transition hover:bg-is-surface-alt disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
+            >
+              {auth.status === "signing-in" ? "Signing in…" : "Sign in"}
+            </button>
+            <ThemeToggle mode={mode} setMode={setMode} />
+          </div>
         </div>
       </header>
       {activeFolder ? (
@@ -430,7 +483,12 @@ function SignedOutView({
               <p className="text-sm text-is-text-tertiary">Checking sign-in…</p>
             </div>
           ) : (
-            <ConnectPanel auth={auth} onOpenFolder={onOpenFolder} />
+            <ConnectPanel
+              auth={auth}
+              onOpenFolder={onOpenFolder}
+              folderContexts={folderContexts}
+              onSelectContext={onSelectContext}
+            />
           )}
         </main>
       )}
