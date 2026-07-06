@@ -34,6 +34,8 @@ interface ShellContextProps {
   folderContexts: SpaceContext[];
   onOpenFolder: () => void;
   onCloseFolder: (ctx: SpaceContext) => void;
+  /** Leave the active folder context (the editor's Back at the folder root). */
+  onLeaveFolder: () => void;
 }
 
 // Code-split: CodeMirror + the live-preview layer load only when a note opens,
@@ -62,6 +64,7 @@ function SignedInView({
   folderContexts,
   onOpenFolder,
   onCloseFolder,
+  onLeaveFolder,
 }: {
   auth: Auth;
   mode: ThemeMode;
@@ -169,7 +172,7 @@ function SignedInView({
         signingOut={auth.status === "signing-out"}
       />
       {isFolder ? (
-        <FolderBody context={activeContext!} />
+        <FolderEditor context={activeContext!} onLeave={onLeaveFolder} />
       ) : editing ? (
         <Suspense
           fallback={<div className="flex flex-1 items-center justify-center text-sm text-is-text-tertiary">Loading editor…</div>}
@@ -249,19 +252,27 @@ function SignedInView({
   );
 }
 
-// The body for an accountless folder context. S2c-2a wires the folder as a
-// first-class context (switcher + persistence); rendering the folder in the
-// editor is S2c-2b, which replaces this placeholder with EditorSurface over
-// `context.path`.
-function FolderBody({ context }: { context: SpaceContext }) {
+// The body for an accountless folder context — the editor over the folder. The
+// editor is already path-native (Tauri `fs`); a folder Location has no `remote`,
+// so Share / web-link / Sync / Discuss stay hidden (S2c-1). The Back button at
+// the folder root leaves the context (`onLeave`).
+function FolderEditor({ context, onLeave }: { context: SpaceContext; onLeave: () => void }) {
   return (
-    <div className="flex min-h-0 flex-1 items-center justify-center px-8 text-center">
-      <div className="max-w-sm">
-        <FolderOpen className="mx-auto h-10 w-10 text-is-text-tertiary" strokeWidth={1.333} aria-hidden="true" />
-        <h2 className="mt-4 text-sm font-medium text-is-text">{context.label}</h2>
-        <p className="mt-1 break-all text-xs text-is-text-tertiary">{context.path}</p>
-      </div>
-    </div>
+    <Suspense
+      fallback={
+        <div className="flex flex-1 items-center justify-center text-sm text-is-text-tertiary">
+          Loading editor…
+        </div>
+      }
+    >
+      <EditorSurface
+        key={context.path}
+        location={{ path: context.path! }}
+        onClose={onLeave}
+        onStartConversation={() => {}}
+        canShare={false}
+      />
+    </Suspense>
   );
 }
 
@@ -378,6 +389,7 @@ function SignedOutView({
   folderContexts,
   onOpenFolder,
   onCloseFolder,
+  onLeaveFolder,
 }: {
   auth: Auth;
   mode: ThemeMode;
@@ -409,7 +421,7 @@ function SignedOutView({
         </div>
       </header>
       {activeFolder ? (
-        <FolderBody context={activeFolder} />
+        <FolderEditor context={activeFolder} onLeave={onLeaveFolder} />
       ) : (
         <main className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto px-8 py-10">
           {auth.status === "checking" ? (
@@ -461,6 +473,13 @@ function App() {
     },
     [closeFolder, activeRef],
   );
+  // Leave the active folder → fall back to the default context (first account
+  // context signed-in, else the connect panel). Clear the persisted ref so a
+  // deliberate exit isn't reopened on relaunch.
+  const onLeaveFolder = useCallback(() => {
+    setActiveRef(undefined);
+    void setActiveContextRef("");
+  }, []);
 
   const shell: ShellContextProps = {
     activeRef,
@@ -468,6 +487,7 @@ function App() {
     folderContexts,
     onOpenFolder,
     onCloseFolder,
+    onLeaveFolder,
   };
 
   // The update banner overlays every auth state — rendered once, above the

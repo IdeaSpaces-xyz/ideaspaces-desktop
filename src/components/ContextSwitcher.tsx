@@ -51,6 +51,9 @@ export function ContextSwitcher({
               <DropdownMenu.RadioItem
                 key={ctx.ref}
                 value={ctx.ref}
+                // Full path in the tooltip so same-named folders (e.g. two
+                // `notes/` dirs) are distinguishable; harmless for accounts.
+                title={ctx.path}
                 className="group flex cursor-pointer select-none items-center gap-2 px-3 py-2 text-xs text-is-text outline-none transition-colors data-[highlighted]:bg-is-surface-alt"
               >
                 <ContextGlyph context={ctx} />
