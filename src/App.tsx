@@ -1,4 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Bot, Cloud, FolderOpen, type LucideIcon } from "lucide-react";
 import { Header } from "./components/Header";
 import { LogoSymbol } from "./components/LogoSymbol";
 import { RepoRail } from "./components/RepoRail";
@@ -30,14 +31,6 @@ const ConversationsView = lazy(() =>
 );
 
 type Auth = ReturnType<typeof useAuth>;
-
-function Screen({ children }: { children: ReactNode }) {
-  return (
-    <main className="flex min-h-dvh flex-col items-center justify-center gap-6 px-8 text-center">
-      {children}
-    </main>
-  );
-}
 
 const primaryButton =
   "rounded-lg bg-is-text px-5 py-2.5 text-sm font-medium text-is-bg transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50";
@@ -227,42 +220,132 @@ function SignedInView({
   );
 }
 
-function CenteredAuth({ auth }: { auth: Auth }) {
-  if (auth.status === "checking") {
-    return (
-      <Screen>
-        <LogoSymbol className="h-10 w-10 text-is-text-tertiary" />
-        <p className="text-sm text-is-text-tertiary">Checking sign-in…</p>
-      </Screen>
-    );
-  }
+// One of the three connectors on the signed-out empty state. A card with an
+// icon, a title, and a description; `disabled` dims it and shows a "Soon" tag
+// (Open folder ships in S2, Connect Pi in S4 — they're shown now so the
+// three-layer shape reads at a glance).
+function ConnectCard({
+  icon: Icon,
+  title,
+  description,
+  disabled,
+  children,
+}: {
+  icon: LucideIcon;
+  title: string;
+  description: string;
+  disabled?: boolean;
+  children?: ReactNode;
+}) {
+  return (
+    <div
+      className={`rounded-xl border border-is-border bg-is-surface p-4 text-left${
+        disabled ? " opacity-60" : ""
+      }`}
+    >
+      <div className="flex items-start gap-3">
+        <Icon size={20} strokeWidth={1.333} className="mt-0.5 shrink-0 text-is-text-tertiary" aria-hidden="true" />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <h2 className="font-chrome text-sm text-is-text">{title}</h2>
+            {disabled && (
+              <span className="rounded-full border border-is-border px-1.5 py-0.5 font-chrome text-[10px] uppercase tracking-wide text-is-text-tertiary">
+                Soon
+              </span>
+            )}
+          </div>
+          <p className="mt-0.5 text-sm text-is-text-secondary">{description}</p>
+          {children && <div className="mt-3">{children}</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
 
+// The signed-out empty state: the three connectors (IdeaSpace live; Open folder
+// and Connect Pi shown as coming soon). The sign-in flow (button label, cancel,
+// error) lives in the IdeaSpace card.
+function ConnectPanel({ auth }: { auth: Auth }) {
   const signingIn = auth.status === "signing-in";
   return (
-    <Screen>
-      <LogoSymbol className="h-12 w-12 text-is-text" />
-      <div className="space-y-1">
-        <h1 className="text-2xl font-medium text-is-text">IdeaSpaces</h1>
-        <p className="max-w-xs text-sm text-is-text-secondary">
+    <div className="w-full max-w-sm">
+      <div className="mb-6 flex flex-col items-center text-center">
+        <LogoSymbol className="h-12 w-12 text-is-text" />
+        <h1 className="mt-4 text-2xl font-medium text-is-text">IdeaSpaces</h1>
+        <p className="mt-1 max-w-xs text-sm text-is-text-secondary">
           A place where teams of agents and people work together.
         </p>
       </div>
-      <button className={primaryButton} onClick={auth.signIn} disabled={signingIn}>
-        {signingIn ? "Waiting for browser…" : "Sign in"}
-      </button>
-      {signingIn && (
-        <p className="text-sm text-is-text-tertiary">
-          Complete sign-in in the browser window that opened.{" "}
-          <button
-            className="underline underline-offset-2 hover:text-is-text"
-            onClick={auth.cancelSignIn}
-          >
-            Cancel
+      <div className="space-y-3">
+        <ConnectCard
+          icon={Cloud}
+          title="Connect IdeaSpace"
+          description="Sign in to sync your spaces and work with Keeper."
+        >
+          <button className={primaryButton} onClick={auth.signIn} disabled={signingIn}>
+            {signingIn ? "Waiting for browser…" : "Sign in"}
           </button>
-        </p>
-      )}
-      {auth.error && <p className="text-sm text-is-danger-text">{auth.error}</p>}
-    </Screen>
+          {signingIn && (
+            <p className="mt-2 text-sm text-is-text-tertiary">
+              Complete sign-in in the browser window that opened.{" "}
+              <button
+                className="underline underline-offset-2 hover:text-is-text"
+                onClick={auth.cancelSignIn}
+              >
+                Cancel
+              </button>
+            </p>
+          )}
+          {auth.error && <p className="mt-2 text-sm text-is-danger-text">{auth.error}</p>}
+        </ConnectCard>
+        <ConnectCard
+          icon={FolderOpen}
+          title="Open a folder"
+          description="Edit local Markdown — no account needed."
+          disabled
+        />
+        <ConnectCard
+          icon={Bot}
+          title="Connect Pi"
+          description="A local agent that works in your folders."
+          disabled
+        />
+      </div>
+    </div>
+  );
+}
+
+// Signed-out shell: the app frame always renders (a slim header with the mark +
+// theme toggle) with the connect panel in the body — auth is a connector state,
+// not a full-screen gate. The signed-in view is unchanged.
+function SignedOutView({
+  auth,
+  mode,
+  setMode,
+}: {
+  auth: Auth;
+  mode: ThemeMode;
+  setMode: (mode: ThemeMode) => void;
+}) {
+  return (
+    <div className="flex h-dvh flex-col overflow-hidden">
+      <header className="shrink-0 border-b border-is-border bg-is-bg px-4 py-1.5 font-chrome sm:px-6">
+        <div className="flex items-center justify-between gap-4">
+          <LogoSymbol className="h-6 w-7 text-is-text" />
+          <ThemeToggle mode={mode} setMode={setMode} />
+        </div>
+      </header>
+      <main className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto px-8 py-10">
+        {auth.status === "checking" ? (
+          <div className="flex flex-col items-center gap-4">
+            <LogoSymbol className="h-10 w-10 text-is-text-tertiary" />
+            <p className="text-sm text-is-text-tertiary">Checking sign-in…</p>
+          </div>
+        ) : (
+          <ConnectPanel auth={auth} />
+        )}
+      </main>
+    </div>
   );
 }
 
@@ -281,12 +364,7 @@ function App() {
       {signedIn ? (
         <SignedInView auth={auth} mode={mode} setMode={setMode} />
       ) : (
-        <>
-          <div className="fixed right-4 top-4 z-10">
-            <ThemeToggle mode={mode} setMode={setMode} />
-          </div>
-          <CenteredAuth auth={auth} />
-        </>
+        <SignedOutView auth={auth} mode={mode} setMode={setMode} />
       )}
     </>
   );
