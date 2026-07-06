@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Bot, Cloud, FolderOpen, type LucideIcon } from "lucide-react";
+import { ContextSwitcher } from "./components/ContextSwitcher";
 import { Header } from "./components/Header";
 import { LogoSymbol } from "./components/LogoSymbol";
 import { RepoRail } from "./components/RepoRail";
@@ -12,11 +13,28 @@ import { useAuth } from "./auth/useAuth";
 import { useSpaces } from "./spaces/useSpaces";
 import { useSpaceActions } from "./spaces/useSpaceActions";
 import { useCloneStatuses } from "./spaces/useCloneStatuses";
+import { useOpenedFolders } from "./spaces/useOpenedFolders";
 import { useTheme, type ThemeMode } from "./theme/useTheme";
-import { deriveSpaceContexts, resolveContext, spacesForContext } from "./lib/space-context";
+import {
+  deriveSpaceContexts,
+  folderContext,
+  resolveContext,
+  spacesForContext,
+  type SpaceContext,
+} from "./lib/space-context";
 import { deriveRepoEntries } from "./lib/repo-entry";
 import { getActiveContextRef, setActiveContextRef } from "./lib/active-context";
 import { fromClone, type Location } from "./lib/location";
+
+// Props shared across the shell views — context selection lives above the
+// signed-in/out split so a folder can be opened and worked in either state.
+interface ShellContextProps {
+  activeRef: string | undefined;
+  onSelectContext: (ref: string) => void;
+  folderContexts: SpaceContext[];
+  onOpenFolder: () => void;
+  onCloseFolder: (ctx: SpaceContext) => void;
+}
 
 // Code-split: CodeMirror + the live-preview layer load only when a note opens,
 // keeping the initial bundle (login/browse) light.
@@ -39,14 +57,18 @@ function SignedInView({
   auth,
   mode,
   setMode,
+  activeRef,
+  onSelectContext,
+  folderContexts,
+  onOpenFolder,
+  onCloseFolder,
 }: {
   auth: Auth;
   mode: ThemeMode;
   setMode: (mode: ThemeMode) => void;
-}) {
+} & ShellContextProps) {
   const spaces = useSpaces();
   const actions = useSpaceActions(spaces.reload);
-  const [activeRef, setActiveRef] = useState<string | undefined>(undefined);
   // The open editor: a clone, optionally jumped to a specific note (from search).
   const [editing, setEditing] = useState<{ location: Location; note?: string } | undefined>(
     undefined,
@@ -56,27 +78,26 @@ function SignedInView({
   const [convoRepoId, setConvoRepoId] = useState<string | undefined>(undefined);
   const [paletteOpen, setPaletteOpen] = useState(false);
 
-  // Restore the last-used context once on mount; never clobber a selection the
-  // user has already made (cur ?? stored). Saved on every switch below.
+  // A pending preselect belongs to the old context — clear it on a switch.
   useEffect(() => {
-    void getActiveContextRef().then((ref) => {
-      if (ref) setActiveRef((cur) => cur ?? ref);
-    });
-  }, []);
-  const selectContext = useCallback((ref: string) => {
-    setActiveRef(ref);
-    void setActiveContextRef(ref);
-    setConvoRepoId(undefined); // a pending preselect belongs to the old context
-  }, []);
+    setConvoRepoId(undefined);
+  }, [activeRef]);
 
-  const contexts = useMemo(
+  // Account contexts (Personal/org) plus the accountless folders from above.
+  const accountContexts = useMemo(
     () => deriveSpaceContexts(spaces.username, spaces.spaces),
     [spaces.username, spaces.spaces],
   );
+  const contexts = useMemo(
+    () => [...accountContexts, ...folderContexts],
+    [accountContexts, folderContexts],
+  );
   const activeContext = resolveContext(contexts, activeRef);
+  const isFolder = activeContext?.kind === "folder";
   const visibleSpaces = useMemo(
-    () => (activeContext ? spacesForContext(spaces.spaces, activeContext) : spaces.spaces),
-    [activeContext, spaces.spaces],
+    () =>
+      activeContext && !isFolder ? spacesForContext(spaces.spaces, activeContext) : spaces.spaces,
+    [activeContext, isFolder, spaces.spaces],
   );
   const cloneStatuses = useCloneStatuses(spaces.clones);
   const repoEntries = useMemo(
@@ -137,7 +158,9 @@ function SignedInView({
       <Header
         contexts={contexts}
         activeContext={activeContext}
-        onSelectContext={selectContext}
+        onSelectContext={onSelectContext}
+        onOpenFolder={onOpenFolder}
+        onCloseFolder={onCloseFolder}
         onHome={() => setEditing(undefined)}
         username={spaces.username ?? undefined}
         mode={mode}
@@ -145,7 +168,9 @@ function SignedInView({
         onSignOut={auth.signOut}
         signingOut={auth.status === "signing-out"}
       />
-      {editing ? (
+      {isFolder ? (
+        <FolderBody context={activeContext!} />
+      ) : editing ? (
         <Suspense
           fallback={<div className="flex flex-1 items-center justify-center text-sm text-is-text-tertiary">Loading editor…</div>}
         >
@@ -224,52 +249,74 @@ function SignedInView({
   );
 }
 
+// The body for an accountless folder context. S2c-2a wires the folder as a
+// first-class context (switcher + persistence); rendering the folder in the
+// editor is S2c-2b, which replaces this placeholder with EditorSurface over
+// `context.path`.
+function FolderBody({ context }: { context: SpaceContext }) {
+  return (
+    <div className="flex min-h-0 flex-1 items-center justify-center px-8 text-center">
+      <div className="max-w-sm">
+        <FolderOpen className="mx-auto h-10 w-10 text-is-text-tertiary" strokeWidth={1.333} aria-hidden="true" />
+        <h2 className="mt-4 text-sm font-medium text-is-text">{context.label}</h2>
+        <p className="mt-1 break-all text-xs text-is-text-tertiary">{context.path}</p>
+      </div>
+    </div>
+  );
+}
+
 // One of the three connectors on the signed-out empty state. A card with an
 // icon, a title, and a description; `disabled` dims it and shows a "Soon" tag
-// (Open folder ships in S2, Connect Pi in S4 — they're shown now so the
-// three-layer shape reads at a glance).
+// (Connect Pi ships in S4 — shown now so the three-layer shape reads at a
+// glance). With `onClick` the whole card is a button.
 function ConnectCard({
   icon: Icon,
   title,
   description,
   disabled,
+  onClick,
   children,
 }: {
   icon: LucideIcon;
   title: string;
   description: string;
   disabled?: boolean;
+  onClick?: () => void;
   children?: ReactNode;
 }) {
-  return (
-    <div
-      className={`rounded-xl border border-is-border bg-is-surface p-4 text-left${
-        disabled ? " opacity-60" : ""
-      }`}
-    >
-      <div className="flex items-start gap-3">
-        <Icon size={20} strokeWidth={1.333} className="mt-0.5 shrink-0 text-is-text-tertiary" aria-hidden="true" />
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <h2 className="font-chrome text-sm text-is-text">{title}</h2>
-            {disabled && (
-              <span className="rounded-full border border-is-border px-1.5 py-0.5 font-chrome text-[10px] uppercase tracking-wide text-is-text-tertiary">
-                Soon
-              </span>
-            )}
-          </div>
-          <p className="mt-0.5 text-sm text-is-text-secondary">{description}</p>
-          {children && <div className="mt-3">{children}</div>}
+  const cls = `w-full rounded-xl border border-is-border bg-is-surface p-4 text-left${
+    disabled ? " opacity-60" : ""
+  }${onClick ? " transition hover:bg-is-surface-alt focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring" : ""}`;
+  const inner = (
+    <div className="flex items-start gap-3">
+      <Icon size={20} strokeWidth={1.333} className="mt-0.5 shrink-0 text-is-text-tertiary" aria-hidden="true" />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <h2 className="font-chrome text-sm text-is-text">{title}</h2>
+          {disabled && (
+            <span className="rounded-full border border-is-border px-1.5 py-0.5 font-chrome text-[10px] uppercase tracking-wide text-is-text-tertiary">
+              Soon
+            </span>
+          )}
         </div>
+        <p className="mt-0.5 text-sm text-is-text-secondary">{description}</p>
+        {children && <div className="mt-3">{children}</div>}
       </div>
     </div>
+  );
+  return onClick ? (
+    <button type="button" onClick={onClick} className={cls}>
+      {inner}
+    </button>
+  ) : (
+    <div className={cls}>{inner}</div>
   );
 }
 
 // The signed-out empty state: the three connectors (IdeaSpace live; Open folder
 // and Connect Pi shown as coming soon). The sign-in flow (button label, cancel,
 // error) lives in the IdeaSpace card.
-function ConnectPanel({ auth }: { auth: Auth }) {
+function ConnectPanel({ auth, onOpenFolder }: { auth: Auth; onOpenFolder: () => void }) {
   const signingIn = auth.status === "signing-in";
   return (
     <div className="w-full max-w-sm">
@@ -306,7 +353,7 @@ function ConnectPanel({ auth }: { auth: Auth }) {
           icon={FolderOpen}
           title="Open a folder"
           description="Edit local Markdown — no account needed."
-          disabled
+          onClick={onOpenFolder}
         />
         <ConnectCard
           icon={Bot}
@@ -326,29 +373,55 @@ function SignedOutView({
   auth,
   mode,
   setMode,
+  activeRef,
+  onSelectContext,
+  folderContexts,
+  onOpenFolder,
+  onCloseFolder,
 }: {
   auth: Auth;
   mode: ThemeMode;
   setMode: (mode: ThemeMode) => void;
-}) {
+} & ShellContextProps) {
+  // A folder can be open without an account — show it in the shell, with the
+  // switcher to move between folders. Otherwise, the connect panel.
+  const activeFolder = folderContexts.find((c) => c.ref === activeRef) ?? null;
   return (
     <div className="flex h-dvh flex-col overflow-hidden">
       <header className="shrink-0 border-b border-is-border bg-is-bg px-4 py-1.5 font-chrome sm:px-6">
         <div className="flex items-center justify-between gap-4">
-          <LogoSymbol className="h-6 w-7 text-is-text" />
+          <div className="flex min-w-0 items-center gap-2.5">
+            <LogoSymbol className="h-6 w-7 text-is-text" />
+            {activeFolder && (
+              <>
+                <span className="h-4 w-px shrink-0 bg-is-border" />
+                <ContextSwitcher
+                  contexts={folderContexts}
+                  activeContext={activeFolder}
+                  onSelect={onSelectContext}
+                  onOpenFolder={onOpenFolder}
+                  onCloseFolder={onCloseFolder}
+                />
+              </>
+            )}
+          </div>
           <ThemeToggle mode={mode} setMode={setMode} />
         </div>
       </header>
-      <main className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto px-8 py-10">
-        {auth.status === "checking" ? (
-          <div className="flex flex-col items-center gap-4">
-            <LogoSymbol className="h-10 w-10 text-is-text-tertiary" />
-            <p className="text-sm text-is-text-tertiary">Checking sign-in…</p>
-          </div>
-        ) : (
-          <ConnectPanel auth={auth} />
-        )}
-      </main>
+      {activeFolder ? (
+        <FolderBody context={activeFolder} />
+      ) : (
+        <main className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto px-8 py-10">
+          {auth.status === "checking" ? (
+            <div className="flex flex-col items-center gap-4">
+              <LogoSymbol className="h-10 w-10 text-is-text-tertiary" />
+              <p className="text-sm text-is-text-tertiary">Checking sign-in…</p>
+            </div>
+          ) : (
+            <ConnectPanel auth={auth} onOpenFolder={onOpenFolder} />
+          )}
+        </main>
+      )}
     </div>
   );
 }
@@ -356,8 +429,46 @@ function SignedOutView({
 function App() {
   const auth = useAuth();
   const { mode, setMode } = useTheme();
-
   const signedIn = auth.status === "signed-in" || auth.status === "signing-out";
+
+  // Context selection lives here, above the signed-in/out split, so an
+  // accountless folder can be opened and worked in either state. Restore the
+  // last-used context once on mount; never clobber a selection already made.
+  const { folders, openFolder, closeFolder } = useOpenedFolders();
+  const [activeRef, setActiveRef] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    void getActiveContextRef().then((ref) => {
+      if (ref) setActiveRef((cur) => cur ?? ref);
+    });
+  }, []);
+  const onSelectContext = useCallback((ref: string) => {
+    setActiveRef(ref);
+    void setActiveContextRef(ref);
+  }, []);
+  const folderContexts = useMemo(() => folders.map(folderContext), [folders]);
+  const onOpenFolder = useCallback(() => {
+    void openFolder().then((path) => {
+      if (path) onSelectContext(`folder:${path}`);
+    });
+  }, [openFolder, onSelectContext]);
+  // Remove a folder from the list; if it was active, fall back to the default
+  // context (first account context signed-in, else the connect panel).
+  const onCloseFolder = useCallback(
+    (ctx: SpaceContext) => {
+      if (!ctx.path) return;
+      void closeFolder(ctx.path);
+      if (activeRef === ctx.ref) setActiveRef(undefined);
+    },
+    [closeFolder, activeRef],
+  );
+
+  const shell: ShellContextProps = {
+    activeRef,
+    onSelectContext,
+    folderContexts,
+    onOpenFolder,
+    onCloseFolder,
+  };
 
   // The update banner overlays every auth state — rendered once, above the
   // branch, so a new auth state can never accidentally drop it.
@@ -366,9 +477,9 @@ function App() {
       <UpdateBanner />
       <UpdatedNotice />
       {signedIn ? (
-        <SignedInView auth={auth} mode={mode} setMode={setMode} />
+        <SignedInView auth={auth} mode={mode} setMode={setMode} {...shell} />
       ) : (
-        <SignedOutView auth={auth} mode={mode} setMode={setMode} />
+        <SignedOutView auth={auth} mode={mode} setMode={setMode} {...shell} />
       )}
     </>
   );

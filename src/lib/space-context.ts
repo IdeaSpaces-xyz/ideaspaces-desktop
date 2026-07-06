@@ -5,13 +5,23 @@
 import type { Space } from "./cli";
 
 export interface SpaceContext {
-  kind: "personal" | "org";
+  kind: "personal" | "org" | "folder";
   /** Stable ref used as the switcher value. */
   ref: string;
-  /** Display label — username for Personal, hostname for org. */
+  /** Display label — username for Personal, hostname for org, folder name for a folder. */
   label: string;
-  /** Company hostname for org contexts; null for Personal. */
+  /** Company hostname for org contexts; null for Personal and folder contexts. */
   hostname: string | null;
+  /** Filesystem root — present only for `kind: "folder"` (an accountless folder). */
+  path?: string;
+}
+
+/** An accountless folder the user opened — a context with no account, just a path. */
+export function folderContext(path: string): SpaceContext {
+  // Label = the last path segment. Assumes `/`-separated paths (macOS/Linux) —
+  // the release target today; a Windows target would need a path-aware split.
+  const label = path.replace(/\/+$/, "").split("/").pop() || path;
+  return { kind: "folder", ref: `folder:${path}`, label, hostname: null, path };
 }
 
 /** Personal context first, then one per distinct company hostname (sorted). */
