@@ -18,6 +18,8 @@ export interface SpaceContext {
 
 /** An accountless folder the user opened — a context with no account, just a path. */
 export function folderContext(path: string): SpaceContext {
+  // Label = the last path segment. Assumes `/`-separated paths (macOS/Linux) —
+  // the release target today; a Windows target would need a path-aware split.
   const label = path.replace(/\/+$/, "").split("/").pop() || path;
   return { kind: "folder", ref: `folder:${path}`, label, hostname: null, path };
 }

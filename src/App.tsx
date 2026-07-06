@@ -33,6 +33,7 @@ interface ShellContextProps {
   onSelectContext: (ref: string) => void;
   folderContexts: SpaceContext[];
   onOpenFolder: () => void;
+  onCloseFolder: (ctx: SpaceContext) => void;
 }
 
 // Code-split: CodeMirror + the live-preview layer load only when a note opens,
@@ -60,6 +61,7 @@ function SignedInView({
   onSelectContext,
   folderContexts,
   onOpenFolder,
+  onCloseFolder,
 }: {
   auth: Auth;
   mode: ThemeMode;
@@ -158,6 +160,7 @@ function SignedInView({
         activeContext={activeContext}
         onSelectContext={onSelectContext}
         onOpenFolder={onOpenFolder}
+        onCloseFolder={onCloseFolder}
         onHome={() => setEditing(undefined)}
         username={spaces.username ?? undefined}
         mode={mode}
@@ -374,6 +377,7 @@ function SignedOutView({
   onSelectContext,
   folderContexts,
   onOpenFolder,
+  onCloseFolder,
 }: {
   auth: Auth;
   mode: ThemeMode;
@@ -396,6 +400,7 @@ function SignedOutView({
                   activeContext={activeFolder}
                   onSelect={onSelectContext}
                   onOpenFolder={onOpenFolder}
+                  onCloseFolder={onCloseFolder}
                 />
               </>
             )}
@@ -429,7 +434,7 @@ function App() {
   // Context selection lives here, above the signed-in/out split, so an
   // accountless folder can be opened and worked in either state. Restore the
   // last-used context once on mount; never clobber a selection already made.
-  const { folders, openFolder } = useOpenedFolders();
+  const { folders, openFolder, closeFolder } = useOpenedFolders();
   const [activeRef, setActiveRef] = useState<string | undefined>(undefined);
   useEffect(() => {
     void getActiveContextRef().then((ref) => {
@@ -446,8 +451,24 @@ function App() {
       if (path) onSelectContext(`folder:${path}`);
     });
   }, [openFolder, onSelectContext]);
+  // Remove a folder from the list; if it was active, fall back to the default
+  // context (first account context signed-in, else the connect panel).
+  const onCloseFolder = useCallback(
+    (ctx: SpaceContext) => {
+      if (!ctx.path) return;
+      void closeFolder(ctx.path);
+      if (activeRef === ctx.ref) setActiveRef(undefined);
+    },
+    [closeFolder, activeRef],
+  );
 
-  const shell: ShellContextProps = { activeRef, onSelectContext, folderContexts, onOpenFolder };
+  const shell: ShellContextProps = {
+    activeRef,
+    onSelectContext,
+    folderContexts,
+    onOpenFolder,
+    onCloseFolder,
+  };
 
   // The update banner overlays every auth state — rendered once, above the
   // branch, so a new auth state can never accidentally drop it.

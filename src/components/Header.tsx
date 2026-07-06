@@ -13,6 +13,7 @@ export function Header({
   activeContext,
   onSelectContext,
   onOpenFolder,
+  onCloseFolder,
   onHome,
   username,
   mode,
@@ -24,6 +25,7 @@ export function Header({
   activeContext: SpaceContext | null;
   onSelectContext: (ref: string) => void;
   onOpenFolder: () => void;
+  onCloseFolder: (ctx: SpaceContext) => void;
   /** Click the logo → back to the conversations home (closes the editor). */
   onHome: () => void;
   username?: string;
@@ -51,6 +53,7 @@ export function Header({
             activeContext={activeContext}
             onSelect={onSelectContext}
             onOpenFolder={onOpenFolder}
+            onCloseFolder={onCloseFolder}
           />
         </div>
 

@@ -13,20 +13,28 @@ function store(): Promise<Store> {
   return storePromise;
 }
 
+// Pure list transforms — extracted so the dedupe / move-to-front / remove logic
+// is unit-testable without the (Tauri-backed) store.
+export function promoteFolder(list: string[], path: string): string[] {
+  return [path, ...list.filter((p) => p !== path)];
+}
+export function withoutFolder(list: string[], path: string): string[] {
+  return list.filter((p) => p !== path);
+}
+
 export async function getOpenedFolders(): Promise<string[]> {
   return (await (await store()).get<string[]>(KEY)) ?? [];
 }
 
 // Add (or move to front) a folder; returns the new list. Dedupes by exact path.
 export async function addOpenedFolder(path: string): Promise<string[]> {
-  const current = await getOpenedFolders();
-  const next = [path, ...current.filter((p) => p !== path)];
+  const next = promoteFolder(await getOpenedFolders(), path);
   await (await store()).set(KEY, next);
   return next;
 }
 
 export async function removeOpenedFolder(path: string): Promise<string[]> {
-  const next = (await getOpenedFolders()).filter((p) => p !== path);
+  const next = withoutFolder(await getOpenedFolders(), path);
   await (await store()).set(KEY, next);
   return next;
 }

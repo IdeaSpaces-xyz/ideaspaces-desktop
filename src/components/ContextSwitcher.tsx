@@ -1,5 +1,5 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { Building2, Check, ChevronsUpDown, FolderOpen, FolderPlus, User } from "lucide-react";
+import { Building2, Check, ChevronsUpDown, FolderOpen, FolderPlus, User, X } from "lucide-react";
 import { cn } from "../lib/cn";
 import type { SpaceContext } from "../lib/space-context";
 
@@ -11,12 +11,15 @@ export function ContextSwitcher({
   activeContext,
   onSelect,
   onOpenFolder,
+  onCloseFolder,
 }: {
   contexts: SpaceContext[];
   activeContext: SpaceContext | null;
   onSelect: (ref: string) => void;
   /** Pick a folder to open as an accountless context. */
   onOpenFolder: () => void;
+  /** Remove an opened folder from the list. */
+  onCloseFolder: (ctx: SpaceContext) => void;
 }) {
   if (!activeContext) return null;
 
@@ -48,7 +51,7 @@ export function ContextSwitcher({
               <DropdownMenu.RadioItem
                 key={ctx.ref}
                 value={ctx.ref}
-                className="flex cursor-pointer select-none items-center gap-2 px-3 py-2 text-xs text-is-text outline-none transition-colors data-[highlighted]:bg-is-surface-alt"
+                className="group flex cursor-pointer select-none items-center gap-2 px-3 py-2 text-xs text-is-text outline-none transition-colors data-[highlighted]:bg-is-surface-alt"
               >
                 <ContextGlyph context={ctx} />
                 <span className={cn("flex-1 truncate", ctx.kind === "personal" && "lowercase")}>
@@ -57,6 +60,24 @@ export function ContextSwitcher({
                 <DropdownMenu.ItemIndicator>
                   <Check size={14} strokeWidth={1.5} className="text-is-text" />
                 </DropdownMenu.ItemIndicator>
+                {ctx.kind === "folder" && (
+                  // Remove this folder from the list. Stop the pointer/click from
+                  // selecting the row or closing the menu — this is its own action.
+                  <button
+                    type="button"
+                    aria-label={`Remove ${ctx.label}`}
+                    title="Remove from list"
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onCloseFolder(ctx);
+                    }}
+                    className="rounded p-0.5 text-is-text-tertiary opacity-0 transition hover:bg-is-surface hover:text-is-text focus-visible:opacity-100 group-data-[highlighted]:opacity-100"
+                  >
+                    <X size={12} strokeWidth={1.5} aria-hidden="true" />
+                  </button>
+                )}
               </DropdownMenu.RadioItem>
             ))}
           </DropdownMenu.RadioGroup>
