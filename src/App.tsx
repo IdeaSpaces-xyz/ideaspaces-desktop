@@ -1,4 +1,13 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { Bot, Cloud, FolderOpen, type LucideIcon } from "lucide-react";
 import { ContextSwitcher } from "./components/ContextSwitcher";
 import { Header } from "./components/Header";
@@ -554,14 +563,25 @@ function App() {
     onLeaveFolder,
   };
 
-  // Surface sign-in failures via toast when a folder is active — the connect
-  // panel (which renders auth.error inline) isn't mounted then, so a failed
-  // sign-in from the folder header would otherwise be silent.
+  // Surface sign-in failures via toast only from the folder header (the connect
+  // panel renders auth.error inline; SignedInView has its own banner — so gate on
+  // signed-out + in-a-folder to avoid double-surfacing against either). Fire on
+  // the *leading edge* of a new error, so re-entering a folder with a stale
+  // auth.error doesn't re-toast it.
   const toast = useToast();
   const inFolder = folderContexts.some((c) => c.ref === activeRef);
+  const lastToastedError = useRef<string | undefined>(undefined);
   useEffect(() => {
-    if (auth.error && inFolder) toast(auth.error, "error");
-  }, [auth.error, inFolder, toast]);
+    if (
+      !signedIn &&
+      inFolder &&
+      auth.error &&
+      auth.error !== lastToastedError.current
+    ) {
+      toast(auth.error, "error");
+    }
+    lastToastedError.current = auth.error;
+  }, [auth.error, signedIn, inFolder, toast]);
 
   // The update banner overlays every auth state — rendered once, above the
   // branch, so a new auth state can never accidentally drop it.
