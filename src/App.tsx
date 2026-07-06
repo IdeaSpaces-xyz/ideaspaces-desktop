@@ -1,4 +1,13 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { Bot, Cloud, FolderOpen, type LucideIcon } from "lucide-react";
 import { ContextSwitcher } from "./components/ContextSwitcher";
 import { Header } from "./components/Header";
@@ -15,6 +24,7 @@ import { useSpaceActions } from "./spaces/useSpaceActions";
 import { useCloneStatuses } from "./spaces/useCloneStatuses";
 import { useOpenedFolders } from "./spaces/useOpenedFolders";
 import { useTheme, type ThemeMode } from "./theme/useTheme";
+import { useToast } from "./toast/toast-context";
 import {
   deriveSpaceContexts,
   folderContext,
@@ -34,6 +44,8 @@ interface ShellContextProps {
   folderContexts: SpaceContext[];
   onOpenFolder: () => void;
   onCloseFolder: (ctx: SpaceContext) => void;
+  /** Leave the active folder context (the editor's Back at the folder root). */
+  onLeaveFolder: () => void;
 }
 
 // Code-split: CodeMirror + the live-preview layer load only when a note opens,
@@ -62,6 +74,7 @@ function SignedInView({
   folderContexts,
   onOpenFolder,
   onCloseFolder,
+  onLeaveFolder,
 }: {
   auth: Auth;
   mode: ThemeMode;
@@ -169,7 +182,7 @@ function SignedInView({
         signingOut={auth.status === "signing-out"}
       />
       {isFolder ? (
-        <FolderBody context={activeContext!} />
+        <FolderEditor context={activeContext!} onLeave={onLeaveFolder} />
       ) : editing ? (
         <Suspense
           fallback={<div className="flex flex-1 items-center justify-center text-sm text-is-text-tertiary">Loading editor…</div>}
@@ -249,19 +262,27 @@ function SignedInView({
   );
 }
 
-// The body for an accountless folder context. S2c-2a wires the folder as a
-// first-class context (switcher + persistence); rendering the folder in the
-// editor is S2c-2b, which replaces this placeholder with EditorSurface over
-// `context.path`.
-function FolderBody({ context }: { context: SpaceContext }) {
+// The body for an accountless folder context — the editor over the folder. The
+// editor is already path-native (Tauri `fs`); a folder Location has no `remote`,
+// so Share / web-link / Sync / Discuss stay hidden (S2c-1). The Back button at
+// the folder root leaves the context (`onLeave`).
+function FolderEditor({ context, onLeave }: { context: SpaceContext; onLeave: () => void }) {
   return (
-    <div className="flex min-h-0 flex-1 items-center justify-center px-8 text-center">
-      <div className="max-w-sm">
-        <FolderOpen className="mx-auto h-10 w-10 text-is-text-tertiary" strokeWidth={1.333} aria-hidden="true" />
-        <h2 className="mt-4 text-sm font-medium text-is-text">{context.label}</h2>
-        <p className="mt-1 break-all text-xs text-is-text-tertiary">{context.path}</p>
-      </div>
-    </div>
+    <Suspense
+      fallback={
+        <div className="flex flex-1 items-center justify-center text-sm text-is-text-tertiary">
+          Loading editor…
+        </div>
+      }
+    >
+      <EditorSurface
+        key={context.path}
+        location={{ path: context.path! }}
+        onClose={onLeave}
+        onStartConversation={() => {}}
+        canShare={false}
+      />
+    </Suspense>
   );
 }
 
@@ -316,7 +337,17 @@ function ConnectCard({
 // The signed-out empty state: the three connectors (IdeaSpace live; Open folder
 // and Connect Pi shown as coming soon). The sign-in flow (button label, cancel,
 // error) lives in the IdeaSpace card.
-function ConnectPanel({ auth, onOpenFolder }: { auth: Auth; onOpenFolder: () => void }) {
+function ConnectPanel({
+  auth,
+  onOpenFolder,
+  folderContexts,
+  onSelectContext,
+}: {
+  auth: Auth;
+  onOpenFolder: () => void;
+  folderContexts: SpaceContext[];
+  onSelectContext: (ref: string) => void;
+}) {
   const signingIn = auth.status === "signing-in";
   return (
     <div className="w-full max-w-sm">
@@ -362,6 +393,27 @@ function ConnectPanel({ auth, onOpenFolder }: { auth: Auth; onOpenFolder: () => 
           disabled
         />
       </div>
+      {folderContexts.length > 0 && (
+        <div className="mt-6">
+          <h3 className="mb-2 font-chrome text-[10px] uppercase tracking-[0.08em] text-is-text-tertiary">
+            Your folders
+          </h3>
+          <div className="space-y-1.5">
+            {folderContexts.map((ctx) => (
+              <button
+                key={ctx.ref}
+                type="button"
+                onClick={() => onSelectContext(ctx.ref)}
+                title={ctx.path}
+                className="flex w-full items-center gap-2 rounded-lg border border-is-border bg-is-surface px-3 py-2 text-left text-sm text-is-text transition hover:bg-is-surface-alt focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
+              >
+                <FolderOpen size={16} strokeWidth={1.333} className="shrink-0 text-is-text-tertiary" aria-hidden="true" />
+                <span className="min-w-0 flex-1 truncate">{ctx.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -378,6 +430,7 @@ function SignedOutView({
   folderContexts,
   onOpenFolder,
   onCloseFolder,
+  onLeaveFolder,
 }: {
   auth: Auth;
   mode: ThemeMode;
@@ -391,7 +444,19 @@ function SignedOutView({
       <header className="shrink-0 border-b border-is-border bg-is-bg px-4 py-1.5 font-chrome sm:px-6">
         <div className="flex items-center justify-between gap-4">
           <div className="flex min-w-0 items-center gap-2.5">
-            <LogoSymbol className="h-6 w-7 text-is-text" />
+            {activeFolder ? (
+              <button
+                type="button"
+                onClick={onLeaveFolder}
+                aria-label="Home"
+                title="Home"
+                className="inline-flex shrink-0 items-center rounded text-is-text transition hover:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
+              >
+                <LogoSymbol className="h-6 w-7" />
+              </button>
+            ) : (
+              <LogoSymbol className="h-6 w-7 text-is-text" />
+            )}
             {activeFolder && (
               <>
                 <span className="h-4 w-px shrink-0 bg-is-border" />
@@ -405,11 +470,26 @@ function SignedOutView({
               </>
             )}
           </div>
-          <ThemeToggle mode={mode} setMode={setMode} />
+          <div className="flex shrink-0 items-center gap-1.5">
+            {/* Only in a folder — at root the connect panel's card is the sign-in
+                CTA, so a header button too would be redundant. */}
+            {activeFolder && (
+              // While signing in, the button cancels the (possibly stalled)
+              // browser handoff; errors surface via the toast wired in App.
+              <button
+                type="button"
+                onClick={auth.status === "signing-in" ? auth.cancelSignIn : auth.signIn}
+                className="rounded-md px-2.5 py-1 text-xs font-medium text-is-text transition hover:bg-is-surface-alt focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
+              >
+                {auth.status === "signing-in" ? "Cancel sign-in" : "Sign in"}
+              </button>
+            )}
+            <ThemeToggle mode={mode} setMode={setMode} />
+          </div>
         </div>
       </header>
       {activeFolder ? (
-        <FolderBody context={activeFolder} />
+        <FolderEditor context={activeFolder} onLeave={onLeaveFolder} />
       ) : (
         <main className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto px-8 py-10">
           {auth.status === "checking" ? (
@@ -418,7 +498,12 @@ function SignedOutView({
               <p className="text-sm text-is-text-tertiary">Checking sign-in…</p>
             </div>
           ) : (
-            <ConnectPanel auth={auth} onOpenFolder={onOpenFolder} />
+            <ConnectPanel
+              auth={auth}
+              onOpenFolder={onOpenFolder}
+              folderContexts={folderContexts}
+              onSelectContext={onSelectContext}
+            />
           )}
         </main>
       )}
@@ -461,6 +546,13 @@ function App() {
     },
     [closeFolder, activeRef],
   );
+  // Leave the active folder → fall back to the default context (first account
+  // context signed-in, else the connect panel). Clear the persisted ref so a
+  // deliberate exit isn't reopened on relaunch.
+  const onLeaveFolder = useCallback(() => {
+    setActiveRef(undefined);
+    void setActiveContextRef("");
+  }, []);
 
   const shell: ShellContextProps = {
     activeRef,
@@ -468,7 +560,28 @@ function App() {
     folderContexts,
     onOpenFolder,
     onCloseFolder,
+    onLeaveFolder,
   };
+
+  // Surface sign-in failures via toast only from the folder header (the connect
+  // panel renders auth.error inline; SignedInView has its own banner — so gate on
+  // signed-out + in-a-folder to avoid double-surfacing against either). Fire on
+  // the *leading edge* of a new error, so re-entering a folder with a stale
+  // auth.error doesn't re-toast it.
+  const toast = useToast();
+  const inFolder = folderContexts.some((c) => c.ref === activeRef);
+  const lastToastedError = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (
+      !signedIn &&
+      inFolder &&
+      auth.error &&
+      auth.error !== lastToastedError.current
+    ) {
+      toast(auth.error, "error");
+    }
+    lastToastedError.current = auth.error;
+  }, [auth.error, signedIn, inFolder, toast]);
 
   // The update banner overlays every auth state — rendered once, above the
   // branch, so a new auth state can never accidentally drop it.

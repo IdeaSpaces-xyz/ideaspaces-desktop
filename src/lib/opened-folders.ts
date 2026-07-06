@@ -22,6 +22,16 @@ export function withoutFolder(list: string[], path: string): string[] {
   return list.filter((p) => p !== path);
 }
 
+// Is `path` within the home tree? Requires the separator so `/Users/bobby` isn't
+// treated as inside `/Users/bob`. The `fs` capabilities are scoped to `$HOME/**`
+// (src-tauri/capabilities/default.json), so a folder outside home would read but
+// silently fail to write — we reject it up front. Assumes `/`-separated paths,
+// the same macOS/Linux assumption as folderContext() in space-context.ts.
+export function isInsideHome(path: string, home: string): boolean {
+  const h = home.replace(/\/+$/, "");
+  return path === h || path.startsWith(h + "/");
+}
+
 export async function getOpenedFolders(): Promise<string[]> {
   return (await (await store()).get<string[]>(KEY)) ?? [];
 }
