@@ -15,6 +15,7 @@ import { useSpaceActions } from "./spaces/useSpaceActions";
 import { useCloneStatuses } from "./spaces/useCloneStatuses";
 import { useOpenedFolders } from "./spaces/useOpenedFolders";
 import { useTheme, type ThemeMode } from "./theme/useTheme";
+import { useToast } from "./toast/toast-context";
 import {
   deriveSpaceContexts,
   folderContext,
@@ -464,13 +465,14 @@ function SignedOutView({
             {/* Only in a folder — at root the connect panel's card is the sign-in
                 CTA, so a header button too would be redundant. */}
             {activeFolder && (
+              // While signing in, the button cancels the (possibly stalled)
+              // browser handoff; errors surface via the toast wired in App.
               <button
                 type="button"
-                onClick={auth.signIn}
-                disabled={auth.status === "signing-in"}
-                className="rounded-md px-2.5 py-1 text-xs font-medium text-is-text transition hover:bg-is-surface-alt disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
+                onClick={auth.status === "signing-in" ? auth.cancelSignIn : auth.signIn}
+                className="rounded-md px-2.5 py-1 text-xs font-medium text-is-text transition hover:bg-is-surface-alt focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
               >
-                {auth.status === "signing-in" ? "Signing in…" : "Sign in"}
+                {auth.status === "signing-in" ? "Cancel sign-in" : "Sign in"}
               </button>
             )}
             <ThemeToggle mode={mode} setMode={setMode} />
@@ -551,6 +553,15 @@ function App() {
     onCloseFolder,
     onLeaveFolder,
   };
+
+  // Surface sign-in failures via toast when a folder is active — the connect
+  // panel (which renders auth.error inline) isn't mounted then, so a failed
+  // sign-in from the folder header would otherwise be silent.
+  const toast = useToast();
+  const inFolder = folderContexts.some((c) => c.ref === activeRef);
+  useEffect(() => {
+    if (auth.error && inFolder) toast(auth.error, "error");
+  }, [auth.error, inFolder, toast]);
 
   // The update banner overlays every auth state — rendered once, above the
   // branch, so a new auth state can never accidentally drop it.
