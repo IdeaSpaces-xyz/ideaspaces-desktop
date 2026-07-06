@@ -1,5 +1,14 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { Building2, Check, ChevronsUpDown, FolderOpen, FolderPlus, User, X } from "lucide-react";
+import {
+  Building2,
+  Check,
+  ChevronsUpDown,
+  FolderCog,
+  FolderOpen,
+  FolderPlus,
+  User,
+  X,
+} from "lucide-react";
 import { cn } from "../lib/cn";
 import type { SpaceContext } from "../lib/space-context";
 
@@ -12,6 +21,7 @@ export function ContextSwitcher({
   onSelect,
   onOpenFolder,
   onCloseFolder,
+  onChangeCloneRoot,
 }: {
   contexts: SpaceContext[];
   activeContext: SpaceContext | null;
@@ -20,6 +30,8 @@ export function ContextSwitcher({
   onOpenFolder: () => void;
   /** Remove an opened folder from the list. */
   onCloseFolder: (ctx: SpaceContext) => void;
+  /** Set the active account's clone root (absent for folder contexts). */
+  onChangeCloneRoot?: () => void;
 }) {
   if (!activeContext) return null;
 
@@ -92,6 +104,16 @@ export function ContextSwitcher({
             <FolderPlus size={14} strokeWidth={1.333} className="shrink-0 text-is-text-secondary" />
             <span className="flex-1 truncate">Open folder…</span>
           </DropdownMenu.Item>
+          {onChangeCloneRoot && (
+            // Set where the active account's repos clone by default.
+            <DropdownMenu.Item
+              onSelect={onChangeCloneRoot}
+              className="flex cursor-pointer select-none items-center gap-2 px-3 py-2 text-xs text-is-text outline-none transition-colors data-[highlighted]:bg-is-surface-alt"
+            >
+              <FolderCog size={14} strokeWidth={1.333} className="shrink-0 text-is-text-secondary" />
+              <span className="flex-1 truncate">Change clone folder…</span>
+            </DropdownMenu.Item>
+          )}
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
     </DropdownMenu.Root>

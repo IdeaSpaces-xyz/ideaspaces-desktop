@@ -81,7 +81,7 @@ function SignedInView({
   setMode: (mode: ThemeMode) => void;
 } & ShellContextProps) {
   const spaces = useSpaces();
-  const actions = useSpaceActions(spaces.reload);
+  const actions = useSpaceActions(spaces.reload, spaces.username);
   // The open editor: a clone, optionally jumped to a specific note (from search).
   const [editing, setEditing] = useState<{ location: Location; note?: string } | undefined>(
     undefined,
@@ -174,6 +174,11 @@ function SignedInView({
         onSelectContext={onSelectContext}
         onOpenFolder={onOpenFolder}
         onCloseFolder={onCloseFolder}
+        onChangeCloneRoot={
+          activeContext && activeContext.kind !== "folder"
+            ? () => void actions.changeCloneRoot(activeContext)
+            : undefined
+        }
         onHome={() => setEditing(undefined)}
         username={spaces.username ?? undefined}
         mode={mode}
