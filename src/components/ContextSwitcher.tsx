@@ -1,31 +1,24 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { Building2, Check, ChevronsUpDown, User } from "lucide-react";
+import { Building2, Check, ChevronsUpDown, FolderOpen, FolderPlus, User } from "lucide-react";
 import { cn } from "../lib/cn";
 import type { SpaceContext } from "../lib/space-context";
 
-// Global Personal / org switcher in the header. Ported from is_web's /v2 TopBar.
+// Global context switcher in the header — Personal / org accounts plus any
+// accountless folders the user has opened, and an "Open folder…" action. Ported
+// from is_web's /v2 TopBar, generalized for the local-first shell.
 export function ContextSwitcher({
   contexts,
   activeContext,
   onSelect,
+  onOpenFolder,
 }: {
   contexts: SpaceContext[];
   activeContext: SpaceContext | null;
   onSelect: (ref: string) => void;
+  /** Pick a folder to open as an accountless context. */
+  onOpenFolder: () => void;
 }) {
   if (!activeContext) return null;
-
-  // Single context (Personal only, no orgs) → static label, no menu.
-  if (contexts.length <= 1) {
-    return (
-      <span className="flex min-w-0 items-center gap-1.5 px-2 py-1 text-xs text-is-text">
-        <ContextGlyph context={activeContext} />
-        <span className={cn("truncate", activeContext.kind === "personal" && "lowercase")}>
-          {activeContext.label}
-        </span>
-      </span>
-    );
-  }
 
   return (
     <DropdownMenu.Root>
@@ -67,6 +60,14 @@ export function ContextSwitcher({
               </DropdownMenu.RadioItem>
             ))}
           </DropdownMenu.RadioGroup>
+          <DropdownMenu.Separator className="my-1 h-px bg-is-border" />
+          <DropdownMenu.Item
+            onSelect={onOpenFolder}
+            className="flex cursor-pointer select-none items-center gap-2 px-3 py-2 text-xs text-is-text outline-none transition-colors data-[highlighted]:bg-is-surface-alt"
+          >
+            <FolderPlus size={14} strokeWidth={1.333} className="shrink-0 text-is-text-secondary" />
+            <span className="flex-1 truncate">Open folder…</span>
+          </DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
     </DropdownMenu.Root>
@@ -74,6 +75,7 @@ export function ContextSwitcher({
 }
 
 function ContextGlyph({ context }: { context: SpaceContext }) {
-  const Icon = context.kind === "personal" ? User : Building2;
+  const Icon =
+    context.kind === "personal" ? User : context.kind === "folder" ? FolderOpen : Building2;
   return <Icon size={14} strokeWidth={1.333} className="shrink-0 text-is-text-secondary" />;
 }
