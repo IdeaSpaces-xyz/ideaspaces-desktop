@@ -43,8 +43,8 @@ import { ask } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { spaceUrl } from "../lib/web";
-import { cloneStatus, commitClone, type CloneRecord } from "../lib/cli";
-import { toCloneRecord, type Location } from "../lib/location";
+import { cloneStatus, commitClone } from "../lib/cli";
+import { type Location } from "../lib/location";
 import { pullThenPush } from "../lib/sync";
 import { deriveSyncBadge, type SyncBadge } from "../lib/sync-state";
 import { useToast } from "../toast/toast-context";
@@ -94,7 +94,8 @@ const NOTHING_PENDING_BADGE = deriveSyncBadge({
 // Keyed by path so each note gets fresh state (NoteEditor mounts per note).
 function NotePane({
   note,
-  clone,
+  rootPath,
+  syncable,
   onBusyChange,
   onRegisterFlush,
   onClose,
@@ -104,7 +105,9 @@ function NotePane({
   resolveWiki,
 }: {
   note: NoteFile;
-  clone: CloneRecord;
+  rootPath: string;
+  /** The folder is a synced clone (has a remote) — gates the Sync pill + push/pull. */
+  syncable: boolean;
   onBusyChange: (busy: boolean) => void;
   // Expose this note's autosave-flush up so the surface can persist the draft
   // before an external action (e.g. renaming the open note) reads it from disk.
@@ -184,9 +187,12 @@ function NotePane({
 
   // Seed the sync indicator from the clone's git state — it may carry prior
   // unsynced work (uncommitted, or committed-not-pushed) from before this open.
+  // Skip for a non-synced folder (no remote): syncView stays "loading", so the
+  // pill renders nothing and we never run git status on a possibly-non-repo path.
   useEffect(() => {
+    if (!syncable) return;
     let alive = true;
-    cloneStatus(clone.path)
+    cloneStatus(rootPath)
       .then((s) => {
         if (!alive) return;
         // Only resolve the initial "loading" — never clobber a state the user
@@ -201,7 +207,7 @@ function NotePane({
     return () => {
       alive = false;
     };
-  }, [clone.path]);
+  }, [rootPath, syncable]);
 
   // Write the draft to disk if it changed. The silent half of the loop — the
   // user never asks for it.
@@ -258,7 +264,7 @@ function NotePane({
       const syncedContent = draftRef.current;
       try {
         // Scoped commit: only this note's path, never other staged work.
-        await commitClone(clone.path, `Edit ${note.relPath}`, [note.relPath]);
+        await commitClone(rootPath, `Edit ${note.relPath}`, [note.relPath]);
       } catch (err) {
         // Nothing new to commit is fine — fall through and push any committed
         // history. TODO(i18n): this matches the English "nothing to commit"
@@ -266,7 +272,7 @@ function NotePane({
         // locale-robust. Tracked in roadmap/plans/desktop/_agent/now.md.
         if (!/nothing to commit|no changes/i.test(errMessage(err))) throw err;
       }
-      const res = await pullThenPush(clone.path);
+      const res = await pullThenPush(rootPath);
       // Edits that landed during the sync leave the note unsynced again.
       setSyncView(draftRef.current === syncedContent ? NOTHING_PENDING_BADGE : LOCAL_EDITS_BADGE);
       toast(
@@ -280,7 +286,7 @@ function NotePane({
     } finally {
       setBusy(false);
     }
-  }, [clone.path, note.relPath, flushSave, toast]);
+  }, [rootPath, note.relPath, flushSave, toast]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-is-surface">
@@ -291,7 +297,7 @@ function NotePane({
           <CopyButton value={note.relPath} label="note path" />
         </p>
         <div className="flex shrink-0 items-center gap-2">
-          {syncView === "syncing" ? (
+          {syncable && (syncView === "syncing" ? (
             <span className="inline-flex items-center gap-1.5 px-2 py-1.5 text-xs text-is-text-tertiary">
               <RefreshCw size={14} strokeWidth={1.333} className="animate-spin" aria-hidden="true" />
               Syncing…
@@ -319,7 +325,7 @@ function NotePane({
               )}
               {syncView.verb}
             </button>
-          )}
+          ))}
           {!isReadme && (
             <ExportMenu
               disabled={busy || exporting}
@@ -986,10 +992,14 @@ export function EditorSurface({
   canShare: boolean;
 }) {
   const toast = useToast();
-  // This surface still keys on repo_id (commit/share/spaceUrl); bridge the
-  // path-native Location back to the flat clone shape until S2b/S2c make the
-  // internals path-native. `remote` is always present here (clone-backed).
-  const clone = useMemo(() => toCloneRecord(location), [location]);
+  // Path is the primary key — always present; local file IO keys on it. `remote`
+  // (repo_id/namespace/slug) is present only for a clone bound to a space, so the
+  // remote-only affordances (Share, web-link) hide when it's absent. A bare
+  // folder has no slug, so display falls back to the folder name.
+  const rootPath = location.path;
+  const remote = location.remote;
+  const folderName = rootPath.replace(/\/+$/, "").split("/").pop() || rootPath;
+  const displayName = remote?.slug ?? folderName;
   // Start in the target note's directory so useDir loads the files we need to
   // select it; "" (root) otherwise.
   const [path, setPath] = useState(() => {
@@ -1029,11 +1039,11 @@ export function EditorSurface({
   const registerFlush = useCallback((fn: (() => Promise<void>) | null) => {
     flushOpenNoteRef.current = fn;
   }, []);
-  const { status, folders, files, error, reload } = useDir(clone.path, path);
-  const { index: wikiIndex, reload: reloadWiki } = useWikiIndex(clone.path);
+  const { status, folders, files, error, reload } = useDir(rootPath, path);
+  const { index: wikiIndex, reload: reloadWiki } = useWikiIndex(rootPath);
   // Per-note git created/updated times (one cached `git log` pass per clone),
   // for the date sorts. Empty until it resolves.
-  const noteTimesMap = useNoteTimes(clone.path);
+  const noteTimesMap = useNoteTimes(rootPath);
 
   // Open the initial note (from search) once its directory has loaded — reuses
   // the exact NoteFile the tree builds, so its title/frontmatter come for free.
@@ -1076,14 +1086,14 @@ export function EditorSurface({
   const submitCreate = useCallback(
     async (name: string) => {
       try {
-        await createFolder(clone.path, path, name);
+        await createFolder(rootPath, path, name);
         await reload();
         setCreating(null);
       } catch (err) {
         toast(errMessage(err), "error");
       }
     },
-    [clone.path, path, reload, toast],
+    [rootPath, path, reload, toast],
   );
 
   // Add+ → New folder uses the inline create row in the browse tree, so close
@@ -1115,7 +1125,7 @@ export function EditorSurface({
         // reads the latest content from disk rather than dropping live edits.
         await flushOpenNoteRef.current?.();
         if (target.kind === "folder") {
-          const newRel = await renameFolder(clone.path, target.relPath, newName);
+          const newRel = await renameFolder(rootPath, target.relPath, newName);
           await Promise.all([reload(), reloadWiki()]);
           // If the open note lives inside the renamed folder, follow it to the
           // new path — otherwise the editor would save back to the old (gone)
@@ -1123,7 +1133,7 @@ export function EditorSurface({
           // this is defensive, but cheap and correct.)
           if (selected && selected.relPath.startsWith(`${target.relPath}/`)) {
             const newRelPath = newRel + selected.relPath.slice(target.relPath.length);
-            const root = clone.path.replace(/\/+$/, "");
+            const root = rootPath.replace(/\/+$/, "");
             setSelected({ ...selected, relPath: newRelPath, path: `${root}/${newRelPath}` });
             setEditorKey((k) => k + 1);
           }
@@ -1132,7 +1142,7 @@ export function EditorSurface({
           if (!file) return;
           const content = await readNote(file.path);
           const newNote = await renameNote(
-            clone.path,
+            rootPath,
             file.relPath,
             newName,
             setFrontmatterName(content, newName),
@@ -1149,7 +1159,7 @@ export function EditorSurface({
         toast(errMessage(err), "error");
       }
     },
-    [renaming, clone.path, files, selected, reload, reloadWiki, toast],
+    [renaming, rootPath, files, selected, reload, reloadWiki, toast],
   );
 
   // Drop a pending rename when the folder changes — the row no longer exists.
@@ -1160,7 +1170,7 @@ export function EditorSurface({
   const createNewNote = useCallback(async () => {
     if (selected && !(await confirmLeave())) return;
     try {
-      const note = await createUntitledNote(clone.path, path);
+      const note = await createUntitledNote(rootPath, path);
       await Promise.all([reload(), reloadWiki()]);
       setCreating(null);
       setNewNotePath(note.path);
@@ -1168,7 +1178,7 @@ export function EditorSurface({
     } catch (err) {
       toast(errMessage(err), "error");
     }
-  }, [selected, confirmLeave, clone.path, path, reload, reloadWiki, toast]);
+  }, [selected, confirmLeave, rootPath, path, reload, reloadWiki, toast]);
 
   // Retitle the open note: write its content (new frontmatter `name`) to a
   // slugified filename, then reselect. The editorKey bump forces a remount even
@@ -1176,13 +1186,13 @@ export function EditorSurface({
   const retitleNote = useCallback(
     async (content: string, title: string) => {
       if (!selected) return;
-      const newNote = await renameNote(clone.path, selected.relPath, title, content);
+      const newNote = await renameNote(rootPath, selected.relPath, title, content);
       await Promise.all([reload(), reloadWiki()]);
       setNewNotePath(undefined); // titled now → its pane should focus the body
       setSelected(newNote);
       setEditorKey((k) => k + 1);
     },
-    [selected, clone.path, reload, reloadWiki],
+    [selected, rootPath, reload, reloadWiki],
   );
 
   // `[[wiki-link]]` styling: a web address (`[[example.com]]`) reads like a
@@ -1247,7 +1257,7 @@ export function EditorSurface({
           if (!create) return;
           if (!(await confirmLeave())) return;
           try {
-            const created = await createNote(clone.path, dir, base);
+            const created = await createNote(rootPath, dir, base);
             await Promise.all([reload(), reloadWiki()]);
             setCreating(null);
             setPath(dir);
@@ -1260,7 +1270,7 @@ export function EditorSurface({
         }
       }
     },
-    [wikiIndex, openNote, confirmLeave, clone.path, reload, reloadWiki, toast],
+    [wikiIndex, openNote, confirmLeave, rootPath, reload, reloadWiki, toast],
   );
 
   // Back: close the open note → up one folder → out to Repos. One predictable
@@ -1304,19 +1314,21 @@ export function EditorSurface({
   const [sharing, setSharing] = useState(false);
 
   // Copy the public web link for the current location — the open note, else the
-  // folder. `clone.namespace` is the owner handle; the /space/ path route is public.
+  // folder. `remote.namespace` is the owner handle; the /space/ path route is
+  // public. Only meaningful when the folder is a synced clone (has a remote).
   const copyLink = useCallback(async () => {
+    if (!remote) return;
     try {
-      await writeText(spaceUrl(clone.namespace, clone.slug, selected?.relPath ?? path));
+      await writeText(spaceUrl(remote.namespace, remote.slug, selected?.relPath ?? path));
       toast("Link copied");
     } catch (err) {
       toast(errMessage(err), "error");
     }
-  }, [clone.namespace, clone.slug, selected, path, toast]);
+  }, [remote, selected, path, toast]);
 
   const segments = path ? path.split("/") : [];
-  // Title is the current folder name, or the repo itself at the root.
-  const title = segments.length ? segments[segments.length - 1] : clone.slug;
+  // Title is the current folder name, or the repo/folder itself at the root.
+  const title = segments.length ? segments[segments.length - 1] : displayName;
   // README is pulled out of the notes list and shown as the folder's guide.
   const readme = useMemo(() => files.find((f) => /^readme$/i.test(f.name)), [files]);
   const noteFiles = useMemo(
@@ -1343,8 +1355,8 @@ export function EditorSurface({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {sharing && (
-        <ShareDialog repoId={clone.repo_id} repoLabel={clone.slug} onClose={() => setSharing(false)} />
+      {sharing && remote && (
+        <ShareDialog repoId={remote.repo_id} repoLabel={remote.slug} onClose={() => setSharing(false)} />
       )}
       <div className="flex items-center gap-2 border-b border-is-border px-3 py-2.5">
         {railCollapsed && (
@@ -1368,28 +1380,34 @@ export function EditorSurface({
           Back
         </button>
         <div className="min-w-0 flex-1">
-          <Breadcrumb slug={clone.slug} segments={segments} onNavigate={(p) => void navigate(p)} />
+          <Breadcrumb slug={displayName} segments={segments} onNavigate={(p) => void navigate(p)} />
         </div>
-        <button
-          type="button"
-          onClick={() => void copyLink()}
-          aria-label="Copy link"
-          title={`Copy link to ${selected ? "this note" : "this folder"} on the web`}
-          className="inline-flex shrink-0 items-center rounded-md p-1.5 text-is-text-tertiary transition hover:bg-is-surface-alt hover:text-is-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
-        >
-          <Link2 size={15} strokeWidth={1.5} aria-hidden="true" />
-        </button>
-        <button
-          type="button"
-          onClick={onStartConversation}
-          aria-label="Start a conversation"
-          title="Start a conversation in this repo"
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1.5 text-xs text-is-text-tertiary transition hover:bg-is-surface-alt hover:text-is-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
-        >
-          <MessageSquarePlus size={14} strokeWidth={1.5} aria-hidden="true" />
-          Discuss
-        </button>
-        {canShare && (
+        {/* Web link + Discuss are remote-only: a bare local folder has no public
+            URL and no Keeper conversation (local-agent conversations arrive in S4). */}
+        {remote && (
+          <>
+            <button
+              type="button"
+              onClick={() => void copyLink()}
+              aria-label="Copy link"
+              title={`Copy link to ${selected ? "this note" : "this folder"} on the web`}
+              className="inline-flex shrink-0 items-center rounded-md p-1.5 text-is-text-tertiary transition hover:bg-is-surface-alt hover:text-is-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
+            >
+              <Link2 size={15} strokeWidth={1.5} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              onClick={onStartConversation}
+              aria-label="Start a conversation"
+              title="Start a conversation in this repo"
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1.5 text-xs text-is-text-tertiary transition hover:bg-is-surface-alt hover:text-is-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
+            >
+              <MessageSquarePlus size={14} strokeWidth={1.5} aria-hidden="true" />
+              Discuss
+            </button>
+          </>
+        )}
+        {canShare && remote && (
           <button
             type="button"
             onClick={() => setSharing(true)}
@@ -1430,7 +1448,7 @@ export function EditorSurface({
             <span className="min-w-0 flex-1 truncate text-xs font-medium text-is-text-secondary">
               {title}
             </span>
-            <CopyButton value={path || clone.slug} label="folder path" size={13} />
+            <CopyButton value={path || displayName} label="folder path" size={13} />
             <button
               type="button"
               onClick={() => setRailCollapsed(true)}
@@ -1516,7 +1534,8 @@ export function EditorSurface({
             <NotePane
               key={`${selected.path}:${editorKey}`}
               note={selected}
-              clone={clone}
+              rootPath={rootPath}
+              syncable={remote != null}
               onBusyChange={setBusy}
               onRegisterFlush={registerFlush}
               onClose={() => void closeNote()}
