@@ -1,5 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { promoteFolder, withoutFolder } from "./opened-folders";
+import { isInsideHome, promoteFolder, withoutFolder } from "./opened-folders";
+
+describe("isInsideHome", () => {
+  const home = "/Users/bob";
+  it("accepts the home dir itself and its descendants", () => {
+    expect(isInsideHome(home, home)).toBe(true);
+    expect(isInsideHome("/Users/bob/notes/journal", home)).toBe(true);
+  });
+  it("tolerates a trailing slash on home", () => {
+    expect(isInsideHome("/Users/bob/notes", "/Users/bob/")).toBe(true);
+  });
+  it("rejects a sibling that shares a prefix (bob vs bobby)", () => {
+    expect(isInsideHome("/Users/bobby/notes", home)).toBe(false);
+  });
+  it("rejects paths outside home", () => {
+    expect(isInsideHome("/Volumes/ext/notes", home)).toBe(false);
+    expect(isInsideHome("/tmp", home)).toBe(false);
+  });
+});
 
 describe("promoteFolder", () => {
   it("prepends a new folder", () => {

@@ -461,14 +461,18 @@ function SignedOutView({
             )}
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
-            <button
-              type="button"
-              onClick={auth.signIn}
-              disabled={auth.status === "signing-in"}
-              className="rounded-md px-2.5 py-1 text-xs font-medium text-is-text transition hover:bg-is-surface-alt disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
-            >
-              {auth.status === "signing-in" ? "Signing in…" : "Sign in"}
-            </button>
+            {/* Only in a folder — at root the connect panel's card is the sign-in
+                CTA, so a header button too would be redundant. */}
+            {activeFolder && (
+              <button
+                type="button"
+                onClick={auth.signIn}
+                disabled={auth.status === "signing-in"}
+                className="rounded-md px-2.5 py-1 text-xs font-medium text-is-text transition hover:bg-is-surface-alt disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
+              >
+                {auth.status === "signing-in" ? "Signing in…" : "Sign in"}
+              </button>
+            )}
             <ThemeToggle mode={mode} setMode={setMode} />
           </div>
         </div>

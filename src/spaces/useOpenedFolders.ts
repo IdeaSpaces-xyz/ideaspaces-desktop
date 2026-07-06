@@ -1,18 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { homeDir } from "@tauri-apps/api/path";
-import { addOpenedFolder, getOpenedFolders, removeOpenedFolder } from "../lib/opened-folders";
+import {
+  addOpenedFolder,
+  getOpenedFolders,
+  isInsideHome,
+  removeOpenedFolder,
+} from "../lib/opened-folders";
 import { useToast } from "../toast/toast-context";
-
-// A picked path is workable only if it's under the home tree — the app's `fs`
-// capabilities are scoped to `$HOME/**` (see src-tauri/capabilities/default.json,
-// which is deliberately narrow, with a TODO to tighten further). Opening a folder
-// outside it would let the editor read the tree but silently fail every write, so
-// we reject it up front instead.
-function isInsideHome(path: string, home: string): boolean {
-  const h = home.replace(/\/+$/, "");
-  return path === h || path.startsWith(h + "/");
-}
 
 // The accountless folders the user has opened, persisted (newest-first). Auth-
 // independent — a folder is a context you can work in with or without a login.
