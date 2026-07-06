@@ -44,6 +44,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { spaceUrl } from "../lib/web";
 import { cloneStatus, commitClone, type CloneRecord } from "../lib/cli";
+import { toCloneRecord, type Location } from "../lib/location";
 import { pullThenPush } from "../lib/sync";
 import { deriveSyncBadge, type SyncBadge } from "../lib/sync-state";
 import { useToast } from "../toast/toast-context";
@@ -969,13 +970,13 @@ function NoteDates({ created, updated }: { created?: number; updated?: number })
 // the desktop twist that the right pane *is* the editor (no read-only → edit
 // toggle — the live-preview surface is editable in place).
 export function EditorSurface({
-  clone,
+  location,
   onClose,
   initialRelPath,
   onStartConversation,
   canShare,
 }: {
-  clone: CloneRecord;
+  location: Location;
   onClose: () => void;
   /** Open straight to this note (repo-relative path), e.g. from search. */
   initialRelPath?: string;
@@ -985,6 +986,10 @@ export function EditorSurface({
   canShare: boolean;
 }) {
   const toast = useToast();
+  // This surface still keys on repo_id (commit/share/spaceUrl); bridge the
+  // path-native Location back to the flat clone shape until S2b/S2c make the
+  // internals path-native. `remote` is always present here (clone-backed).
+  const clone = useMemo(() => toCloneRecord(location), [location]);
   // Start in the target note's directory so useDir loads the files we need to
   // select it; "" (root) otherwise.
   const [path, setPath] = useState(() => {
