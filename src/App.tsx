@@ -16,7 +16,7 @@ import { useTheme, type ThemeMode } from "./theme/useTheme";
 import { deriveSpaceContexts, resolveContext, spacesForContext } from "./lib/space-context";
 import { deriveRepoEntries } from "./lib/repo-entry";
 import { getActiveContextRef, setActiveContextRef } from "./lib/active-context";
-import type { CloneRecord } from "./lib/cli";
+import { fromClone, type Location } from "./lib/location";
 
 // Code-split: CodeMirror + the live-preview layer load only when a note opens,
 // keeping the initial bundle (login/browse) light.
@@ -48,7 +48,7 @@ function SignedInView({
   const actions = useSpaceActions(spaces.reload);
   const [activeRef, setActiveRef] = useState<string | undefined>(undefined);
   // The open editor: a clone, optionally jumped to a specific note (from search).
-  const [editing, setEditing] = useState<{ clone: CloneRecord; note?: string } | undefined>(
+  const [editing, setEditing] = useState<{ location: Location; note?: string } | undefined>(
     undefined,
   );
   // Repo to preselect in the home composer — set when "Start conversation" is
@@ -120,10 +120,13 @@ function SignedInView({
   const openHit = useCallback(
     (hit: RankedHit) => {
       const clone = spaces.clones.find((c) => c.path === hit.clonePath);
-      if (clone) setEditing({ clone, note: hit.path });
+      if (clone) {
+        const space = spaces.spaces.find((s) => s.repo_id === clone.repo_id);
+        setEditing({ location: fromClone(clone, space), note: hit.path });
+      }
       setPaletteOpen(false);
     },
-    [spaces.clones],
+    [spaces.clones, spaces.spaces],
   );
 
   return (
@@ -147,17 +150,18 @@ function SignedInView({
           fallback={<div className="flex flex-1 items-center justify-center text-sm text-is-text-tertiary">Loading editor…</div>}
         >
           <EditorSurface
-            key={`${editing.clone.path}::${editing.note ?? ""}`}
-            clone={editing.clone}
+            key={`${editing.location.path}::${editing.note ?? ""}`}
+            location={editing.location}
             initialRelPath={editing.note}
             onClose={() => setEditing(undefined)}
             onStartConversation={() => {
-              setConvoRepoId(editing.clone.repo_id);
+              setConvoRepoId(editing.location.remote?.repo_id);
               setEditing(undefined);
             }}
             canShare={
-              spaces.spaces.find((s) => s.repo_id === editing.clone.repo_id)?.role?.toLowerCase() ===
-              "owner"
+              spaces.spaces
+                .find((s) => s.repo_id === editing.location.remote?.repo_id)
+                ?.role?.toLowerCase() === "owner"
             }
           />
         </Suspense>
@@ -171,7 +175,7 @@ function SignedInView({
             status={spaces.status}
             error={spaces.error}
             onReload={() => void spaces.reload()}
-            onOpen={(entry) => entry.clone && setEditing({ clone: entry.clone })}
+            onOpen={(entry) => entry.clone && setEditing({ location: fromClone(entry.clone, entry.space) })}
             onClone={actions.clone}
             onCloneTo={actions.cloneTo}
             onLinkExisting={actions.linkExisting}
