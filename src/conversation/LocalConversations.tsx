@@ -314,6 +314,7 @@ function LocalConversationView({
             userName={username}
             optimisticUserText={optimistic}
             streamState={streamState}
+            agent={{ name: "Pi", avatar: "P", role: "local agent" }}
           />
         )}
       </div>

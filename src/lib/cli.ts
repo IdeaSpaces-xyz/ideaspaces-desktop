@@ -849,10 +849,10 @@ export async function getLocalConversation(
     "conversation",
     "get",
     "--local",
-    "--conversation",
-    conversationId,
     "--context",
     context,
+    "--conversation",
+    conversationId,
     "--json",
   ]);
   if (code !== 0) {
