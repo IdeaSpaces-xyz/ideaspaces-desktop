@@ -26,10 +26,16 @@ import type {
 let piBinArgs: string[] = [];
 
 /** Resolve the bundled pi path once; on failure (dev), leave PATH fallback.
- *  Call at app start (before the first pi-status / local conversation). */
+ *  Call at app start (before the first pi-status / local conversation).
+ *  First paint is gated on this, so bound it: the invoke is a synchronous
+ *  fs check on the Rust side, but a hung IPC must not blank the screen —
+ *  time out to the PATH fallback rather than never settling. */
 export async function initPiRuntime(): Promise<void> {
   try {
-    const path = await invoke<string>("pi_bin_path");
+    const path = await Promise.race([
+      invoke<string>("pi_bin_path"),
+      new Promise<string>((_, reject) => setTimeout(() => reject(new Error("pi_bin_path timed out")), 2000)),
+    ]);
     piBinArgs = path ? ["--pi-bin", path] : [];
   } catch {
     piBinArgs = [];
