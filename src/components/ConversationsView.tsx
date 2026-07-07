@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Lock, MessageSquare, RefreshCw, X } from "lucide-react";
 import { useConversations, type ConversationRow } from "../spaces/useConversations";
 import { NewConversation } from "./NewConversation";
+import { LocalConversationView } from "../conversation/LocalConversations";
 import { bucketByTime, relativeTime } from "../lib/time";
 import {
   getConversation,
@@ -541,26 +542,29 @@ export function ConversationsView({
   repos,
   reposLoading,
   username,
+  clonePathFor,
   preselectRepoId,
 }: {
   repos: Space[];
   reposLoading: boolean;
   username: string;
+  /** The local clone path for a repo, if available offline — gates Pi in the draft. */
+  clonePathFor: (repoId: string) => string | undefined;
   /** Repo to preselect in the start-conversation draft (e.g. from a repo tree). */
   preselectRepoId?: string;
 }) {
   const { status, rows, error, truncated, reload } = useConversations(repos);
-  const [selected, setSelected] = useState<ConversationRow | null>(null);
-  // Set only for a just-created conversation, to auto-send its first message
-  // with the model tier / Think chosen in the draft.
-  const [initialSend, setInitialSend] = useState<({ message: string } & SendOptions) | undefined>(
-    undefined,
-  );
+  // The open conversation — a remote Keeper one, or a local Pi one over a clone
+  // path. Its first message (auto-sent once) rides along on creation.
+  const [selected, setSelected] = useState<
+    | { kind: "remote"; row: ConversationRow; initialSend?: { message: string } & SendOptions }
+    | { kind: "local"; conversationId: string; context: string; initialSend?: { message: string } }
+    | null
+  >(null);
   // An open conversation belongs to the context it was opened in — drop it on a
   // context/repo switch so we never show one that's out of scope.
   useEffect(() => {
     setSelected(null);
-    setInitialSend(undefined);
   }, [repos]);
   // Repos still loading → repos is [] and conversations resolve to a false
   // "empty"; show loading until the repo set is known.
@@ -569,30 +573,44 @@ export function ConversationsView({
   // arrive newest-first, which the bucketer preserves within each section.
   const buckets = useMemo(() => bucketByTime(rows, (c) => c.updated_at), [rows]);
 
-  // Leaving a conversation clears the pending first message so reopening it
-  // (as an existing row) never re-sends.
-  const backToList = () => {
-    setSelected(null);
-    setInitialSend(undefined);
-  };
+  const backToList = () => setSelected(null);
 
-  // Draft created → open it as the selected conversation and hand off its first
-  // message (with the chosen model tier / Think); refresh the list so it appears
-  // when you go back.
+  // Draft created → open it and hand off its first message. Remote refreshes the
+  // list so it appears on return; local conversations live in the folder's
+  // `.pi/sessions` and aren't in this (remote) list.
   const handleCreated = (row: ConversationRow, firstMessage: string, opts: SendOptions) => {
-    setInitialSend({ message: firstMessage, ...opts });
-    setSelected(row);
+    setSelected({ kind: "remote", row, initialSend: { message: firstMessage, ...opts } });
     void reload();
+  };
+  const handleCreatedLocal = (args: {
+    conversationId: string;
+    context: string;
+    message: string;
+  }) => {
+    setSelected({
+      kind: "local",
+      conversationId: args.conversationId,
+      context: args.context,
+      initialSend: { message: args.message },
+    });
   };
 
   // A selected conversation takes the full height (own scroll + pinned compose),
   // so it renders outside the padded list page.
   if (selected) {
-    return (
-      <ConversationDetail
-        conversation={selected}
+    return selected.kind === "local" ? (
+      <LocalConversationView
+        context={selected.context}
+        conversationId={selected.conversationId}
+        username={username}
+        initialSend={selected.initialSend}
         onBack={backToList}
-        initialSend={initialSend}
+      />
+    ) : (
+      <ConversationDetail
+        conversation={selected.row}
+        onBack={backToList}
+        initialSend={selected.initialSend}
         username={username}
       />
     );
@@ -604,8 +622,10 @@ export function ConversationsView({
         <NewConversation
           repos={repos}
           username={username}
+          clonePathFor={clonePathFor}
           preselectRepoId={preselectRepoId}
           onCreated={handleCreated}
+          onCreatedLocal={handleCreatedLocal}
         />
       )}
 
@@ -666,7 +686,7 @@ export function ConversationsView({
                           <li key={c.conversation_id}>
                             <button
                               type="button"
-                              onClick={() => setSelected(c)}
+                              onClick={() => setSelected({ kind: "remote", row: c })}
                               className="block w-full rounded-lg border border-is-border bg-is-surface px-4 py-3.5 text-left transition-colors hover:bg-is-surface-alt focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
                             >
                               <span className="flex items-baseline justify-between gap-3">

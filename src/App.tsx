@@ -252,6 +252,7 @@ function SignedInView({
                 repos={visibleSpaces}
                 reposLoading={spaces.status !== "loaded"}
                 username={spaces.username ?? "you"}
+                clonePathFor={(repoId) => spaces.clones.find((c) => c.repo_id === repoId)?.path}
                 preselectRepoId={convoRepoId}
               />
             </Suspense>
