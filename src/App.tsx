@@ -6,9 +6,10 @@ import {
   useMemo,
   useRef,
   useState,
+  type ComponentType,
   type ReactNode,
 } from "react";
-import { Bot, Check, Cloud, FolderOpen, type LucideIcon } from "lucide-react";
+import { Cloud, FolderOpen } from "lucide-react";
 import { ContextSwitcher } from "./components/ContextSwitcher";
 import { Header } from "./components/Header";
 import { LogoSymbol } from "./components/LogoSymbol";
@@ -24,6 +25,7 @@ import { useSpaceActions } from "./spaces/useSpaceActions";
 import { useCloneStatuses } from "./spaces/useCloneStatuses";
 import { useOpenedFolders } from "./spaces/useOpenedFolders";
 import { usePiStatus, describePi } from "./pi/usePiStatus";
+import { PiLogo } from "./pi/PiLogo";
 import { useTheme, type ThemeMode } from "./theme/useTheme";
 import { useToast } from "./toast/toast-context";
 import {
@@ -292,10 +294,18 @@ function FolderEditor({ context, onLeave }: { context: SpaceContext; onLeave: ()
   );
 }
 
-// One of the three connectors on the signed-out empty state. A card with an
-// icon, a title, and a description; `disabled` dims it and shows a "Soon" tag
-// (Connect Pi ships in S4 — shown now so the three-layer shape reads at a
-// glance). With `onClick` the whole card is a button.
+// An icon usable in a ConnectCard — a Lucide icon or our PiLogo; both take the
+// same size/strokeWidth/className/aria-hidden props.
+type ConnectIcon = ComponentType<{
+  size?: number;
+  strokeWidth?: number;
+  className?: string;
+  "aria-hidden"?: boolean | "true" | "false";
+}>;
+
+// One of the connectors on the signed-out empty state. A card with an icon, a
+// title, and a description; `disabled` dims it and shows a "Soon" tag. With
+// `onClick` the whole card is a button.
 function ConnectCard({
   icon: Icon,
   title,
@@ -304,7 +314,7 @@ function ConnectCard({
   onClick,
   children,
 }: {
-  icon: LucideIcon;
+  icon: ConnectIcon;
   title: string;
   description: string;
   disabled?: boolean;
@@ -397,7 +407,7 @@ function ConnectPanel({
           onClick={onOpenFolder}
         />
         <ConnectCard
-          icon={piCard.connected ? Check : Bot}
+          icon={PiLogo}
           title={piCard.title}
           description={piCard.description}
           onClick={recheckPi}
