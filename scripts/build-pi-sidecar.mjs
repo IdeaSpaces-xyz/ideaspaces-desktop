@@ -125,6 +125,17 @@ function findExecutable(dir) {
 }
 
 if (!universal) {
+  // Non-macOS host (the product ships macOS-only today): don't hard-fail the
+  // whole `tauri dev`/`build` — skip bundling pi so the rest still builds. The
+  // CLI sidecar is host-generic (bun compiles for any triple) and initPiRuntime
+  // falls back to the user's PATH `pi`, so a dev on Linux/Windows loses only the
+  // bundled binary, not a working app. Mirrors the "never blocks" philosophy.
+  if (!ASSET_FOR[hostTriple]) {
+    console.warn(
+      `build-pi-sidecar: no prebuilt pi for ${hostTriple} — skipping (macOS-only today; falls back to PATH pi).`,
+    );
+    process.exit(0);
+  }
   await stage(hostTriple);
   console.log("build-pi-sidecar: done.");
 } else {
