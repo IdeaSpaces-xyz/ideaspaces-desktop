@@ -320,7 +320,11 @@ function FolderWorkspace({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {piReady && (
-        <div className="flex shrink-0 items-center gap-1 border-b border-is-border px-3 py-1.5">
+        <div
+          role="tablist"
+          aria-label="Folder view"
+          className="flex shrink-0 items-center gap-1 border-b border-is-border px-3 py-1.5"
+        >
           <TabButton active={view === "edit"} onClick={() => setMode("edit")}>
             Edit
           </TabButton>
@@ -353,6 +357,8 @@ function TabButton({
   return (
     <button
       type="button"
+      role="tab"
+      aria-selected={active}
       onClick={onClick}
       className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 font-chrome text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring ${
         active ? "bg-is-surface-alt text-is-text" : "text-is-text-tertiary hover:text-is-text"

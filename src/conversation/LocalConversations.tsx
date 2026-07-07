@@ -11,7 +11,7 @@ import {
 import type { KeeperConversationDetail } from "./keeper-types";
 import { createInitialKeeperStreamState, reduceKeeperStreamState } from "./keeper-stream-state";
 import { V2Transcript } from "./V2Transcript";
-import { Compose, type SendOptions } from "./Compose";
+import { Compose } from "./Compose";
 import { bucketByTime, relativeTime } from "../lib/time";
 import { useToast } from "../toast/toast-context";
 import { PiLogo } from "../pi/PiLogo";
@@ -27,9 +27,7 @@ export function LocalConversations({ context, username }: { context: string; use
   const [error, setError] = useState<string | undefined>(undefined);
   // The open conversation, plus an optional first message to auto-send (a freshly
   // created one). `null` = the list.
-  const [open, setOpen] = useState<{ id: string; initialSend?: { message: string } & SendOptions } | null>(
-    null,
-  );
+  const [open, setOpen] = useState<{ id: string; initialSend?: { message: string } } | null>(null);
 
   const load = useCallback(async () => {
     setStatus("loading");
@@ -50,10 +48,10 @@ export function LocalConversations({ context, username }: { context: string; use
 
   // A new conversation is minted on the first message, then opened with it queued.
   const startNew = useCallback(
-    async (text: string, opts: SendOptions) => {
+    async (text: string) => {
       try {
         const { conversation_id } = await createLocalConversation();
-        setOpen({ id: conversation_id, initialSend: { message: text, ...opts } });
+        setOpen({ id: conversation_id, initialSend: { message: text } });
       } catch (err) {
         toast(err instanceof Error ? err.message : String(err), "error");
       }
@@ -86,7 +84,13 @@ export function LocalConversations({ context, username }: { context: string; use
           <span>Pi — your local agent, over this folder</span>
         </div>
         <div className="rounded-2xl border border-is-border bg-is-surface">
-          <Compose onSend={(t, o) => void startNew(t, o)} onStop={() => {}} streaming={false} />
+          <Compose
+            onSend={(t) => void startNew(t)}
+            onStop={() => {}}
+            streaming={false}
+            placeholder="Ask Pi…"
+            showModelControls={false}
+          />
         </div>
       </section>
 
@@ -167,7 +171,7 @@ function LocalConversationView({
   context: string;
   conversationId: string;
   username: string;
-  initialSend?: { message: string } & SendOptions;
+  initialSend?: { message: string };
   onBack: () => void;
 }) {
   const toast = useToast();
@@ -313,6 +317,8 @@ function LocalConversationView({
           onStop={stop}
           streaming={streaming}
           disabled={sending && !streaming}
+          placeholder="Ask Pi…"
+          showModelControls={false}
         />
       </div>
     </div>
