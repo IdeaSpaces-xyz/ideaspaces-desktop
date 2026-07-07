@@ -12,13 +12,19 @@ import "./index.css";
 import App from "./App";
 import { ToastProvider } from "./toast/ToastProvider";
 import { UpdaterProvider } from "./updater/UpdaterProvider";
+import { initPiRuntime } from "./lib/cli";
 
-ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
-  <React.StrictMode>
-    <ToastProvider>
-      <UpdaterProvider>
-        <App />
-      </UpdaterProvider>
-    </ToastProvider>
-  </React.StrictMode>,
-);
+// Resolve the bundled pi path before the first render, so Connect Pi detection
+// (usePiStatus, on mount) already passes --pi-bin. It never rejects (falls back
+// to PATH pi in dev), and the invoke is a fast local round-trip.
+void initPiRuntime().finally(() => {
+  ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
+    <React.StrictMode>
+      <ToastProvider>
+        <UpdaterProvider>
+          <App />
+        </UpdaterProvider>
+      </ToastProvider>
+    </React.StrictMode>,
+  );
+});

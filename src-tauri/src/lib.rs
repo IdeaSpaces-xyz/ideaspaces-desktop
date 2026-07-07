@@ -11,10 +11,27 @@ fn print_page(window: tauri::WebviewWindow) -> Result<(), String> {
     window.print().map_err(|e| e.to_string())
 }
 
+/// Absolute path to the bundled `pi` sidecar, for handing to the CLI as
+/// `--pi-bin` (the CLI spawns pi for local conversations). Tauri places external
+/// binaries next to the app executable and strips the target-triple suffix, so
+/// resolve it relative to `current_exe`. Errs when absent — dev without
+/// `build:pi-sidecar`, where the caller falls back to the user's PATH `pi`.
+#[tauri::command]
+fn pi_bin_path() -> Result<String, String> {
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let dir = exe.parent().ok_or("no parent dir for current_exe")?;
+    let pi = dir.join(if cfg!(windows) { "pi.exe" } else { "pi" });
+    if pi.exists() {
+        Ok(pi.to_string_lossy().into_owned())
+    } else {
+        Err(format!("bundled pi not found at {}", pi.display()))
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![print_page])
+        .invoke_handler(tauri::generate_handler![print_page, pi_bin_path])
         // Native macOS menu bar. We set a custom menu to add "Check for
         // Updates…" under the app menu — so we MUST re-add the standard Edit
         // roles (copy/paste/undo) the editor relies on, plus Window. The
