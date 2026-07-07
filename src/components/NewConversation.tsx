@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { Bot, Check, ChevronsUpDown, FolderGit2 } from "lucide-react";
 import { createConversation, createLocalConversation, listAgents, type Agent, type Space } from "../lib/cli";
@@ -40,7 +40,10 @@ export function NewConversation({
   // when pi is connected. Selectable only for a repo that's available offline —
   // Pi runs over its local clone (reach: online-only → Keeper only, synced → both).
   const { state: piState } = usePiStatus();
-  const localAgent = piState.kind === "ready" ? localPiAgent(username) : null;
+  const localAgent = useMemo(
+    () => (piState.kind === "ready" ? localPiAgent(username) : null),
+    [piState.kind, username],
+  );
   // Preselect the repo we were sent from, else the only repo, else none.
   const [repoId, setRepoId] = useState(
     (preselectRepoId && repos.some((r) => r.repo_id === preselectRepoId) && preselectRepoId) ||
@@ -176,6 +179,10 @@ export function NewConversation({
           onStop={() => {}}
           streaming={false}
           disabled={busy || !repoId}
+          // Pi runs on its own model; hide the Keeper tier/Think controls (they'd
+          // no-op) and address the prompt to Pi when it's the chosen agent.
+          showModelControls={!chosenIsLocal}
+          placeholder={chosenIsLocal ? "Ask Pi…" : undefined}
         />
       </div>
       {!repoId && (
