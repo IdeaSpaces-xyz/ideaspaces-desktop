@@ -28,6 +28,7 @@ export function LocalConversations({ context, username }: { context: string; use
   // The open conversation, plus an optional first message to auto-send (a freshly
   // created one). `null` = the list.
   const [open, setOpen] = useState<{ id: string; initialSend?: { message: string } } | null>(null);
+  const [creating, setCreating] = useState(false);
 
   const load = useCallback(async () => {
     setStatus("loading");
@@ -49,14 +50,18 @@ export function LocalConversations({ context, username }: { context: string; use
   // A new conversation is minted on the first message, then opened with it queued.
   const startNew = useCallback(
     async (text: string) => {
+      if (creating) return; // guard a fast double-submit from minting two ids
+      setCreating(true);
       try {
         const { conversation_id } = await createLocalConversation();
         setOpen({ id: conversation_id, initialSend: { message: text } });
       } catch (err) {
         toast(err instanceof Error ? err.message : String(err), "error");
+      } finally {
+        setCreating(false);
       }
     },
-    [toast],
+    [creating, toast],
   );
 
   if (open) {
@@ -88,6 +93,7 @@ export function LocalConversations({ context, username }: { context: string; use
             onSend={(t) => void startNew(t)}
             onStop={() => {}}
             streaming={false}
+            disabled={creating}
             placeholder="Ask Pi…"
             showModelControls={false}
           />

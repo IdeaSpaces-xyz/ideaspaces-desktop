@@ -336,7 +336,10 @@ function FolderWorkspace({
       )}
       <div className="min-h-0 flex-1 overflow-hidden">
         {view === "discuss" ? (
-          <LocalConversations context={context.path!} username={username} />
+          // Keyed on the path so switching the active folder resets the open
+          // conversation — it belongs to the folder it was opened in (matches
+          // FolderEditor's key on EditorSurface).
+          <LocalConversations key={context.path} context={context.path!} username={username} />
         ) : (
           <FolderEditor context={context} onLeave={onLeave} />
         )}
