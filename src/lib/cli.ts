@@ -355,6 +355,9 @@ export interface Agent {
   can_use: boolean;
   /** Whether this is the owner's default agent. */
   is_default: boolean;
+  /** Where the agent runs. `remote` = a Keeper agent from the API; `local` = the
+   *  desktop-synthesized `agent:<user>-pi` running on this machine (see pi/localAgent). */
+  location: "remote" | "local";
 }
 
 /**
@@ -368,7 +371,11 @@ export async function listAgents(): Promise<Agent[]> {
   if (code !== 0) {
     throw new Error(stderr.trim() || `Could not load agents (exit ${code ?? "unknown"}).`);
   }
-  return parseJson<{ agents: Agent[] }>(stdout, "agents").agents;
+  // API agents are all remote (Keeper); the local Pi is synthesized client-side.
+  return parseJson<{ agents: Omit<Agent, "location">[] }>(stdout, "agents").agents.map((a) => ({
+    ...a,
+    location: "remote" as const,
+  }));
 }
 
 export interface NodeDetail {
