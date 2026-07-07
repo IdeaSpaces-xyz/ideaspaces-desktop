@@ -211,6 +211,11 @@ function LocalConversationView({
     }
   }, [context, conversationId]);
 
+  // `get --local` on a freshly-minted id is a success with empty history (the
+  // session file is created lazily on first send; findSessionFile → null →
+  // empty detail, local-conversations.ts). So loading on mount is safe even for
+  // a brand-new conversation — status reaches "loaded" and the queued first
+  // message auto-sends; there's no error path that would strand it.
   useEffect(() => {
     void load();
   }, [load]);

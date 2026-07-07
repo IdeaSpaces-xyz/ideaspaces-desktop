@@ -325,16 +325,20 @@ function FolderWorkspace({
           aria-label="Folder view"
           className="flex shrink-0 items-center gap-1 border-b border-is-border px-3 py-1.5"
         >
-          <TabButton active={view === "edit"} onClick={() => setMode("edit")}>
+          <TabButton active={view === "edit"} controls="folder-panel" onClick={() => setMode("edit")}>
             Edit
           </TabButton>
-          <TabButton active={view === "discuss"} onClick={() => setMode("discuss")}>
+          <TabButton
+            active={view === "discuss"}
+            controls="folder-panel"
+            onClick={() => setMode("discuss")}
+          >
             <PiLogo size={13} className="text-is-text-secondary" />
             Discuss
           </TabButton>
         </div>
       )}
-      <div className="min-h-0 flex-1 overflow-hidden">
+      <div id="folder-panel" role="tabpanel" className="min-h-0 flex-1 overflow-hidden">
         {view === "discuss" ? (
           // Keyed on the path so switching the active folder resets the open
           // conversation — it belongs to the folder it was opened in (matches
@@ -350,10 +354,12 @@ function FolderWorkspace({
 
 function TabButton({
   active,
+  controls,
   onClick,
   children,
 }: {
   active: boolean;
+  controls?: string;
   onClick: () => void;
   children: ReactNode;
 }) {
@@ -362,6 +368,7 @@ function TabButton({
       type="button"
       role="tab"
       aria-selected={active}
+      aria-controls={controls}
       onClick={onClick}
       className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 font-chrome text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring ${
         active ? "bg-is-surface-alt text-is-text" : "text-is-text-tertiary hover:text-is-text"
