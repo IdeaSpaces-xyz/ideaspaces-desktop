@@ -169,8 +169,10 @@ export function LocalConversations({ context, username }: { context: string; use
 
 // One open local conversation: history + live stream + compose. Mirrors the
 // remote ConversationDetail's send/reconcile/cancel flow, minus the remote-only
-// clone-sync banner and notes panel (Pi writes to disk directly).
-function LocalConversationView({
+// clone-sync banner and notes panel (Pi writes to disk directly). Exported so
+// the signed-in conversation surface can open a local Pi turn over a synced
+// repo's clone path (C3b), not just the folder Discuss surface.
+export function LocalConversationView({
   context,
   conversationId,
   username,

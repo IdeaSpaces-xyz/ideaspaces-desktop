@@ -117,6 +117,11 @@ function SignedInView({
     [activeContext, isFolder, spaces.spaces],
   );
   const cloneStatuses = useCloneStatuses(spaces.clones);
+  // A repo's local clone path, if it's available offline — gates Pi in the draft.
+  const clonePathFor = useCallback(
+    (repoId: string) => spaces.clones.find((c) => c.repo_id === repoId)?.path,
+    [spaces.clones],
+  );
   const repoEntries = useMemo(
     () =>
       deriveRepoEntries({
@@ -252,6 +257,7 @@ function SignedInView({
                 repos={visibleSpaces}
                 reposLoading={spaces.status !== "loaded"}
                 username={spaces.username ?? "you"}
+                clonePathFor={clonePathFor}
                 preselectRepoId={convoRepoId}
               />
             </Suspense>
