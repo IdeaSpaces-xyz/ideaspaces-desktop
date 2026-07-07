@@ -4,11 +4,12 @@ import { ask, open } from "@tauri-apps/plugin-dialog";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { cloneSpace, forgetClone, linkClone, pullClone, pushClone, type Space } from "../lib/cli";
 import { pullThenPush } from "../lib/sync";
-import { defaultWorkspaceDir } from "../lib/workspace";
+import { accountRoot, setAccountRoot } from "../lib/workspace";
+import type { SpaceContext } from "../lib/space-context";
 import { useToast } from "../toast/toast-context";
 
 /** Clone / sync actions over the CLI sidecar, with per-row busy state + toasts. */
-export function useSpaceActions(reload: () => Promise<void> | void) {
+export function useSpaceActions(reload: () => Promise<void> | void, username: string | null) {
   // Set, not a single id — concurrent actions on different rows must not stomp
   // each other's busy state.
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
@@ -25,7 +26,8 @@ export function useSpaceActions(reload: () => Promise<void> | void) {
 
   const errMessage = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
-  // Clone into `<parent>/<slug>` — parent defaults to the workspace dir.
+  // Clone into `<parent>/<slug>` — parent defaults to the space's account root
+  // (per-account, so an org's repos land under its own folder).
   const clone = useCallback(
     async (space: Space, parentDir?: string) => {
       // The slug is the folder name appended to the parent — guard against a
@@ -37,7 +39,7 @@ export function useSpaceActions(reload: () => Promise<void> | void) {
       }
       setBusy(space.repo_id, true);
       try {
-        const parent = parentDir ?? (await defaultWorkspaceDir());
+        const parent = parentDir ?? (await accountRoot(space.hostname, username));
         const target = await join(parent, space.slug);
         await cloneSpace(space.repo_id, target);
         await reload();
@@ -48,7 +50,7 @@ export function useSpaceActions(reload: () => Promise<void> | void) {
         setBusy(space.repo_id, false);
       }
     },
-    [reload, setBusy, toast],
+    [reload, setBusy, toast, username],
   );
 
   // Pick a parent folder, then clone there.
@@ -62,6 +64,26 @@ export function useSpaceActions(reload: () => Promise<void> | void) {
       if (typeof picked === "string") await clone(space, picked);
     },
     [clone],
+  );
+
+  // Set where an account's repos clone by default (the switcher's "Change clone
+  // folder…"). Affects future clones only; existing clones keep their location.
+  const changeCloneRoot = useCallback(
+    async (context: SpaceContext) => {
+      const picked = await open({
+        directory: true,
+        multiple: false,
+        title: `Choose a clone folder for ${context.label}…`,
+      });
+      if (typeof picked !== "string") return;
+      try {
+        await setAccountRoot(context.ref, picked);
+        toast(`${context.label} repos will clone into ${picked}`);
+      } catch (err) {
+        toast(errMessage(err), "error");
+      }
+    },
+    [toast],
   );
 
   // Repo-first: bind a folder you already have to THIS space. The CLI verifies
@@ -193,6 +215,7 @@ export function useSpaceActions(reload: () => Promise<void> | void) {
     linking,
     clone,
     cloneTo,
+    changeCloneRoot,
     linkExisting,
     linkFolder,
     pull,
