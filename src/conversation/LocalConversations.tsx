@@ -10,6 +10,7 @@ import {
 } from "../lib/cli";
 import type { KeeperConversationDetail } from "./keeper-types";
 import { createInitialKeeperStreamState, reduceKeeperStreamState } from "./keeper-stream-state";
+import { useChatScroll } from "./useChatScroll";
 import { V2Transcript } from "./V2Transcript";
 import { Compose } from "./Compose";
 import { bucketByTime, relativeTime } from "../lib/time";
@@ -34,7 +35,9 @@ export function LocalConversations({ context, username }: { context: string; use
     setStatus("loading");
     try {
       const r = await listLocalConversations(context);
-      setRows(r.conversations);
+      // Defensive newest-first sort (parity with the remote useConversations) so
+      // bucketByTime's within-bucket order is correct regardless of CLI order.
+      setRows([...r.conversations].sort((a, b) => (a.updated_at < b.updated_at ? 1 : -1)));
       setError(undefined);
       setStatus("loaded");
     } catch (err) {
@@ -289,6 +292,14 @@ function LocalConversationView({
     }
   }, [status, initialSend, send]);
 
+  // Auto-follow the stream, with a "New ↓" jump when the user scrolls up.
+  const messageCount = (detail?.history.length ?? 0) + (optimistic ? 1 : 0);
+  const { scrollContainerRef, messagesEndRef, showScrollButton, scrollToBottom } = useChatScroll({
+    messageCount,
+    isStreaming: streaming,
+    streamingText: streamState.accumulatedText,
+  });
+
   return (
     <div className="mx-auto flex h-full min-h-0 w-full max-w-2xl flex-col px-6 py-8">
       <button
@@ -299,28 +310,45 @@ function LocalConversationView({
         <ArrowLeft size={14} strokeWidth={1.333} aria-hidden="true" />
         Conversations
       </button>
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        {status === "loading" && <p className="text-sm text-is-text-tertiary">Loading conversation…</p>}
-        {status === "error" && (
-          <p className="text-sm text-is-danger-text">
-            {error}{" "}
+      <div className="relative min-h-0 flex-1">
+        <div ref={scrollContainerRef} className="h-full overflow-y-auto">
+          {status === "loading" && (
+            <p className="text-sm text-is-text-tertiary">Loading conversation…</p>
+          )}
+          {status === "error" && (
+            <p className="text-sm text-is-danger-text">
+              {error}{" "}
+              <button
+                type="button"
+                className="underline underline-offset-2 hover:text-is-text"
+                onClick={() => void load()}
+              >
+                Retry
+              </button>
+            </p>
+          )}
+          {status === "loaded" && detail && (
+            <V2Transcript
+              detail={detail}
+              userName={username}
+              optimisticUserText={optimistic}
+              streamState={streamState}
+              agent={{ name: "Pi", avatar: "P", role: "local agent" }}
+            />
+          )}
+          <div ref={messagesEndRef} />
+        </div>
+        {showScrollButton && status === "loaded" && (
+          <div className="absolute bottom-2 left-1/2 -translate-x-1/2">
             <button
               type="button"
-              className="underline underline-offset-2 hover:text-is-text"
-              onClick={() => void load()}
+              onClick={scrollToBottom}
+              aria-label="Scroll to new messages"
+              className="rounded-full border border-is-border bg-is-surface px-3.5 py-1.5 font-chrome text-xs text-is-text shadow-sm transition-colors hover:bg-is-surface-alt focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
             >
-              Retry
+              New ↓
             </button>
-          </p>
-        )}
-        {status === "loaded" && detail && (
-          <V2Transcript
-            detail={detail}
-            userName={username}
-            optimisticUserText={optimistic}
-            streamState={streamState}
-            agent={{ name: "Pi", avatar: "P", role: "local agent" }}
-          />
+          </div>
         )}
       </div>
       <div className="mt-4 rounded-2xl border border-is-border bg-is-surface">
