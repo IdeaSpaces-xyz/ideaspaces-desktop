@@ -624,7 +624,42 @@ export function streamConversation(
   if (body.modelTier) args.push("--model", body.modelTier);
   if (body.thinking) args.push("--thinking");
   args.push("--json");
+  return streamCli(args, handlers);
+}
 
+/**
+ * Stream a LOCAL (Pi) turn over a folder — `conversation send --local`. Same
+ * event contract as {@link streamConversation} (the CLI emits the same 9 Keeper
+ * events), so the reducer + transcript are reused unchanged. `context` is the
+ * folder root; sessions live at `<context>/.pi/sessions/`. Extension paths come
+ * from `IDEASPACES_PI_EXTENSIONS` (env), inherited by the sidecar — no repo_id,
+ * no account: Pi runs standalone over the local path.
+ */
+export function streamLocalConversation(
+  context: string,
+  conversationId: string,
+  body: SendMessage,
+  handlers: StreamHandlers,
+): StreamHandle {
+  const args = [
+    "conversation",
+    "send",
+    "--local",
+    "--context",
+    context,
+    "--conversation",
+    conversationId,
+    "--message",
+    body.message,
+    "--json",
+  ];
+  return streamCli(args, handlers);
+}
+
+/** Shared streaming core: spawn the sidecar with `args`, line-buffer stdout into
+ *  {@link KeeperStreamEvent}s, expose done/cancel. Spawned (not execute()'d) so a
+ *  turn can be cancelled mid-flight. */
+function streamCli(args: string[], handlers: StreamHandlers): StreamHandle {
   const command = Command.sidecar("binaries/ideaspaces", args);
 
   let buffer = "";
@@ -788,4 +823,62 @@ export async function piStatus(extPaths?: string[]): Promise<PiStatus> {
     throw new Error(stderr.trim() || `Could not check pi status (exit ${code ?? "unknown"}).`);
   }
   return parseJson<PiStatus>(stdout, "pi-status");
+}
+
+// --- Local (Pi) conversations ---
+// Pi runs standalone over a folder path (no repo_id, no account). Same JSON
+// contracts as the remote conversation verbs, so the reducer + transcript reuse.
+
+/** Create a local conversation — `conversation new --local`. Mints an id (the pi
+ *  session id); the session file is created lazily on first send. */
+export async function createLocalConversation(): Promise<{ conversation_id: string }> {
+  const { code, stdout, stderr } = await runCli(["conversation", "new", "--local", "--json"]);
+  if (code !== 0) {
+    throw new Error(stderr.trim() || `Could not create a local conversation (exit ${code ?? "unknown"}).`);
+  }
+  return parseJson<{ conversation_id: string }>(stdout, "conversation new --local");
+}
+
+/** Read a local conversation's history — `conversation get --local`. Same shape
+ *  as the remote get; `repo_id` in the payload is the context root, not a repo. */
+export async function getLocalConversation(
+  context: string,
+  conversationId: string,
+): Promise<KeeperConversationDetail> {
+  const { code, stdout, stderr } = await runCli([
+    "conversation",
+    "get",
+    "--local",
+    "--context",
+    context,
+    "--conversation",
+    conversationId,
+    "--json",
+  ]);
+  if (code !== 0) {
+    throw new Error(stderr.trim() || `Could not load the local conversation (exit ${code ?? "unknown"}).`);
+  }
+  return parseJson<KeeperConversationDetail>(stdout, "conversation get --local");
+}
+
+export interface LocalConversationsResult {
+  context: string;
+  conversations: Conversation[];
+  total: number;
+  has_more: boolean;
+}
+
+/** List a folder's local conversations — `conversations --local --context <root>`. */
+export async function listLocalConversations(context: string): Promise<LocalConversationsResult> {
+  const { code, stdout, stderr } = await runCli([
+    "conversations",
+    "--local",
+    "--context",
+    context,
+    "--json",
+  ]);
+  if (code !== 0) {
+    throw new Error(stderr.trim() || `Could not load local conversations (exit ${code ?? "unknown"}).`);
+  }
+  return parseJson<LocalConversationsResult>(stdout, "conversations --local");
 }

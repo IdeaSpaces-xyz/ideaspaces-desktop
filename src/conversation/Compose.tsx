@@ -25,11 +25,18 @@ export function Compose({
   onStop,
   streaming,
   disabled = false,
+  placeholder = "Ask Keeper…",
+  showModelControls = true,
 }: {
   onSend: (text: string, opts: SendOptions) => void;
   onStop: () => void;
   streaming: boolean;
   disabled?: boolean;
+  /** Prompt text. Defaults to the Keeper copy; the local Pi surface passes its own. */
+  placeholder?: string;
+  /** The model-tier picker + Think toggle. Hidden for the local flow until the
+   *  model picker lands (C5–C6) — no false affordance for controls that no-op. */
+  showModelControls?: boolean;
 }) {
   const toast = useToast();
   const [text, setText] = useState("");
@@ -76,55 +83,59 @@ export function Compose({
             submit();
           }
         }}
-        placeholder="Ask Keeper…"
+        placeholder={placeholder}
         aria-label="Message"
         disabled={disabled}
         className="block max-h-[200px] min-h-[3.5rem] w-full resize-none bg-transparent font-chrome text-sm leading-relaxed text-is-text outline-none placeholder:text-is-text-tertiary disabled:opacity-60"
       />
       <div className="mt-2 flex items-center gap-2">
-        {/* Segmented model picker — flat pills, not a native <select> (renders
-            inconsistently in the webview, and the Think pill beside it is the
-            proven pattern). */}
-        <div
-          role="radiogroup"
-          aria-label="Model"
-          className="flex items-center gap-0.5 rounded bg-is-surface-alt p-0.5"
-        >
-          {MODEL_TIERS.map((tier) => (
+        {showModelControls && (
+          <>
+            {/* Segmented model picker — flat pills, not a native <select> (renders
+                inconsistently in the webview, and the Think pill beside it is the
+                proven pattern). */}
+            <div
+              role="radiogroup"
+              aria-label="Model"
+              className="flex items-center gap-0.5 rounded bg-is-surface-alt p-0.5"
+            >
+              {MODEL_TIERS.map((tier) => (
+                <button
+                  key={tier}
+                  type="button"
+                  role="radio"
+                  aria-checked={modelTier === tier}
+                  onClick={() => setModelTier(tier)}
+                  disabled={disabled}
+                  title={MODEL_TIER_INFO[tier].description}
+                  className={cn(
+                    "rounded px-2 py-0.5 font-chrome text-[11px] uppercase tracking-[0.04em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring disabled:opacity-50",
+                    modelTier === tier
+                      ? "bg-is-text text-is-bg"
+                      : "text-is-text-tertiary hover:text-is-text",
+                  )}
+                >
+                  {MODEL_TIER_INFO[tier].label}
+                </button>
+              ))}
+            </div>
             <button
-              key={tier}
               type="button"
-              role="radio"
-              aria-checked={modelTier === tier}
-              onClick={() => setModelTier(tier)}
+              onClick={() => setThinking((v) => !v)}
               disabled={disabled}
-              title={MODEL_TIER_INFO[tier].description}
+              aria-pressed={thinking}
+              title="Show the model's thinking"
               className={cn(
-                "rounded px-2 py-0.5 font-chrome text-[11px] uppercase tracking-[0.04em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring disabled:opacity-50",
-                modelTier === tier
+                togglePill,
+                thinking
                   ? "bg-is-text text-is-bg"
-                  : "text-is-text-tertiary hover:text-is-text",
+                  : "bg-is-surface-alt text-is-text-tertiary hover:text-is-text",
               )}
             >
-              {MODEL_TIER_INFO[tier].label}
+              think
             </button>
-          ))}
-        </div>
-        <button
-          type="button"
-          onClick={() => setThinking((v) => !v)}
-          disabled={disabled}
-          aria-pressed={thinking}
-          title="Show the model's thinking"
-          className={cn(
-            togglePill,
-            thinking
-              ? "bg-is-text text-is-bg"
-              : "bg-is-surface-alt text-is-text-tertiary hover:text-is-text",
-          )}
-        >
-          think
-        </button>
+          </>
+        )}
         {streaming ? (
           <button
             type="button"

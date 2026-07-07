@@ -26,6 +26,7 @@ import { useCloneStatuses } from "./spaces/useCloneStatuses";
 import { useOpenedFolders } from "./spaces/useOpenedFolders";
 import { usePiStatus, describePi } from "./pi/usePiStatus";
 import { PiLogo } from "./pi/PiLogo";
+import { LocalConversations } from "./conversation/LocalConversations";
 import { useTheme, type ThemeMode } from "./theme/useTheme";
 import { useToast } from "./toast/toast-context";
 import {
@@ -190,7 +191,11 @@ function SignedInView({
         signingOut={auth.status === "signing-out"}
       />
       {isFolder ? (
-        <FolderEditor context={activeContext!} onLeave={onLeaveFolder} />
+        <FolderWorkspace
+          context={activeContext!}
+          username={spaces.username ?? "you"}
+          onLeave={onLeaveFolder}
+        />
       ) : editing ? (
         <Suspense
           fallback={<div className="flex flex-1 items-center justify-center text-sm text-is-text-tertiary">Loading editor…</div>}
@@ -291,6 +296,86 @@ function FolderEditor({ context, onLeave }: { context: SpaceContext; onLeave: ()
         canShare={false}
       />
     </Suspense>
+  );
+}
+
+// A folder context's body: the editor, plus a Discuss surface (local Pi
+// conversations over the folder) once pi is connected. An Edit/Discuss toggle
+// switches between them; without pi, it's just the editor. Pi is standalone —
+// this works with or without an IdeaSpace login.
+function FolderWorkspace({
+  context,
+  username,
+  onLeave,
+}: {
+  context: SpaceContext;
+  username: string;
+  onLeave: () => void;
+}) {
+  const { state: piState } = usePiStatus();
+  const piReady = piState.kind === "ready";
+  const [mode, setMode] = useState<"edit" | "discuss">("edit");
+  const view = piReady ? mode : "edit";
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      {piReady && (
+        <div
+          role="tablist"
+          aria-label="Folder view"
+          className="flex shrink-0 items-center gap-1 border-b border-is-border px-3 py-1.5"
+        >
+          <TabButton active={view === "edit"} controls="folder-panel" onClick={() => setMode("edit")}>
+            Edit
+          </TabButton>
+          <TabButton
+            active={view === "discuss"}
+            controls="folder-panel"
+            onClick={() => setMode("discuss")}
+          >
+            <PiLogo size={13} className="text-is-text-secondary" />
+            Discuss
+          </TabButton>
+        </div>
+      )}
+      <div id="folder-panel" role="tabpanel" className="min-h-0 flex-1 overflow-hidden">
+        {view === "discuss" ? (
+          // Keyed on the path so switching the active folder resets the open
+          // conversation — it belongs to the folder it was opened in (matches
+          // FolderEditor's key on EditorSurface).
+          <LocalConversations key={context.path} context={context.path!} username={username} />
+        ) : (
+          <FolderEditor context={context} onLeave={onLeave} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TabButton({
+  active,
+  controls,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  controls?: string;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      aria-controls={controls}
+      onClick={onClick}
+      className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 font-chrome text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring ${
+        active ? "bg-is-surface-alt text-is-text" : "text-is-text-tertiary hover:text-is-text"
+      }`}
+    >
+      {children}
+    </button>
   );
 }
 
@@ -509,7 +594,7 @@ function SignedOutView({
         </div>
       </header>
       {activeFolder ? (
-        <FolderEditor context={activeFolder} onLeave={onLeaveFolder} />
+        <FolderWorkspace context={activeFolder} username="you" onLeave={onLeaveFolder} />
       ) : (
         <main className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto px-8 py-10">
           {auth.status === "checking" ? (

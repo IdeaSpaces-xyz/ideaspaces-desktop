@@ -24,6 +24,14 @@ import {
   type V2RenderableMessage,
 } from "./transcript-messages";
 
+/** Who the assistant is, for attribution. Defaults to Keeper; the local Pi
+ *  surface passes its own so turns aren't misattributed to Keeper/Claude. */
+export interface AgentIdentity {
+  name: string;
+  avatar: string;
+  role: string;
+}
+
 interface V2TranscriptProps {
   detail: KeeperConversationDetail;
   userName: string;
@@ -31,6 +39,7 @@ interface V2TranscriptProps {
   optimisticUserText?: string | null;
   streamState?: KeeperStreamState | null;
   className?: string;
+  agent?: AgentIdentity;
 }
 
 export function V2Transcript({
@@ -39,9 +48,15 @@ export function V2Transcript({
   optimisticUserText,
   streamState,
   className,
+  agent: agentProp,
 }: V2TranscriptProps) {
   const messages = toV2RenderableMessages(detail.history);
   const modelTier = detail.model_tier || "sonnet";
+  const agent: AgentIdentity = agentProp ?? {
+    name: "Keeper",
+    avatar: "K",
+    role: `Claude · ${modelTier}`,
+  };
 
   const live = streamState?.state;
   const isStreaming = live === "connecting" || live === "generating" || live === "tool_running";
@@ -65,7 +80,7 @@ export function V2Transcript({
         return (
           <div key={message.key} className="contents">
             {showDivider && <V2AsyncDivider createdAt={message.createdAt} />}
-            <V2Turn message={message} userName={userName} modelTier={modelTier} />
+            <V2Turn message={message} userName={userName} agent={agent} />
           </div>
         );
       })}
@@ -74,23 +89,21 @@ export function V2Transcript({
         <V2Turn
           message={{ kind: "user", content: optimisticUserText, key: "optimistic", createdAt: "" }}
           userName={userName}
-          modelTier={modelTier}
+          agent={agent}
         />
       )}
 
-      {showLive && streamState && (
-        <V2LiveAssistant streamState={streamState} modelTier={modelTier} />
-      )}
+      {showLive && streamState && <V2LiveAssistant streamState={streamState} agent={agent} />}
     </div>
   );
 }
 
 function V2LiveAssistant({
   streamState,
-  modelTier,
+  agent,
 }: {
   streamState: KeeperStreamState;
-  modelTier: string;
+  agent: AgentIdentity;
 }) {
   const hasText = streamState.accumulatedText.length > 0;
   const isThinkingStream =
@@ -99,9 +112,9 @@ function V2LiveAssistant({
     streamState.state === "tool_running";
   return (
     <div className="grid grid-cols-[40px_1fr] gap-3.5">
-      <V2Avatar label="K" agent />
+      <V2Avatar label={agent.avatar} agent />
       <div className="min-w-0">
-        <V2Attribution name="Keeper" role={`Claude · ${modelTier}`} when="streaming…" />
+        <V2Attribution name={agent.name} role={agent.role} when="streaming…" />
         <div className="text-is-text">
           <V2ThinkingBlock content={streamState.accumulatedThinking} isStreaming={isThinkingStream} />
           {hasText && <V2Markdown variant="chat">{streamState.accumulatedText}</V2Markdown>}
@@ -117,7 +130,7 @@ function V2LiveAssistant({
             // (the disclosure above already covers the thinking-content case).
             !hasText &&
             streamState.accumulatedThinking.length === 0 && (
-              <ActiveIndicator label="Keeper is thinking…" />
+              <ActiveIndicator label={`${agent.name} is thinking…`} />
             )
           )}
         </div>
@@ -162,11 +175,11 @@ function ActiveIndicator({ label }: { label: string }) {
 function V2Turn({
   message,
   userName,
-  modelTier,
+  agent,
 }: {
   message: V2RenderableMessage;
   userName: string;
-  modelTier: string;
+  agent: AgentIdentity;
 }) {
   if (message.kind === "user") {
     return (
@@ -187,11 +200,11 @@ function V2Turn({
 
   return (
     <div className="grid grid-cols-[40px_1fr] gap-3.5">
-      <V2Avatar label="K" agent />
+      <V2Avatar label={agent.avatar} agent />
       <div className="min-w-0">
         <V2Attribution
-          name="Keeper"
-          role={`Claude · ${modelTier}`}
+          name={agent.name}
+          role={agent.role}
           when={formatAbsoluteDate(message.createdAt)}
         />
         <div className="text-is-text">
