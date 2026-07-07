@@ -733,3 +733,52 @@ export async function logout(): Promise<void> {
     throw new Error(stderr.trim() || `Sign-out failed (exit ${code ?? "unknown"}).`);
   }
 }
+
+// --- Connect Pi (local agent detection) ---
+// Mirrors the CLI `pi-status` contract (commands/pi-status.ts). Detection lives
+// in the CLI so the desktop never parses ~/.pi; we just render this.
+
+export interface PiProvider {
+  name: string;
+  hasCreds: boolean;
+  expiresAt: number | null;
+  expired: boolean;
+}
+
+export interface PiExtensionCheck {
+  name: string;
+  path: string;
+  resolvable: boolean;
+}
+
+export interface PiBinary {
+  present: boolean;
+  path: string;
+  version: string | null;
+}
+
+export interface PiStatus {
+  binary: PiBinary;
+  providers: PiProvider[];
+  /** ≥1 provider carries credentials (expired-but-refreshable still counts). */
+  configured: boolean;
+  extensions: PiExtensionCheck[];
+  extensionsResolvable: boolean;
+  /** The C1 "Connect Pi" bar: a usable binary + a configured provider. */
+  ready: boolean;
+}
+
+/**
+ * Is the local pi runtime usable for a local agent? Runs `pi-status --json`.
+ * Pass extension paths to also check `extensionsResolvable` (the D1 bundling
+ * concern); omit for binary+config detection (the C1 bar).
+ */
+export async function piStatus(extPaths?: string[]): Promise<PiStatus> {
+  const args = ["pi-status", "--json"];
+  if (extPaths && extPaths.length) args.push("--ext", extPaths.join(","));
+  const { code, stdout, stderr } = await runCli(args);
+  if (code !== 0) {
+    throw new Error(stderr.trim() || `Could not check pi status (exit ${code ?? "unknown"}).`);
+  }
+  return parseJson<PiStatus>(stdout, "pi-status");
+}

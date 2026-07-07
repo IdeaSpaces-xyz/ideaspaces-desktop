@@ -8,7 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Bot, Cloud, FolderOpen, type LucideIcon } from "lucide-react";
+import { Bot, Check, Cloud, FolderOpen, type LucideIcon } from "lucide-react";
 import { ContextSwitcher } from "./components/ContextSwitcher";
 import { Header } from "./components/Header";
 import { LogoSymbol } from "./components/LogoSymbol";
@@ -23,6 +23,7 @@ import { useSpaces } from "./spaces/useSpaces";
 import { useSpaceActions } from "./spaces/useSpaceActions";
 import { useCloneStatuses } from "./spaces/useCloneStatuses";
 import { useOpenedFolders } from "./spaces/useOpenedFolders";
+import { usePiStatus, describePi } from "./pi/usePiStatus";
 import { useTheme, type ThemeMode } from "./theme/useTheme";
 import { useToast } from "./toast/toast-context";
 import {
@@ -354,6 +355,10 @@ function ConnectPanel({
   onSelectContext: (ref: string) => void;
 }) {
   const signingIn = auth.status === "signing-in";
+  // Connect Pi (C1): detect the local agent via the CLI's pi-status; the card
+  // reflects it. Clicking re-checks (e.g. after installing pi / adding a provider).
+  const { state: piState, recheck: recheckPi } = usePiStatus();
+  const piCard = describePi(piState);
   return (
     <div className="w-full max-w-sm">
       <div className="mb-6 flex flex-col items-center text-center">
@@ -392,10 +397,10 @@ function ConnectPanel({
           onClick={onOpenFolder}
         />
         <ConnectCard
-          icon={Bot}
-          title="Connect Pi"
-          description="A local agent that works in your folders."
-          disabled
+          icon={piCard.connected ? Check : Bot}
+          title={piCard.title}
+          description={piCard.description}
+          onClick={recheckPi}
         />
       </div>
       {folderContexts.length > 0 && (
