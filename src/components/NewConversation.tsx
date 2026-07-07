@@ -5,6 +5,9 @@ import { createConversation, listAgents, type Agent, type Space } from "../lib/c
 import type { ConversationRow } from "../spaces/useConversations";
 import { useToast } from "../toast/toast-context";
 import { Compose, type SendOptions } from "../conversation/Compose";
+import { usePiStatus } from "../pi/usePiStatus";
+import { localPiAgent } from "../pi/localAgent";
+import { PiLogo } from "../pi/PiLogo";
 
 // The draft for a new conversation: pick a context repo (the agent's point of
 // view) + the agent, then send the first message. Nothing exists server-side
@@ -16,15 +19,22 @@ import { Compose, type SendOptions } from "../conversation/Compose";
 // the top of the conversation list, not a separate screen.
 export function NewConversation({
   repos,
+  username,
   preselectRepoId,
   onCreated,
 }: {
   repos: Space[];
+  username: string;
   /** Open already scoped to this repo (e.g. "Start conversation" from its tree). */
   preselectRepoId?: string;
   onCreated: (row: ConversationRow, firstMessage: string, opts: SendOptions) => void;
 }) {
   const toast = useToast();
+  // Connect Pi (C2): surface the local agent beside the remote Keeper agents when
+  // pi is connected. Shown but not yet selectable — routing a local conversation
+  // is C3; picking it here would hit the remote flow with no Keeper agent.
+  const { state: piState } = usePiStatus();
+  const localAgent = piState.kind === "ready" ? localPiAgent(username) : null;
   // Preselect the repo we were sent from, else the only repo, else none.
   const [repoId, setRepoId] = useState(
     (preselectRepoId && repos.some((r) => r.repo_id === preselectRepoId) && preselectRepoId) ||
@@ -109,11 +119,27 @@ export function NewConversation({
             value={effectiveAgentNodeId}
             onValueChange={setAgentNodeId}
             disabled={busy}
-            items={agents.map((a) => ({
-              value: a.node_id,
-              label: `${a.name}${a.is_default ? " (default)" : ""}`,
-              icon: <Bot size={14} strokeWidth={1.333} className="shrink-0 text-is-text-secondary" />,
-            }))}
+            items={[
+              ...agents.map((a) => ({
+                value: a.node_id,
+                label: `${a.name}${a.is_default ? " (default)" : ""}`,
+                icon: (
+                  <Bot size={14} strokeWidth={1.333} className="shrink-0 text-is-text-secondary" />
+                ),
+              })),
+              // The local agent: shown when pi is connected, not yet selectable (C3).
+              ...(localAgent
+                ? [
+                    {
+                      value: localAgent.node_id,
+                      label: localAgent.name,
+                      icon: <PiLogo size={14} className="shrink-0 text-is-text-secondary" />,
+                      disabled: true,
+                      hint: "local · soon",
+                    },
+                  ]
+                : []),
+            ]}
             footer={agentsNote ? <Note>{agentsNote}</Note> : undefined}
           />
         </div>
@@ -153,7 +179,7 @@ function ChipPicker({
   heading: string;
   value: string;
   onValueChange: (value: string) => void;
-  items: { value: string; label: string; icon?: ReactNode }[];
+  items: { value: string; label: string; icon?: ReactNode; disabled?: boolean; hint?: ReactNode }[];
   footer?: ReactNode;
   disabled?: boolean;
 }) {
@@ -185,10 +211,16 @@ function ChipPicker({
               <DropdownMenu.RadioItem
                 key={item.value}
                 value={item.value}
-                className="flex cursor-pointer select-none items-center gap-2 px-3 py-2 font-chrome text-xs text-is-text outline-none transition-colors data-[highlighted]:bg-is-surface-alt"
+                disabled={item.disabled}
+                className="flex cursor-pointer select-none items-center gap-2 px-3 py-2 font-chrome text-xs text-is-text outline-none transition-colors data-[highlighted]:bg-is-surface-alt data-[disabled]:cursor-default data-[disabled]:opacity-50"
               >
                 {item.icon}
                 <span className="flex-1 truncate">{item.label}</span>
+                {item.hint && (
+                  <span className="shrink-0 font-chrome text-[10px] text-is-text-tertiary">
+                    {item.hint}
+                  </span>
+                )}
                 <DropdownMenu.ItemIndicator>
                   <Check size={14} strokeWidth={1.5} className="text-is-text" />
                 </DropdownMenu.ItemIndicator>

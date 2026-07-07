@@ -601,7 +601,12 @@ export function ConversationsView({
   return (
     <div className="mx-auto w-full max-w-2xl px-6 py-8">
       {repos.length > 0 && (
-        <NewConversation repos={repos} preselectRepoId={preselectRepoId} onCreated={handleCreated} />
+        <NewConversation
+          repos={repos}
+          username={username}
+          preselectRepoId={preselectRepoId}
+          onCreated={handleCreated}
+        />
       )}
 
       <h2 className="mb-3 font-chrome text-[11px] uppercase tracking-[0.08em] text-is-text-tertiary">
