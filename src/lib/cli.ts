@@ -82,7 +82,12 @@ export async function initPiRuntime(): Promise<void> {
   const dirs = extResolved.filter((d): d is string => !!d);
   piExtArgs = dirs.length ? ["--ext", dirs.join(",")] : [];
   piSkillArgs = dirs.length ? ["--skill", dirs.map((d) => `${d}/skills`).join(",")] : [];
-  if (assetsDir) piSidecarEnv = { ...piSidecarEnv, PI_PACKAGE_DIR: assetsDir };
+  // PI_PACKAGE_DIR must travel with --pi-bin: our assets are the bundled bun
+  // pi's layout (theme/ at root). Only set it when we actually run the bundled
+  // pi (piBin) — a fallback PATH pi (e.g. a Node pi from node_modules/.bin in
+  // dev) uses a *different* layout (dist/modes/interactive/theme) and its own
+  // package dir, so pointing it at ours would break its startup (ENOENT theme).
+  if (piBin && assetsDir) piSidecarEnv = { ...piSidecarEnv, PI_PACKAGE_DIR: assetsDir };
 }
 
 interface SidecarResult {
