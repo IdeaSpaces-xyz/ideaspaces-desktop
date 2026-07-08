@@ -31,7 +31,8 @@
       "binaries/pi"
     ],
     "resources": [
-      "resources/pi-ext"
+      "resources/pi-ext",
+      "resources/pi-assets"
     ],
     "icon": [
       "icons/32x32.png",

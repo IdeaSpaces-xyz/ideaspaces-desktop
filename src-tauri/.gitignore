@@ -11,3 +11,6 @@
 
 # Vendored pi extensions (restaged from node_modules by `npm run build:pi-extensions`)
 /resources/pi-ext/
+
+# pi package assets (theme/export-html/native/wasm), fetched by `npm run build:pi-sidecar`
+/resources/pi-assets/

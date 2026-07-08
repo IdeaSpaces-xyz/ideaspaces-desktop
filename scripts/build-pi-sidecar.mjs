@@ -16,7 +16,17 @@
 
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -53,6 +63,51 @@ const ASSET_FOR = {
 const outDir = join(root, "src-tauri", "binaries");
 mkdirSync(outDir, { recursive: true });
 
+// pi is NOT a self-contained binary: the bun executable resolves its package
+// assets (themes it loads at startup, export-html templates, native `.node`
+// deps, the photon wasm) from a package dir — `getPackageDir()`, overridable via
+// `PI_PACKAGE_DIR`. externalBin ships the executable (for macOS signing); these
+// assets ride as a resource and cli.ts points `PI_PACKAGE_DIR` at them. Without
+// them the bundled pi crashes on startup (ENOENT theme/dark.json). We stage the
+// runtime subset and skip docs/ + examples/ (~3.9M, not needed at runtime).
+// NOTE (release): `native/` + `node_modules/` carry per-arch Mach-O `.node`
+// addons (clipboard, keyboard-modifiers) — a universal build unions both arches
+// (see stageAssets); all of them must be signed during notarization.
+const assetsDir = join(root, "src-tauri", "resources", "pi-assets");
+const PI_ASSET_ENTRIES = [
+  "theme",
+  "export-html",
+  "native",
+  "assets",
+  "node_modules",
+  "photon_rs_bg.wasm",
+  "package.json",
+];
+mkdirSync(assetsDir, { recursive: true });
+
+/** Copy pi's runtime package assets from the extracted `pi/` dir into the
+ *  resource dir. The JS assets (theme/export-html/wasm/…) are arch-independent,
+ *  but `native/` + `node_modules/` carry **arch-specific** `.node` addons
+ *  (e.g. `clipboard-darwin-arm64` vs `-x64`, `native/darwin/prebuilds/darwin-<arch>/`).
+ *  A universal build stages BOTH arches, so this **unions** (merges) rather than
+ *  overwriting — distinct arch names coexist, shared JS overwrites identically.
+ *  The universal branch clears `assetsDir` up front + forces both arches to
+ *  re-stage; single-arch just accumulates idempotently. */
+function stageAssets(pkgDir) {
+  mkdirSync(assetsDir, { recursive: true });
+  for (const entry of PI_ASSET_ENTRIES) {
+    const from = join(pkgDir, entry);
+    if (!existsSync(from)) continue;
+    const dest = join(assetsDir, entry);
+    cpSync(from, dest, { recursive: true }); // merge (union across arches)
+  }
+}
+
+/** True once the package assets are present (theme is the load-bearing one). */
+function assetsStaged() {
+  return existsSync(join(assetsDir, "theme", "dark.json"));
+}
+
 const base = `https://github.com/${PI_REPO}/releases/download/v${PI_VERSION}`;
 
 async function download(url) {
@@ -80,10 +135,16 @@ async function expectedSha(asset) {
 }
 
 // Download + verify + extract the `pi` executable to `binaries/pi-<triple>`.
-async function stage(triple) {
+// `forceAssets` re-stages the package assets even when the binary is cached — the
+// universal build passes it (with an up-front clear) so both arches' native deps
+// land regardless of what a prior single-arch run left on disk.
+async function stage(triple, { forceAssets = false } = {}) {
   const out = join(outDir, `pi-${triple}`);
-  if (existsSync(out)) {
-    console.log(`build-pi-sidecar: ${out} present — skipping (delete to re-fetch).`);
+  // Skip only when the binary + its assets are present and we're not forcing an
+  // asset re-stage — a cached binary with missing assets would ship a pi that
+  // can't start.
+  if (existsSync(out) && assetsStaged() && !forceAssets) {
+    console.log(`build-pi-sidecar: ${out} + assets present — skipping (delete to re-fetch).`);
     return out;
   }
   const asset = ASSET_FOR[triple];
@@ -103,7 +164,8 @@ async function stage(triple) {
     const pi = findExecutable(work);
     if (!pi) fail(`no \`pi\` executable found in ${asset}`);
     execFileSync("install", ["-m", "0755", pi, out]); // copy + chmod +x
-    console.log(`build-pi-sidecar: staged ${out}`);
+    stageAssets(dirname(pi)); // pi's package dir is the extracted `pi/` folder
+    console.log(`build-pi-sidecar: staged ${out} + package assets`);
   } finally {
     rmSync(work, { recursive: true, force: true });
   }
@@ -134,6 +196,9 @@ if (!universal) {
     console.warn(
       `build-pi-sidecar: no prebuilt pi for ${hostTriple} — skipping (macOS-only today; falls back to PATH pi).`,
     );
+    // Keep the resource dir present so tauri's build.rs check passes (it's in
+    // bundle.resources); PI_PACKAGE_DIR stays unset in dev, PATH pi has its own.
+    if (!assetsStaged()) writeFileSync(join(assetsDir, ".gitkeep"), "");
     process.exit(0);
   }
   await stage(hostTriple);
@@ -143,8 +208,18 @@ if (!universal) {
   // slice's cargo build resolves its own by triple) + the lipo'd fat binary
   // (the bundling stage copies that into the universal app). Tauri won't lipo
   // external binaries for us.
-  const arm = await stage("aarch64-apple-darwin");
-  const x64 = await stage("x86_64-apple-darwin");
+  //
+  // Clear the assets ONCE up front and force both arches to (re)stage, so the
+  // union holds regardless of what's cached on disk. Without this, a machine
+  // that already staged one arch (any prior `tauri dev`) would cache-skip it,
+  // and the other arch's stage would be the only one to write — shipping a fat
+  // binary with a single arch's native `.node` deps (dlopen-fails on the other
+  // slice). The in-process state can't see the disk cache, so decide by clearing
+  // here, not with a "first writer clears" flag.
+  rmSync(assetsDir, { recursive: true, force: true });
+  mkdirSync(assetsDir, { recursive: true });
+  const arm = await stage("aarch64-apple-darwin", { forceAssets: true });
+  const x64 = await stage("x86_64-apple-darwin", { forceAssets: true });
   const fat = join(outDir, "pi-universal-apple-darwin");
   console.log(`build-pi-sidecar: lipo -> ${fat}`);
   try {
