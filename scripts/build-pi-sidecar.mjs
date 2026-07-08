@@ -85,23 +85,16 @@ const PI_ASSET_ENTRIES = [
 ];
 mkdirSync(assetsDir, { recursive: true });
 
-let assetsCleared = false;
-
 /** Copy pi's runtime package assets from the extracted `pi/` dir into the
  *  resource dir. The JS assets (theme/export-html/wasm/…) are arch-independent,
  *  but `native/` + `node_modules/` carry **arch-specific** `.node` addons
  *  (e.g. `clipboard-darwin-arm64` vs `-x64`, `native/darwin/prebuilds/darwin-<arch>/`).
- *  A universal build stages BOTH arches, so we must **union** them, not
- *  last-write-wins — else the fat binary ships one arch's native deps and
- *  `dlopen` fails on the other slice. So: clear the dir once per run, then each
- *  arch's `cpSync` merges (distinct arch names coexist; shared JS overwrites
- *  identically). */
+ *  A universal build stages BOTH arches, so this **unions** (merges) rather than
+ *  overwriting — distinct arch names coexist, shared JS overwrites identically.
+ *  The universal branch clears `assetsDir` up front + forces both arches to
+ *  re-stage; single-arch just accumulates idempotently. */
 function stageAssets(pkgDir) {
-  if (!assetsCleared) {
-    rmSync(assetsDir, { recursive: true, force: true });
-    mkdirSync(assetsDir, { recursive: true });
-    assetsCleared = true;
-  }
+  mkdirSync(assetsDir, { recursive: true });
   for (const entry of PI_ASSET_ENTRIES) {
     const from = join(pkgDir, entry);
     if (!existsSync(from)) continue;
@@ -142,11 +135,15 @@ async function expectedSha(asset) {
 }
 
 // Download + verify + extract the `pi` executable to `binaries/pi-<triple>`.
-async function stage(triple) {
+// `forceAssets` re-stages the package assets even when the binary is cached — the
+// universal build passes it (with an up-front clear) so both arches' native deps
+// land regardless of what a prior single-arch run left on disk.
+async function stage(triple, { forceAssets = false } = {}) {
   const out = join(outDir, `pi-${triple}`);
-  // Skip only when BOTH the binary and its package assets are present — a cached
-  // binary with missing assets would ship a pi that can't start.
-  if (existsSync(out) && assetsStaged()) {
+  // Skip only when the binary + its assets are present and we're not forcing an
+  // asset re-stage — a cached binary with missing assets would ship a pi that
+  // can't start.
+  if (existsSync(out) && assetsStaged() && !forceAssets) {
     console.log(`build-pi-sidecar: ${out} + assets present — skipping (delete to re-fetch).`);
     return out;
   }
@@ -211,8 +208,18 @@ if (!universal) {
   // slice's cargo build resolves its own by triple) + the lipo'd fat binary
   // (the bundling stage copies that into the universal app). Tauri won't lipo
   // external binaries for us.
-  const arm = await stage("aarch64-apple-darwin");
-  const x64 = await stage("x86_64-apple-darwin");
+  //
+  // Clear the assets ONCE up front and force both arches to (re)stage, so the
+  // union holds regardless of what's cached on disk. Without this, a machine
+  // that already staged one arch (any prior `tauri dev`) would cache-skip it,
+  // and the other arch's stage would be the only one to write — shipping a fat
+  // binary with a single arch's native `.node` deps (dlopen-fails on the other
+  // slice). The in-process state can't see the disk cache, so decide by clearing
+  // here, not with a "first writer clears" flag.
+  rmSync(assetsDir, { recursive: true, force: true });
+  mkdirSync(assetsDir, { recursive: true });
+  const arm = await stage("aarch64-apple-darwin", { forceAssets: true });
+  const x64 = await stage("x86_64-apple-darwin", { forceAssets: true });
   const fat = join(outDir, "pi-universal-apple-darwin");
   console.log(`build-pi-sidecar: lipo -> ${fat}`);
   try {
