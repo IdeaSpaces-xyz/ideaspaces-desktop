@@ -70,8 +70,9 @@ mkdirSync(outDir, { recursive: true });
 // assets ride as a resource and cli.ts points `PI_PACKAGE_DIR` at them. Without
 // them the bundled pi crashes on startup (ENOENT theme/dark.json). We stage the
 // runtime subset and skip docs/ + examples/ (~3.9M, not needed at runtime).
-// NOTE (release): `native/` + `node_modules/` carry 2 Mach-O `.node` files
-// (clipboard, keyboard-modifiers) that must be signed during notarization.
+// NOTE (release): `native/` + `node_modules/` carry per-arch Mach-O `.node`
+// addons (clipboard, keyboard-modifiers) — a universal build unions both arches
+// (see stageAssets); all of them must be signed during notarization.
 const assetsDir = join(root, "src-tauri", "resources", "pi-assets");
 const PI_ASSET_ENTRIES = [
   "theme",
@@ -84,16 +85,28 @@ const PI_ASSET_ENTRIES = [
 ];
 mkdirSync(assetsDir, { recursive: true });
 
+let assetsCleared = false;
+
 /** Copy pi's runtime package assets from the extracted `pi/` dir into the
- *  resource dir. Arch-independent, so staging from either arch's tarball is
- *  fine (idempotent overwrite). */
+ *  resource dir. The JS assets (theme/export-html/wasm/…) are arch-independent,
+ *  but `native/` + `node_modules/` carry **arch-specific** `.node` addons
+ *  (e.g. `clipboard-darwin-arm64` vs `-x64`, `native/darwin/prebuilds/darwin-<arch>/`).
+ *  A universal build stages BOTH arches, so we must **union** them, not
+ *  last-write-wins — else the fat binary ships one arch's native deps and
+ *  `dlopen` fails on the other slice. So: clear the dir once per run, then each
+ *  arch's `cpSync` merges (distinct arch names coexist; shared JS overwrites
+ *  identically). */
 function stageAssets(pkgDir) {
+  if (!assetsCleared) {
+    rmSync(assetsDir, { recursive: true, force: true });
+    mkdirSync(assetsDir, { recursive: true });
+    assetsCleared = true;
+  }
   for (const entry of PI_ASSET_ENTRIES) {
     const from = join(pkgDir, entry);
     if (!existsSync(from)) continue;
     const dest = join(assetsDir, entry);
-    rmSync(dest, { recursive: true, force: true });
-    cpSync(from, dest, { recursive: true });
+    cpSync(from, dest, { recursive: true }); // merge (union across arches)
   }
 }
 
