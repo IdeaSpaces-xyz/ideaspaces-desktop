@@ -16,7 +16,17 @@
 
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -53,6 +63,45 @@ const ASSET_FOR = {
 const outDir = join(root, "src-tauri", "binaries");
 mkdirSync(outDir, { recursive: true });
 
+// pi is NOT a self-contained binary: the bun executable resolves its package
+// assets (themes it loads at startup, export-html templates, native `.node`
+// deps, the photon wasm) from a package dir — `getPackageDir()`, overridable via
+// `PI_PACKAGE_DIR`. externalBin ships the executable (for macOS signing); these
+// assets ride as a resource and cli.ts points `PI_PACKAGE_DIR` at them. Without
+// them the bundled pi crashes on startup (ENOENT theme/dark.json). We stage the
+// runtime subset and skip docs/ + examples/ (~3.9M, not needed at runtime).
+// NOTE (release): `native/` + `node_modules/` carry 2 Mach-O `.node` files
+// (clipboard, keyboard-modifiers) that must be signed during notarization.
+const assetsDir = join(root, "src-tauri", "resources", "pi-assets");
+const PI_ASSET_ENTRIES = [
+  "theme",
+  "export-html",
+  "native",
+  "assets",
+  "node_modules",
+  "photon_rs_bg.wasm",
+  "package.json",
+];
+mkdirSync(assetsDir, { recursive: true });
+
+/** Copy pi's runtime package assets from the extracted `pi/` dir into the
+ *  resource dir. Arch-independent, so staging from either arch's tarball is
+ *  fine (idempotent overwrite). */
+function stageAssets(pkgDir) {
+  for (const entry of PI_ASSET_ENTRIES) {
+    const from = join(pkgDir, entry);
+    if (!existsSync(from)) continue;
+    const dest = join(assetsDir, entry);
+    rmSync(dest, { recursive: true, force: true });
+    cpSync(from, dest, { recursive: true });
+  }
+}
+
+/** True once the package assets are present (theme is the load-bearing one). */
+function assetsStaged() {
+  return existsSync(join(assetsDir, "theme", "dark.json"));
+}
+
 const base = `https://github.com/${PI_REPO}/releases/download/v${PI_VERSION}`;
 
 async function download(url) {
@@ -82,8 +131,10 @@ async function expectedSha(asset) {
 // Download + verify + extract the `pi` executable to `binaries/pi-<triple>`.
 async function stage(triple) {
   const out = join(outDir, `pi-${triple}`);
-  if (existsSync(out)) {
-    console.log(`build-pi-sidecar: ${out} present — skipping (delete to re-fetch).`);
+  // Skip only when BOTH the binary and its package assets are present — a cached
+  // binary with missing assets would ship a pi that can't start.
+  if (existsSync(out) && assetsStaged()) {
+    console.log(`build-pi-sidecar: ${out} + assets present — skipping (delete to re-fetch).`);
     return out;
   }
   const asset = ASSET_FOR[triple];
@@ -103,7 +154,8 @@ async function stage(triple) {
     const pi = findExecutable(work);
     if (!pi) fail(`no \`pi\` executable found in ${asset}`);
     execFileSync("install", ["-m", "0755", pi, out]); // copy + chmod +x
-    console.log(`build-pi-sidecar: staged ${out}`);
+    stageAssets(dirname(pi)); // pi's package dir is the extracted `pi/` folder
+    console.log(`build-pi-sidecar: staged ${out} + package assets`);
   } finally {
     rmSync(work, { recursive: true, force: true });
   }
@@ -134,6 +186,9 @@ if (!universal) {
     console.warn(
       `build-pi-sidecar: no prebuilt pi for ${hostTriple} — skipping (macOS-only today; falls back to PATH pi).`,
     );
+    // Keep the resource dir present so tauri's build.rs check passes (it's in
+    // bundle.resources); PI_PACKAGE_DIR stays unset in dev, PATH pi has its own.
+    if (!assetsStaged()) writeFileSync(join(assetsDir, ".gitkeep"), "");
     process.exit(0);
   }
   await stage(hostTriple);

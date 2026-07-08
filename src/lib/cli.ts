@@ -28,14 +28,18 @@ import type {
 let piBinArgs: string[] = []; // `--pi-bin <path>` (D1a)
 let piExtArgs: string[] = []; // `--ext <dir,dir>` — bundled extension dirs (D1b)
 let piSkillArgs: string[] = []; // `--skill <dir,dir>` — bundled skill dirs (D1b)
-// `IS_CLI_PATH` env for every sidecar spawn: the bundled pi-is-space extension
-// shells the CLI (status/navigate) via it — see cli_bin_path. Undefined in dev.
+// Env for every sidecar spawn (undefined in dev): `IS_CLI_PATH` so the bundled
+// pi-is-space extension shells the CLI (see cli_bin_path), and `PI_PACKAGE_DIR`
+// so the bundled bun pi finds its package assets (theme/export-html/native/…) —
+// without it pi ENOENTs on `theme/dark.json` at startup.
 let piSidecarEnv: Record<string, string> | undefined;
 
 // The two bundled extensions, as resource-relative dirs (see tauri.conf.json
 // `resources` + build-pi-extensions.mjs). pi loads each dir's `pi.extensions`
 // entry (`--ext`) and scans `<dir>/skills` for its skills (`--skill`).
 const EXT_RESOURCE_DIRS = ["resources/pi-ext/pi-is-space", "resources/pi-ext/pi-local-context"];
+// pi's package assets (see build-pi-sidecar.mjs) → `PI_PACKAGE_DIR`.
+const PI_ASSETS_RESOURCE_DIR = "resources/pi-assets";
 
 /** A bundled-path Rust command, bounded so a hung IPC can't blank first paint
  *  (D1a) and returning null on error (dev: not packaged next to `current_exe`). */
@@ -69,14 +73,16 @@ export async function initPiRuntime(): Promise<void> {
     piSkillArgs = [];
     return;
   }
-  // Packaged: hand pi the bundled extension + skill dirs.
-  const dirs = (
-    await Promise.all(
-      EXT_RESOURCE_DIRS.map((rel) => resolveResource(rel).catch(() => null)),
-    )
-  ).filter((d): d is string => !!d);
+  // Packaged: hand pi the bundled extension + skill dirs, and point
+  // PI_PACKAGE_DIR at pi's bundled package assets so the bundled binary starts.
+  const [extResolved, assetsDir] = await Promise.all([
+    Promise.all(EXT_RESOURCE_DIRS.map((rel) => resolveResource(rel).catch(() => null))),
+    resolveResource(PI_ASSETS_RESOURCE_DIR).catch(() => null),
+  ]);
+  const dirs = extResolved.filter((d): d is string => !!d);
   piExtArgs = dirs.length ? ["--ext", dirs.join(",")] : [];
   piSkillArgs = dirs.length ? ["--skill", dirs.map((d) => `${d}/skills`).join(",")] : [];
+  if (assetsDir) piSidecarEnv = { ...piSidecarEnv, PI_PACKAGE_DIR: assetsDir };
 }
 
 interface SidecarResult {

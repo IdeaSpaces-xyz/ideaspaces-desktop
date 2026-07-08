@@ -97,11 +97,14 @@ jobs:
             printf '#!/bin/sh\n' > "binaries/${name}-${triple}"
             chmod +x "binaries/${name}-${triple}"
           done
-          # The bundle.resources path (vendored pi extensions) must also exist for
-          # the tauri build.rs check. A placeholder dir is enough for the gate;
-          # the real extensions are staged by `npm run build:pi-extensions`.
-          mkdir -p resources/pi-ext
-          echo 'ci placeholder' > resources/pi-ext/.gitkeep
+          # The bundle.resources paths must also exist for the tauri build.rs
+          # check. Placeholder dirs suffice for the gate; the real content is
+          # staged by `npm run build:pi-extensions` (extensions) and
+          # `npm run build:pi-sidecar` (pi package assets: theme/export-html/…).
+          for res in pi-ext pi-assets; do
+            mkdir -p "resources/${res}"
+            echo 'ci placeholder' > "resources/${res}/.gitkeep"
+          done
 
       - name: Format check
         run: cargo fmt --all -- --check
