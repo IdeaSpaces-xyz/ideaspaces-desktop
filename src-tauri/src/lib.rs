@@ -28,10 +28,39 @@ fn pi_bin_path() -> Result<String, String> {
     }
 }
 
+/// Absolute path to the bundled `ideaspaces` CLI sidecar, to hand pi as
+/// `IS_CLI_PATH`. The bundled pi-is-space extension shells the CLI (for
+/// `status`/`navigate`) via that env var; without it, a packaged app would find
+/// neither a `node_modules` copy nor a PATH `ideaspaces`. Resolved next to
+/// `current_exe`, like `pi_bin_path`. Errs when absent — dev, where the CLI is
+/// found via node_modules instead.
+#[tauri::command]
+fn cli_bin_path() -> Result<String, String> {
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let dir = exe.parent().ok_or("no parent dir for current_exe")?;
+    let cli = dir.join(if cfg!(windows) {
+        "ideaspaces.exe"
+    } else {
+        "ideaspaces"
+    });
+    if cli.exists() {
+        Ok(cli.to_string_lossy().into_owned())
+    } else {
+        Err(format!(
+            "bundled ideaspaces CLI not found at {}",
+            cli.display()
+        ))
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![print_page, pi_bin_path])
+        .invoke_handler(tauri::generate_handler![
+            print_page,
+            pi_bin_path,
+            cli_bin_path
+        ])
         // Native macOS menu bar. We set a custom menu to add "Check for
         // Updates…" under the app menu — so we MUST re-add the standard Edit
         // roles (copy/paste/undo) the editor relies on, plus Window. The

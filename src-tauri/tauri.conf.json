@@ -4,9 +4,9 @@
   "version": "0.4.0",
   "identifier": "xyz.ideaspaces.desktop",
   "build": {
-    "beforeDevCommand": "npm run build:sidecar && npm run build:pi-sidecar && npm run dev",
+    "beforeDevCommand": "npm run build:sidecar && npm run build:pi-sidecar && npm run build:pi-extensions && npm run dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "npm run build:sidecar && npm run build:pi-sidecar && npm run build",
+    "beforeBuildCommand": "npm run build:sidecar && npm run build:pi-sidecar && npm run build:pi-extensions && npm run build",
     "frontendDist": "../dist"
   },
   "app": {
@@ -29,6 +29,9 @@
     "externalBin": [
       "binaries/ideaspaces",
       "binaries/pi"
+    ],
+    "resources": [
+      "resources/pi-ext"
     ],
     "icon": [
       "icons/32x32.png",
