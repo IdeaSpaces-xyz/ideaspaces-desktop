@@ -12,11 +12,35 @@
 // (no arbitrary programs); the webview is first-party with CSP set.
 
 import { Command, type Child } from "@tauri-apps/plugin-shell";
+import { invoke } from "@tauri-apps/api/core";
 import type {
   KeeperConversationDetail,
   KeeperStreamEvent,
   ModelTier,
 } from "../conversation/keeper-types";
+
+// The bundled pi binary flag (`--pi-bin <path>`) for local-agent calls, resolved
+// once at startup via the Rust `pi_bin_path` command. Empty in dev (no bundled
+// pi) — the CLI falls back to the user's PATH `pi`. See src-tauri: pi_bin_path,
+// scripts/build-pi-sidecar.mjs, and connect-pi-d1-bundling.
+let piBinArgs: string[] = [];
+
+/** Resolve the bundled pi path once; on failure (dev), leave PATH fallback.
+ *  Call at app start (before the first pi-status / local conversation).
+ *  First paint is gated on this, so bound it: the invoke is a synchronous
+ *  fs check on the Rust side, but a hung IPC must not blank the screen —
+ *  time out to the PATH fallback rather than never settling. */
+export async function initPiRuntime(): Promise<void> {
+  try {
+    const path = await Promise.race([
+      invoke<string>("pi_bin_path"),
+      new Promise<string>((_, reject) => setTimeout(() => reject(new Error("pi_bin_path timed out")), 2000)),
+    ]);
+    piBinArgs = path ? ["--pi-bin", path] : [];
+  } catch {
+    piBinArgs = [];
+  }
+}
 
 interface SidecarResult {
   code: number | null;
@@ -652,6 +676,7 @@ export function streamLocalConversation(
     "--message",
     body.message,
     "--json",
+    ...piBinArgs,
   ];
   return streamCli(args, handlers);
 }
@@ -818,6 +843,7 @@ export interface PiStatus {
 export async function piStatus(extPaths?: string[]): Promise<PiStatus> {
   const args = ["pi-status", "--json"];
   if (extPaths && extPaths.length) args.push("--ext", extPaths.join(","));
+  args.push(...piBinArgs);
   const { code, stdout, stderr } = await runCli(args);
   if (code !== 0) {
     throw new Error(stderr.trim() || `Could not check pi status (exit ${code ?? "unknown"}).`);
@@ -832,7 +858,13 @@ export async function piStatus(extPaths?: string[]): Promise<PiStatus> {
 /** Create a local conversation — `conversation new --local`. Mints an id (the pi
  *  session id); the session file is created lazily on first send. */
 export async function createLocalConversation(): Promise<{ conversation_id: string }> {
-  const { code, stdout, stderr } = await runCli(["conversation", "new", "--local", "--json"]);
+  const { code, stdout, stderr } = await runCli([
+    "conversation",
+    "new",
+    "--local",
+    "--json",
+    ...piBinArgs,
+  ]);
   if (code !== 0) {
     throw new Error(stderr.trim() || `Could not create a local conversation (exit ${code ?? "unknown"}).`);
   }
@@ -854,6 +886,7 @@ export async function getLocalConversation(
     "--conversation",
     conversationId,
     "--json",
+    ...piBinArgs,
   ]);
   if (code !== 0) {
     throw new Error(stderr.trim() || `Could not load the local conversation (exit ${code ?? "unknown"}).`);
@@ -876,6 +909,7 @@ export async function listLocalConversations(context: string): Promise<LocalConv
     "--context",
     context,
     "--json",
+    ...piBinArgs,
   ]);
   if (code !== 0) {
     throw new Error(stderr.trim() || `Could not load local conversations (exit ${code ?? "unknown"}).`);

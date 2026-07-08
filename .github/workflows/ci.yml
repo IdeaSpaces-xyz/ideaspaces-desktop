@@ -87,12 +87,16 @@ jobs:
           mkdir -p dist
           echo '<!doctype html><title>ci</title>' > dist/index.html
 
-      - name: Placeholder CLI sidecar
+      - name: Placeholder sidecars
         run: |
           triple=$(rustc -vV | sed -n 's/^host: //p')
           mkdir -p binaries
-          printf '#!/bin/sh\n' > "binaries/ideaspaces-${triple}"
-          chmod +x "binaries/ideaspaces-${triple}"
+          # Both externalBin (ideaspaces CLI + bundled pi) must exist for the
+          # build.rs check; stubs suffice for the compile gate (not bundling).
+          for name in ideaspaces pi; do
+            printf '#!/bin/sh\n' > "binaries/${name}-${triple}"
+            chmod +x "binaries/${name}-${triple}"
+          done
 
       - name: Format check
         run: cargo fmt --all -- --check
