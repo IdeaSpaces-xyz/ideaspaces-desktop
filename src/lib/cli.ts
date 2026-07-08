@@ -57,10 +57,10 @@ async function bundledPath(command: string): Promise<string | null> {
  *  to `current_exe` only when packaged); we gate the bundled extensions on it so
  *  dev keeps using node_modules + `IDEASPACES_PI_EXTENSIONS`. */
 export async function initPiRuntime(): Promise<void> {
-  const piBin = await bundledPath("pi_bin_path");
+  // Independent, so resolve together — first paint is gated on this, and the two
+  // timeouts must not stack (keep the worst-case blank-screen bound at 2s).
+  const [piBin, cliBin] = await Promise.all([bundledPath("pi_bin_path"), bundledPath("cli_bin_path")]);
   piBinArgs = piBin ? ["--pi-bin", piBin] : [];
-
-  const cliBin = await bundledPath("cli_bin_path");
   piSidecarEnv = cliBin ? { IS_CLI_PATH: cliBin } : undefined;
 
   if (!cliBin) {

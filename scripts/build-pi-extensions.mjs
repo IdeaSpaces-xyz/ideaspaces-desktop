@@ -25,6 +25,12 @@ import { fileURLToPath } from "node:url";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const outDir = join(root, "src-tauri", "resources", "pi-ext");
 
+// In CI/release, `npm ci` always installs the devDependencies, so a missing
+// extension is a broken pipeline — fail loudly here rather than leaning on
+// Tauri's downstream "resource path doesn't exist" to catch it. Locally a dev
+// may not have them; there we warn and fall back to IDEASPACES_PI_EXTENSIONS.
+const isCI = !!process.env.CI;
+
 // Each extension: its package name (under node_modules) + the subdirs to carry.
 // package.json is always copied (the `pi.extensions`/`skills` manifest).
 const EXTENSIONS = [
@@ -36,10 +42,16 @@ let staged = 0;
 for (const ext of EXTENSIONS) {
   const from = join(root, "node_modules", ext.pkg);
   if (!existsSync(from)) {
+    const msg = `${ext.pkg} not in node_modules`;
+    if (isCI) {
+      // A release/CI build must bundle the extensions — don't ship a broken app.
+      console.error(`build-pi-extensions: ${msg} — run \`npm ci\` (required for a packaged build).`);
+      process.exit(1);
+    }
     // Dev without the devDependency installed: skip rather than hard-fail the
     // whole `tauri dev`/`build`. The dev loop supplies extensions via
     // IDEASPACES_PI_EXTENSIONS instead, and initPiRuntime falls back to it.
-    console.warn(`build-pi-extensions: ${ext.pkg} not in node_modules — skipping (dev uses IDEASPACES_PI_EXTENSIONS).`);
+    console.warn(`build-pi-extensions: ${msg} — skipping (dev uses IDEASPACES_PI_EXTENSIONS).`);
     continue;
   }
   const dest = join(outDir, ext.name);
