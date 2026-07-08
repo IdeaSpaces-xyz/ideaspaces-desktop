@@ -18,7 +18,7 @@
 // (initPiRuntime resolves the resource dirs + passes --ext/--skill), and
 // roadmap connect-pi-d1-bundling (D1b).
 
-import { cpSync, existsSync, mkdirSync, rmSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -38,6 +38,14 @@ const EXTENSIONS = [
   { pkg: "@ideaspaces/pi-local-context", name: "pi-local-context", dirs: ["src", "skills"] },
 ];
 
+// The dir must always exist: `tauri.conf.json` lists `resources/pi-ext` in
+// bundle.resources, and Tauri's build.rs fails the whole Rust build with an
+// opaque "resource path doesn't exist" if it's missing. So a dev who pulled
+// main but hasn't `npm install`ed the extension devDependencies still gets a
+// working `tauri dev` (empty dir → the local-turn fallback is
+// IDEASPACES_PI_EXTENSIONS), not a cryptic compile error.
+mkdirSync(outDir, { recursive: true });
+
 let staged = 0;
 for (const ext of EXTENSIONS) {
   const from = join(root, "node_modules", ext.pkg);
@@ -51,7 +59,7 @@ for (const ext of EXTENSIONS) {
     // Dev without the devDependency installed: skip rather than hard-fail the
     // whole `tauri dev`/`build`. The dev loop supplies extensions via
     // IDEASPACES_PI_EXTENSIONS instead, and initPiRuntime falls back to it.
-    console.warn(`build-pi-extensions: ${msg} — skipping (dev uses IDEASPACES_PI_EXTENSIONS).`);
+    console.warn(`build-pi-extensions: ${msg} — run \`npm install\` to bundle it; skipping (dev uses IDEASPACES_PI_EXTENSIONS).`);
     continue;
   }
   const dest = join(outDir, ext.name);
@@ -65,5 +73,9 @@ for (const ext of EXTENSIONS) {
   console.log(`build-pi-extensions: staged ${ext.name} (${ext.dirs.join(", ")})`);
   staged++;
 }
+
+// Keep the resource dir non-empty even when nothing staged, so the tauri
+// build.rs existence check passes (an empty tracked-less dir can be pruned).
+if (staged === 0) writeFileSync(join(outDir, ".gitkeep"), "");
 
 console.log(`build-pi-extensions: done (${staged}/${EXTENSIONS.length} staged).`);
