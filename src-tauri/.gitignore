@@ -8,3 +8,6 @@
 
 # Compiled CLI sidecar (rebuilt by `npm run build:sidecar`)
 /binaries/
+
+# Vendored pi extensions (restaged from node_modules by `npm run build:pi-extensions`)
+/resources/pi-ext/

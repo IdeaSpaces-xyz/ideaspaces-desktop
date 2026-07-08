@@ -87,7 +87,7 @@ jobs:
           mkdir -p dist
           echo '<!doctype html><title>ci</title>' > dist/index.html
 
-      - name: Placeholder sidecars
+      - name: Placeholder sidecars + resources
         run: |
           triple=$(rustc -vV | sed -n 's/^host: //p')
           mkdir -p binaries
@@ -97,6 +97,11 @@ jobs:
             printf '#!/bin/sh\n' > "binaries/${name}-${triple}"
             chmod +x "binaries/${name}-${triple}"
           done
+          # The bundle.resources path (vendored pi extensions) must also exist for
+          # the tauri build.rs check. A placeholder dir is enough for the gate;
+          # the real extensions are staged by `npm run build:pi-extensions`.
+          mkdir -p resources/pi-ext
+          echo 'ci placeholder' > resources/pi-ext/.gitkeep
 
       - name: Format check
         run: cargo fmt --all -- --check

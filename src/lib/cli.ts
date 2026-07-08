@@ -13,33 +13,70 @@
 
 import { Command, type Child } from "@tauri-apps/plugin-shell";
 import { invoke } from "@tauri-apps/api/core";
+import { resolveResource } from "@tauri-apps/api/path";
 import type {
   KeeperConversationDetail,
   KeeperStreamEvent,
   ModelTier,
 } from "../conversation/keeper-types";
 
-// The bundled pi binary flag (`--pi-bin <path>`) for local-agent calls, resolved
-// once at startup via the Rust `pi_bin_path` command. Empty in dev (no bundled
-// pi) — the CLI falls back to the user's PATH `pi`. See src-tauri: pi_bin_path,
-// scripts/build-pi-sidecar.mjs, and connect-pi-d1-bundling.
-let piBinArgs: string[] = [];
+// Bundled-pi wiring, resolved once at startup so the local-agent verbs are
+// self-contained in a packaged app (Connect Pi D1). Empty/undefined in dev,
+// where the CLI falls back to PATH `pi`, `node_modules/@ideaspaces/cli`, and
+// `IDEASPACES_PI_EXTENSIONS`. See src-tauri (pi_bin_path/cli_bin_path),
+// scripts/build-pi-{sidecar,extensions}.mjs, and connect-pi-d1-bundling.
+let piBinArgs: string[] = []; // `--pi-bin <path>` (D1a)
+let piExtArgs: string[] = []; // `--ext <dir,dir>` — bundled extension dirs (D1b)
+let piSkillArgs: string[] = []; // `--skill <dir,dir>` — bundled skill dirs (D1b)
+// `IS_CLI_PATH` env for every sidecar spawn: the bundled pi-is-space extension
+// shells the CLI (status/navigate) via it — see cli_bin_path. Undefined in dev.
+let piSidecarEnv: Record<string, string> | undefined;
 
-/** Resolve the bundled pi path once; on failure (dev), leave PATH fallback.
- *  Call at app start (before the first pi-status / local conversation).
- *  First paint is gated on this, so bound it: the invoke is a synchronous
- *  fs check on the Rust side, but a hung IPC must not blank the screen —
- *  time out to the PATH fallback rather than never settling. */
-export async function initPiRuntime(): Promise<void> {
+// The two bundled extensions, as resource-relative dirs (see tauri.conf.json
+// `resources` + build-pi-extensions.mjs). pi loads each dir's `pi.extensions`
+// entry (`--ext`) and scans `<dir>/skills` for its skills (`--skill`).
+const EXT_RESOURCE_DIRS = ["resources/pi-ext/pi-is-space", "resources/pi-ext/pi-local-context"];
+
+/** A bundled-path Rust command, bounded so a hung IPC can't blank first paint
+ *  (D1a) and returning null on error (dev: not packaged next to `current_exe`). */
+async function bundledPath(command: string): Promise<string | null> {
   try {
-    const path = await Promise.race([
-      invoke<string>("pi_bin_path"),
-      new Promise<string>((_, reject) => setTimeout(() => reject(new Error("pi_bin_path timed out")), 2000)),
+    return await Promise.race([
+      invoke<string>(command),
+      new Promise<string>((_, reject) => setTimeout(() => reject(new Error(`${command} timed out`)), 2000)),
     ]);
-    piBinArgs = path ? ["--pi-bin", path] : [];
   } catch {
-    piBinArgs = [];
+    return null;
   }
+}
+
+/** Resolve the bundled pi runtime once. Call at app start, before the first
+ *  pi-status / local conversation. First paint is gated on this, so each step is
+ *  bounded/guarded and degrades to the dev fallbacks rather than throwing.
+ *  The packaged-app signal is `cli_bin_path` resolving (the CLI sidecar sits next
+ *  to `current_exe` only when packaged); we gate the bundled extensions on it so
+ *  dev keeps using node_modules + `IDEASPACES_PI_EXTENSIONS`. */
+export async function initPiRuntime(): Promise<void> {
+  const piBin = await bundledPath("pi_bin_path");
+  piBinArgs = piBin ? ["--pi-bin", piBin] : [];
+
+  const cliBin = await bundledPath("cli_bin_path");
+  piSidecarEnv = cliBin ? { IS_CLI_PATH: cliBin } : undefined;
+
+  if (!cliBin) {
+    // Dev: the CLI resolves via node_modules and extensions via the env var.
+    piExtArgs = [];
+    piSkillArgs = [];
+    return;
+  }
+  // Packaged: hand pi the bundled extension + skill dirs.
+  const dirs = (
+    await Promise.all(
+      EXT_RESOURCE_DIRS.map((rel) => resolveResource(rel).catch(() => null)),
+    )
+  ).filter((d): d is string => !!d);
+  piExtArgs = dirs.length ? ["--ext", dirs.join(",")] : [];
+  piSkillArgs = dirs.length ? ["--skill", dirs.map((d) => `${d}/skills`).join(",")] : [];
 }
 
 interface SidecarResult {
@@ -48,8 +85,18 @@ interface SidecarResult {
   stderr: string;
 }
 
+/** The CLI sidecar command with the resolved `IS_CLI_PATH` env (D1b) applied to
+ *  every spawn, so a bundled pi turn shells the bundled CLI. `env` merges with
+ *  the inherited environment; it's undefined in dev (CLI via node_modules). */
+function sidecar(args: string[], cwd?: string) {
+  const options: { cwd?: string; env?: Record<string, string> } = {};
+  if (cwd) options.cwd = cwd;
+  if (piSidecarEnv) options.env = piSidecarEnv;
+  return Command.sidecar("binaries/ideaspaces", args, options);
+}
+
 async function runCli(args: string[], cwd?: string): Promise<SidecarResult> {
-  const out = await Command.sidecar("binaries/ideaspaces", args, cwd ? { cwd } : undefined).execute();
+  const out = await sidecar(args, cwd).execute();
   return { code: out.code, stdout: out.stdout, stderr: out.stderr };
 }
 
@@ -655,9 +702,10 @@ export function streamConversation(
  * Stream a LOCAL (Pi) turn over a folder — `conversation send --local`. Same
  * event contract as {@link streamConversation} (the CLI emits the same 9 Keeper
  * events), so the reducer + transcript are reused unchanged. `context` is the
- * folder root; sessions live at `<context>/.pi/sessions/`. Extension paths come
- * from `IDEASPACES_PI_EXTENSIONS` (env), inherited by the sidecar — no repo_id,
- * no account: Pi runs standalone over the local path.
+ * folder root; sessions live at `<context>/.pi/sessions/`. Extensions + skills
+ * come from the bundle (`--ext`/`--skill`, resolved by {@link initPiRuntime}); in
+ * dev those are empty and the CLI falls back to `IDEASPACES_PI_EXTENSIONS`. No
+ * repo_id, no account: Pi runs standalone over the local path.
  */
 export function streamLocalConversation(
   context: string,
@@ -676,6 +724,8 @@ export function streamLocalConversation(
     "--message",
     body.message,
     "--json",
+    ...piExtArgs,
+    ...piSkillArgs,
     ...piBinArgs,
   ];
   return streamCli(args, handlers);
@@ -685,7 +735,7 @@ export function streamLocalConversation(
  *  {@link KeeperStreamEvent}s, expose done/cancel. Spawned (not execute()'d) so a
  *  turn can be cancelled mid-flight. */
 function streamCli(args: string[], handlers: StreamHandlers): StreamHandle {
-  const command = Command.sidecar("binaries/ideaspaces", args);
+  const command = sidecar(args);
 
   let buffer = "";
   let stderr = "";
@@ -760,7 +810,7 @@ export interface LoginHandle {
  * resulting state is read back via whoami(), so login output isn't returned.
  */
 export function login(): LoginHandle {
-  const command = Command.sidecar("binaries/ideaspaces", ["login", "--json"]);
+  const command = sidecar(["login", "--json"]);
   let stderr = "";
   command.stderr.on("data", (line) => {
     stderr += line;
@@ -837,12 +887,14 @@ export interface PiStatus {
 
 /**
  * Is the local pi runtime usable for a local agent? Runs `pi-status --json`.
- * Pass extension paths to also check `extensionsResolvable` (the D1 bundling
- * concern); omit for binary+config detection (the C1 bar).
+ * With extension paths (explicit, or the bundled dirs resolved by
+ * {@link initPiRuntime}) it also reports `extensionsResolvable` — so in a
+ * packaged app the C1 check verifies the bundle; in dev it's binary+config only.
  */
 export async function piStatus(extPaths?: string[]): Promise<PiStatus> {
   const args = ["pi-status", "--json"];
   if (extPaths && extPaths.length) args.push("--ext", extPaths.join(","));
+  else args.push(...piExtArgs);
   args.push(...piBinArgs);
   const { code, stdout, stderr } = await runCli(args);
   if (code !== 0) {
