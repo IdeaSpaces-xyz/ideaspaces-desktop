@@ -60,7 +60,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
-    "@ideaspaces/cli": "github:IdeaSpaces-xyz/cli",
+    "@ideaspaces/cli": "github:IdeaSpaces-xyz/cli#6845c3e95e35dd1f258bb0aa430ee6eee1771ed7",
     "@ideaspaces/editor": "github:IdeaSpaces-xyz/editor",
     "@ideaspaces/pi-is-space": "github:IdeaSpaces-xyz/pi-is-space",
     "@ideaspaces/pi-local-context": "github:IdeaSpaces-xyz/pi-local-context",
