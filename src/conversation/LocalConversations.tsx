@@ -16,6 +16,7 @@ import { Compose } from "./Compose";
 import { bucketByTime, relativeTime } from "../lib/time";
 import { useToast } from "../toast/toast-context";
 import { PiLogo } from "../pi/PiLogo";
+import { usePiModels } from "../pi/usePiModels";
 
 // Local (Pi) conversations over a folder — the "Discuss" surface. Standalone: no
 // account, no repo_id. Pi runs over `context` (the folder path); sessions live at
@@ -23,12 +24,16 @@ import { PiLogo } from "../pi/PiLogo";
 // Keeper flow — the CLI emits the identical 9-event stream.
 export function LocalConversations({ context, username }: { context: string; username: string }) {
   const toast = useToast();
+  const { models } = usePiModels();
   const [rows, setRows] = useState<Conversation[]>([]);
   const [status, setStatus] = useState<"loading" | "loaded" | "error">("loading");
   const [error, setError] = useState<string | undefined>(undefined);
   // The open conversation, plus an optional first message to auto-send (a freshly
-  // created one). `null` = the list.
-  const [open, setOpen] = useState<{ id: string; initialSend?: { message: string } } | null>(null);
+  // created one), with the picked model. `null` = the list.
+  const [open, setOpen] = useState<{
+    id: string;
+    initialSend?: { message: string; model?: string };
+  } | null>(null);
   const [creating, setCreating] = useState(false);
 
   const load = useCallback(async () => {
@@ -52,12 +57,12 @@ export function LocalConversations({ context, username }: { context: string; use
 
   // A new conversation is minted on the first message, then opened with it queued.
   const startNew = useCallback(
-    async (text: string) => {
+    async (text: string, model?: string) => {
       if (creating) return; // guard a fast double-submit from minting two ids
       setCreating(true);
       try {
         const { conversation_id } = await createLocalConversation();
-        setOpen({ id: conversation_id, initialSend: { message: text } });
+        setOpen({ id: conversation_id, initialSend: { message: text, model } });
       } catch (err) {
         toast(err instanceof Error ? err.message : String(err), "error");
       } finally {
@@ -93,12 +98,13 @@ export function LocalConversations({ context, username }: { context: string; use
         </div>
         <div className="rounded-2xl border border-is-border bg-is-surface">
           <Compose
-            onSend={(t) => void startNew(t)}
+            onSend={(t, opts) => void startNew(t, opts.model)}
             onStop={() => {}}
             streaming={false}
             disabled={creating}
             placeholder="Ask Pi…"
             showModelControls={false}
+            models={models}
           />
         </div>
       </section>
@@ -182,10 +188,11 @@ export function LocalConversationView({
   context: string;
   conversationId: string;
   username: string;
-  initialSend?: { message: string };
+  initialSend?: { message: string; model?: string };
   onBack: () => void;
 }) {
   const toast = useToast();
+  const { models } = usePiModels();
   const [detail, setDetail] = useState<KeeperConversationDetail | null>(null);
   const [status, setStatus] = useState<"loading" | "loaded" | "error">("loading");
   const [error, setError] = useState<string | undefined>(undefined);
@@ -238,7 +245,7 @@ export function LocalConversationView({
     streamState.state === "tool_running";
 
   const send = useCallback(
-    async (text: string) => {
+    async (text: string, model?: string) => {
       if (handleRef.current || sendingRef.current) return;
       sendingRef.current = true;
       setSending(true);
@@ -248,7 +255,7 @@ export function LocalConversationView({
       const handle = streamLocalConversation(
         context,
         conversationId,
-        { message: text },
+        { message: text, model },
         {
           onEvent: (e) => {
             if (e.type === "error" && typeof e.message === "string") streamError = e.message;
@@ -290,7 +297,7 @@ export function LocalConversationView({
   useEffect(() => {
     if (status === "loaded" && initialSend && !autoSent.current) {
       autoSent.current = true;
-      void send(initialSend.message);
+      void send(initialSend.message, initialSend.model);
     }
   }, [status, initialSend, send]);
 
@@ -355,12 +362,14 @@ export function LocalConversationView({
       </div>
       <div className="mt-4 rounded-2xl border border-is-border bg-is-surface">
         <Compose
-          onSend={(t) => void send(t)}
+          onSend={(t, opts) => void send(t, opts.model)}
           onStop={stop}
           streaming={streaming}
           disabled={sending && !streaming}
           placeholder="Ask Pi…"
           showModelControls={false}
+          models={models}
+          initialModel={initialSend?.model}
         />
       </div>
     </div>

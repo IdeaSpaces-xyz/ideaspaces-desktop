@@ -8,6 +8,7 @@
 import { useEffect, useRef, useState } from "react";
 import { MODEL_TIERS, MODEL_TIER_INFO } from "./model-tiers";
 import type { ModelTier } from "./keeper-types";
+import type { PiModel } from "../lib/cli";
 import { cn } from "../lib/cn";
 import { useToast } from "../toast/toast-context";
 
@@ -18,6 +19,9 @@ const MAX_MESSAGE_CHARS = 100_000;
 export interface SendOptions {
   modelTier: ModelTier;
   thinking: boolean;
+  /** Local (Pi) only — the chosen `pi-models` ref, when the local picker is shown.
+   *  Undefined for Keeper (which uses `modelTier`) and when no models are loaded. */
+  model?: string;
 }
 
 export function Compose({
@@ -27,6 +31,8 @@ export function Compose({
   disabled = false,
   placeholder = "Ask Keeper…",
   showModelControls = true,
+  models,
+  initialModel,
 }: {
   onSend: (text: string, opts: SendOptions) => void;
   onStop: () => void;
@@ -34,15 +40,30 @@ export function Compose({
   disabled?: boolean;
   /** Prompt text. Defaults to the Keeper copy; the local Pi surface passes its own. */
   placeholder?: string;
-  /** The model-tier picker + Think toggle. Hidden for the local flow until the
-   *  model picker lands (C5–C6) — no false affordance for controls that no-op. */
+  /** The Keeper model-tier picker + Think toggle. */
   showModelControls?: boolean;
+  /** Local (Pi) models for the picker. When non-empty a model `<select>` renders
+   *  and the chosen ref rides on `SendOptions.model`. Keeper omits this. */
+  models?: PiModel[];
+  /** Seed the local picker with this ref (when valid) instead of the first model
+   *  — e.g. an opened conversation inherits the model picked at its start. */
+  initialModel?: string;
 }) {
   const toast = useToast();
   const [text, setText] = useState("");
   const [modelTier, setModelTier] = useState<ModelTier>("sonnet");
   const [thinking, setThinking] = useState(false);
+  const [model, setModel] = useState<string | undefined>(undefined);
   const taRef = useRef<HTMLTextAreaElement>(null);
+
+  // Default the local picker, keeping a valid current selection across (re)loads:
+  // keep the user's pick if still present, else the seed (initialModel), else the
+  // first model. So an opened conversation starts on the model picked at its start.
+  useEffect(() => {
+    if (!models || models.length === 0) return;
+    const has = (ref?: string) => !!ref && models.some((m) => m.ref === ref);
+    setModel((cur) => (has(cur) ? cur : has(initialModel) ? initialModel : models[0].ref));
+  }, [models, initialModel]);
 
   // Auto-grow the textarea with its content, up to a max height.
   useEffect(() => {
@@ -59,7 +80,7 @@ export function Compose({
       toast(`Message is too long (max ${MAX_MESSAGE_CHARS.toLocaleString()} characters).`, "error");
       return;
     }
-    onSend(trimmed, { modelTier, thinking });
+    onSend(trimmed, { modelTier, thinking, model });
     setText("");
   };
 
@@ -135,6 +156,25 @@ export function Compose({
               think
             </button>
           </>
+        )}
+        {models && models.length > 0 && (
+          // Local (Pi) model picker. A native <select>, not the Keeper segments:
+          // there can be dozens of models, so a dropdown is the honest fit. The
+          // chosen ref rides on SendOptions.model.
+          <select
+            aria-label="Model"
+            value={model ?? ""}
+            onChange={(e) => setModel(e.target.value)}
+            disabled={disabled}
+            className="max-w-[12rem] rounded border border-is-border bg-is-surface-alt px-2 py-1 font-chrome text-[11px] text-is-text-secondary outline-none transition-colors hover:text-is-text focus-visible:ring-2 focus-visible:ring-is-focus-ring disabled:opacity-50"
+          >
+            {models.map((m) => (
+              <option key={m.ref} value={m.ref}>
+                {m.name}
+                {m.reasoning ? " · thinking" : ""}
+              </option>
+            ))}
+          </select>
         )}
         {streaming ? (
           <button

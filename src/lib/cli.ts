@@ -668,6 +668,9 @@ export interface SendMessage {
   message: string;
   modelTier?: ModelTier;
   thinking?: boolean;
+  /** Local (Pi) only — a `pi-models` ref (e.g. `anthropic/claude-…`) passed as
+   *  `--model`. Keeper uses `modelTier`; Pi has many models, picked by ref. */
+  model?: string;
 }
 
 export interface StreamHandlers {
@@ -735,10 +738,12 @@ export function streamLocalConversation(
     "--message",
     body.message,
     "--json",
-    ...piExtArgs,
-    ...piSkillArgs,
-    ...piBinArgs,
   ];
+  // The picked model rides as `--pi-model=<ref>` — the LOCAL send's model flag
+  // (commands/conversation.ts reads `--pi-model`, not `--model`; `--model` there
+  // is only a Keeper event label). The `=` form keeps it flag-safe like pi-login.
+  if (body.model) args.push(`--pi-model=${body.model}`);
+  args.push(...piExtArgs, ...piSkillArgs, ...piBinArgs);
   return streamCli(args, handlers);
 }
 
@@ -930,6 +935,37 @@ export async function piLogin(provider: string, apiKey: string): Promise<void> {
   if (code !== 0) {
     throw new Error(stderr.trim() || `Provider sign-in failed (exit ${code ?? "unknown"}).`);
   }
+}
+
+/** One model a local Pi turn can use — mirrors the CLI `pi-models` shape
+ *  (commands/pi-models.ts). `ref` (`provider/id`) is what rides back as `--model`. */
+export interface PiModel {
+  ref: string;
+  id: string;
+  name: string;
+  provider: string;
+  contextWindow: number;
+  maxTokens: number;
+  /** Supports extended thinking/reasoning. */
+  reasoning: boolean;
+  /** Accepts image input. */
+  image: boolean;
+  cost?: { input: number; output: number };
+}
+
+/**
+ * The models a local Pi turn can use — runs `pi-models --json`. Spawns pi in rpc
+ * mode, so it needs `--pi-bin` (unlike pi-login/pi-status, which touch only a
+ * file). The list is **auth-gated**: only models from configured providers show,
+ * so an empty list means "no provider configured yet", not an error.
+ */
+export async function piModels(): Promise<PiModel[]> {
+  const args = ["pi-models", "--json", ...piBinArgs];
+  const { code, stdout, stderr } = await runCli(args);
+  if (code !== 0) {
+    throw new Error(stderr.trim() || `Could not load local models (exit ${code ?? "unknown"}).`);
+  }
+  return parseJson<{ models: PiModel[] }>(stdout, "pi-models").models;
 }
 
 // --- Local (Pi) conversations ---
