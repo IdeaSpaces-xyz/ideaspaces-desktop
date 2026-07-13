@@ -713,15 +713,6 @@ export function streamConversation(
 }
 
 /**
- * Stream a LOCAL (Pi) turn over a folder — `conversation send --local`. Same
- * event contract as {@link streamConversation} (the CLI emits the same 9 Keeper
- * events), so the reducer + transcript are reused unchanged. `context` is the
- * folder root; sessions live at `<context>/.pi/sessions/`. Extensions + skills
- * come from the bundle (`--ext`/`--skill`, resolved by {@link initPiRuntime}); in
- * dev those are empty and the CLI falls back to `IDEASPACES_PI_EXTENSIONS`. No
- * repo_id, no account: Pi runs standalone over the local path.
- */
-/**
  * Build the argv for a local send. Pure (extras passed in) so the flag wiring —
  * especially the model flag — is unit-testable. The picked model rides as
  * `--pi-model=<ref>`: the LOCAL send reads `--pi-model`, NOT `--model` (on the
@@ -751,6 +742,15 @@ export function buildLocalSendArgs(
   return args;
 }
 
+/**
+ * Stream a LOCAL (Pi) turn over a folder — `conversation send --local`. Same
+ * event contract as {@link streamConversation} (the CLI emits the same 9 Keeper
+ * events), so the reducer + transcript are reused unchanged. `context` is the
+ * folder root; sessions live at `<context>/.pi/sessions/`. Extensions + skills
+ * come from the bundle (`--ext`/`--skill`, resolved by {@link initPiRuntime}); in
+ * dev those are empty and the CLI falls back to `IDEASPACES_PI_EXTENSIONS`. No
+ * repo_id, no account: Pi runs standalone over the local path.
+ */
 export function streamLocalConversation(
   context: string,
   conversationId: string,
