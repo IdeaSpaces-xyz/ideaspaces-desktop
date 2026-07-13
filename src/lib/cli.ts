@@ -721,12 +721,19 @@ export function streamConversation(
  * dev those are empty and the CLI falls back to `IDEASPACES_PI_EXTENSIONS`. No
  * repo_id, no account: Pi runs standalone over the local path.
  */
-export function streamLocalConversation(
+/**
+ * Build the argv for a local send. Pure (extras passed in) so the flag wiring —
+ * especially the model flag — is unit-testable. The picked model rides as
+ * `--pi-model=<ref>`: the LOCAL send reads `--pi-model`, NOT `--model` (on the
+ * local path `--model` is only a Keeper event label, so a bare `--model` would
+ * silently no-op). The `=` form keeps it flag-safe like pi-login.
+ */
+export function buildLocalSendArgs(
   context: string,
   conversationId: string,
   body: SendMessage,
-  handlers: StreamHandlers,
-): StreamHandle {
+  extras: string[],
+): string[] {
   const args = [
     "conversation",
     "send",
@@ -739,11 +746,22 @@ export function streamLocalConversation(
     body.message,
     "--json",
   ];
-  // The picked model rides as `--pi-model=<ref>` — the LOCAL send's model flag
-  // (commands/conversation.ts reads `--pi-model`, not `--model`; `--model` there
-  // is only a Keeper event label). The `=` form keeps it flag-safe like pi-login.
   if (body.model) args.push(`--pi-model=${body.model}`);
-  args.push(...piExtArgs, ...piSkillArgs, ...piBinArgs);
+  args.push(...extras);
+  return args;
+}
+
+export function streamLocalConversation(
+  context: string,
+  conversationId: string,
+  body: SendMessage,
+  handlers: StreamHandlers,
+): StreamHandle {
+  const args = buildLocalSendArgs(context, conversationId, body, [
+    ...piExtArgs,
+    ...piSkillArgs,
+    ...piBinArgs,
+  ]);
   return streamCli(args, handlers);
 }
 

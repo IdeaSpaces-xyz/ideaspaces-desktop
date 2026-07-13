@@ -46,7 +46,7 @@ export function NewConversation({
   // when pi is connected. Selectable only for a repo that's available offline —
   // Pi runs over its local clone (reach: online-only → Keeper only, synced → both).
   const { state: piState } = usePiStatus();
-  const { models: piModelList } = usePiModels();
+  const { models: piModelList, error: piModelsError } = usePiModels();
   const localAgent = useMemo(
     () => (piState.kind === "ready" ? localPiAgent(username) : null),
     [piState.kind, username],
@@ -84,6 +84,12 @@ export function NewConversation({
   const clonePath = clonePathFor(repoId);
   const piSelectable = !!localAgent && !!clonePath;
   const chosenIsLocal = piSelectable && agentNodeId === localAgent!.node_id;
+
+  // Surface a models-load failure only when Pi is actually the chosen agent —
+  // this modal loads models eagerly, so a Keeper user shouldn't see a Pi error.
+  useEffect(() => {
+    if (chosenIsLocal && piModelsError) toast(`Couldn't load models: ${piModelsError}`, "error");
+  }, [chosenIsLocal, piModelsError, toast]);
 
   // If the picked repo isn't available offline, drop a stale Pi pick (e.g. after
   // switching to an online-only repo) back to the server default.

@@ -24,7 +24,13 @@ import { usePiModels } from "../pi/usePiModels";
 // Keeper flow — the CLI emits the identical 9-event stream.
 export function LocalConversations({ context, username }: { context: string; username: string }) {
   const toast = useToast();
-  const { models } = usePiModels();
+  const { models, error: modelsError } = usePiModels();
+  // Surface a genuine models-load failure — otherwise it's indistinguishable
+  // from "no provider yet" (both just hide the picker). Pi is ready here, so an
+  // error is unexpected and worth showing.
+  useEffect(() => {
+    if (modelsError) toast(`Couldn't load models: ${modelsError}`, "error");
+  }, [modelsError, toast]);
   const [rows, setRows] = useState<Conversation[]>([]);
   const [status, setStatus] = useState<"loading" | "loaded" | "error">("loading");
   const [error, setError] = useState<string | undefined>(undefined);
@@ -192,7 +198,10 @@ export function LocalConversationView({
   onBack: () => void;
 }) {
   const toast = useToast();
-  const { models } = usePiModels();
+  const { models, error: modelsError } = usePiModels();
+  useEffect(() => {
+    if (modelsError) toast(`Couldn't load models: ${modelsError}`, "error");
+  }, [modelsError, toast]);
   const [detail, setDetail] = useState<KeeperConversationDetail | null>(null);
   const [status, setStatus] = useState<"loading" | "loaded" | "error">("loading");
   const [error, setError] = useState<string | undefined>(undefined);
