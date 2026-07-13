@@ -26,6 +26,7 @@ import { useCloneStatuses } from "./spaces/useCloneStatuses";
 import { useOpenedFolders } from "./spaces/useOpenedFolders";
 import { usePiStatus, describePi } from "./pi/usePiStatus";
 import { PiLogo } from "./pi/PiLogo";
+import { ProviderLoginForm } from "./pi/ProviderLoginForm";
 import { LocalConversations } from "./conversation/LocalConversations";
 import { useTheme, type ThemeMode } from "./theme/useTheme";
 import { useToast } from "./toast/toast-context";
@@ -501,8 +502,13 @@ function ConnectPanel({
           icon={PiLogo}
           title={piCard.title}
           description={piCard.description}
-          onClick={recheckPi}
-        />
+          // On needs-provider the card holds a form (with its own controls), so
+          // it must not also be a button — clicking to recheck stays for the
+          // other states (e.g. after installing pi).
+          onClick={piState.kind === "needs-provider" ? undefined : recheckPi}
+        >
+          {piState.kind === "needs-provider" && <ProviderLoginForm onDone={recheckPi} />}
+        </ConnectCard>
       </div>
       {folderContexts.length > 0 && (
         <div className="mt-6">

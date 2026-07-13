@@ -914,6 +914,24 @@ export async function piStatus(extPaths?: string[]): Promise<PiStatus> {
   return parseJson<PiStatus>(stdout, "pi-status");
 }
 
+/**
+ * Configure a local-agent model provider with an API key — runs `pi-login`,
+ * which writes pi's `auth.json`. The CLI owns the credential write; the desktop
+ * only collects the key and never touches `~/.pi`. No `--pi-bin`: the verb writes
+ * a file, it doesn't spawn pi. Recheck {@link piStatus} after to flip to `ready`.
+ *
+ * The key rides as `--api-key=<key>` (the `=` form): the CLI arg parser splits on
+ * the first `=` and takes the rest verbatim, so a key that begins with `-`/`--`
+ * is never misread as a flag. Args are an argv array (no shell), so no quoting.
+ */
+export async function piLogin(provider: string, apiKey: string): Promise<void> {
+  const args = ["pi-login", "--provider", provider, `--api-key=${apiKey}`, "--json"];
+  const { code, stderr } = await runCli(args);
+  if (code !== 0) {
+    throw new Error(stderr.trim() || `Provider sign-in failed (exit ${code ?? "unknown"}).`);
+  }
+}
+
 // --- Local (Pi) conversations ---
 // Pi runs standalone over a folder path (no repo_id, no account). Same JSON
 // contracts as the remote conversation verbs, so the reducer + transcript reuse.
