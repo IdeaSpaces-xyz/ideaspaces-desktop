@@ -6,6 +6,7 @@ import type { ConversationRow } from "../spaces/useConversations";
 import { useToast } from "../toast/toast-context";
 import { Compose, type SendOptions } from "../conversation/Compose";
 import { usePiStatus } from "../pi/usePiStatus";
+import { usePiModels } from "../pi/usePiModels";
 import { localPiAgent } from "../pi/localAgent";
 import { PiLogo } from "../pi/PiLogo";
 
@@ -33,13 +34,19 @@ export function NewConversation({
   preselectRepoId?: string;
   onCreated: (row: ConversationRow, firstMessage: string, opts: SendOptions) => void;
   /** Start a local (Pi) conversation over `context` (the repo's clone path). */
-  onCreatedLocal: (args: { conversationId: string; context: string; message: string }) => void;
+  onCreatedLocal: (args: {
+    conversationId: string;
+    context: string;
+    message: string;
+    model?: string;
+  }) => void;
 }) {
   const toast = useToast();
   // Connect Pi (C2/C3b): surface the local agent beside the remote Keeper agents
   // when pi is connected. Selectable only for a repo that's available offline —
   // Pi runs over its local clone (reach: online-only → Keeper only, synced → both).
   const { state: piState } = usePiStatus();
+  const { models: piModelList, error: piModelsError } = usePiModels();
   const localAgent = useMemo(
     () => (piState.kind === "ready" ? localPiAgent(username) : null),
     [piState.kind, username],
@@ -78,6 +85,12 @@ export function NewConversation({
   const piSelectable = !!localAgent && !!clonePath;
   const chosenIsLocal = piSelectable && agentNodeId === localAgent!.node_id;
 
+  // Surface a models-load failure only when Pi is actually the chosen agent —
+  // this modal loads models eagerly, so a Keeper user shouldn't see a Pi error.
+  useEffect(() => {
+    if (chosenIsLocal && piModelsError) toast(`Couldn't load models: ${piModelsError}`, "error");
+  }, [chosenIsLocal, piModelsError, toast]);
+
   // If the picked repo isn't available offline, drop a stale Pi pick (e.g. after
   // switching to an online-only repo) back to the server default.
   useEffect(() => {
@@ -98,7 +111,12 @@ export function NewConversation({
       if (chosenIsLocal && clonePath) {
         // Pi over the repo's clone — a local conversation, no server round-trip.
         const { conversation_id } = await createLocalConversation();
-        onCreatedLocal({ conversationId: conversation_id, context: clonePath, message: text });
+        onCreatedLocal({
+          conversationId: conversation_id,
+          context: clonePath,
+          message: text,
+          model: opts.model,
+        });
       } else {
         const created = await createConversation(repoId, effectiveAgentNodeId || undefined);
         onCreated(
@@ -179,9 +197,10 @@ export function NewConversation({
           onStop={() => {}}
           streaming={false}
           disabled={busy || !repoId}
-          // Pi runs on its own model; hide the Keeper tier/Think controls (they'd
-          // no-op) and address the prompt to Pi when it's the chosen agent.
+          // Keeper uses the tier/Think controls; Pi uses its own model picker,
+          // populated from pi-models. Address the prompt to Pi when it's chosen.
           showModelControls={!chosenIsLocal}
+          models={chosenIsLocal ? piModelList : undefined}
           placeholder={chosenIsLocal ? "Ask Pi…" : undefined}
         />
       </div>

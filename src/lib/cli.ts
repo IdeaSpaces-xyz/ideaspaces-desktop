@@ -668,6 +668,9 @@ export interface SendMessage {
   message: string;
   modelTier?: ModelTier;
   thinking?: boolean;
+  /** Local (Pi) only — a `pi-models` ref (e.g. `anthropic/claude-…`) passed as
+   *  `--model`. Keeper uses `modelTier`; Pi has many models, picked by ref. */
+  model?: string;
 }
 
 export interface StreamHandlers {
@@ -710,6 +713,36 @@ export function streamConversation(
 }
 
 /**
+ * Build the argv for a local send. Pure (extras passed in) so the flag wiring —
+ * especially the model flag — is unit-testable. The picked model rides as
+ * `--pi-model=<ref>`: the LOCAL send reads `--pi-model`, NOT `--model` (on the
+ * local path `--model` is only a Keeper event label, so a bare `--model` would
+ * silently no-op). The `=` form keeps it flag-safe like pi-login.
+ */
+export function buildLocalSendArgs(
+  context: string,
+  conversationId: string,
+  body: SendMessage,
+  extras: string[],
+): string[] {
+  const args = [
+    "conversation",
+    "send",
+    "--local",
+    "--context",
+    context,
+    "--conversation",
+    conversationId,
+    "--message",
+    body.message,
+    "--json",
+  ];
+  if (body.model) args.push(`--pi-model=${body.model}`);
+  args.push(...extras);
+  return args;
+}
+
+/**
  * Stream a LOCAL (Pi) turn over a folder — `conversation send --local`. Same
  * event contract as {@link streamConversation} (the CLI emits the same 9 Keeper
  * events), so the reducer + transcript are reused unchanged. `context` is the
@@ -724,21 +757,11 @@ export function streamLocalConversation(
   body: SendMessage,
   handlers: StreamHandlers,
 ): StreamHandle {
-  const args = [
-    "conversation",
-    "send",
-    "--local",
-    "--context",
-    context,
-    "--conversation",
-    conversationId,
-    "--message",
-    body.message,
-    "--json",
+  const args = buildLocalSendArgs(context, conversationId, body, [
     ...piExtArgs,
     ...piSkillArgs,
     ...piBinArgs,
-  ];
+  ]);
   return streamCli(args, handlers);
 }
 
@@ -930,6 +953,37 @@ export async function piLogin(provider: string, apiKey: string): Promise<void> {
   if (code !== 0) {
     throw new Error(stderr.trim() || `Provider sign-in failed (exit ${code ?? "unknown"}).`);
   }
+}
+
+/** One model a local Pi turn can use — mirrors the CLI `pi-models` shape
+ *  (commands/pi-models.ts). `ref` (`provider/id`) is what rides back as `--model`. */
+export interface PiModel {
+  ref: string;
+  id: string;
+  name: string;
+  provider: string;
+  contextWindow: number;
+  maxTokens: number;
+  /** Supports extended thinking/reasoning. */
+  reasoning: boolean;
+  /** Accepts image input. */
+  image: boolean;
+  cost?: { input: number; output: number };
+}
+
+/**
+ * The models a local Pi turn can use — runs `pi-models --json`. Spawns pi in rpc
+ * mode, so it needs `--pi-bin` (unlike pi-login/pi-status, which touch only a
+ * file). The list is **auth-gated**: only models from configured providers show,
+ * so an empty list means "no provider configured yet", not an error.
+ */
+export async function piModels(): Promise<PiModel[]> {
+  const args = ["pi-models", "--json", ...piBinArgs];
+  const { code, stdout, stderr } = await runCli(args);
+  if (code !== 0) {
+    throw new Error(stderr.trim() || `Could not load local models (exit ${code ?? "unknown"}).`);
+  }
+  return parseJson<{ models: PiModel[] }>(stdout, "pi-models").models;
 }
 
 // --- Local (Pi) conversations ---

@@ -558,7 +558,12 @@ export function ConversationsView({
   // path. Its first message (auto-sent once) rides along on creation.
   const [selected, setSelected] = useState<
     | { kind: "remote"; row: ConversationRow; initialSend?: { message: string } & SendOptions }
-    | { kind: "local"; conversationId: string; context: string; initialSend?: { message: string } }
+    | {
+        kind: "local";
+        conversationId: string;
+        context: string;
+        initialSend?: { message: string; model?: string };
+      }
     | null
   >(null);
   // An open conversation belongs to the context it was opened in — drop it on a
@@ -586,12 +591,13 @@ export function ConversationsView({
     conversationId: string;
     context: string;
     message: string;
+    model?: string;
   }) => {
     setSelected({
       kind: "local",
       conversationId: args.conversationId,
       context: args.context,
-      initialSend: { message: args.message },
+      initialSend: { message: args.message, model: args.model },
     });
   };
 
