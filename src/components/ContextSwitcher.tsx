@@ -21,6 +21,7 @@ export function ContextSwitcher({
   onSelect,
   onOpenFolder,
   onCloseFolder,
+  onOpenWorkspaceFolder,
   onChangeCloneRoot,
 }: {
   contexts: SpaceContext[];
@@ -30,6 +31,8 @@ export function ContextSwitcher({
   onOpenFolder: () => void;
   /** Remove an opened folder from the list. */
   onCloseFolder: (ctx: SpaceContext) => void;
+  /** Open the active context's workspace folder in the OS file manager. */
+  onOpenWorkspaceFolder?: () => void;
   /** Set the active account's clone root (absent for folder contexts). */
   onChangeCloneRoot?: () => void;
 }) {
@@ -97,6 +100,17 @@ export function ContextSwitcher({
             ))}
           </DropdownMenu.RadioGroup>
           <DropdownMenu.Separator className="my-1 h-px bg-is-border" />
+          {onOpenWorkspaceFolder && (
+            // The "here's all my stuff" affordance — open the active context's
+            // workspace folder in Finder (S3b).
+            <DropdownMenu.Item
+              onSelect={onOpenWorkspaceFolder}
+              className="flex cursor-pointer select-none items-center gap-2 px-3 py-2 text-xs text-is-text outline-none transition-colors data-[highlighted]:bg-is-surface-alt"
+            >
+              <FolderOpen size={14} strokeWidth={1.333} className="shrink-0 text-is-text-secondary" />
+              <span className="flex-1 truncate">Open workspace folder</span>
+            </DropdownMenu.Item>
+          )}
           <DropdownMenu.Item
             onSelect={onOpenFolder}
             className="flex cursor-pointer select-none items-center gap-2 px-3 py-2 text-xs text-is-text outline-none transition-colors data-[highlighted]:bg-is-surface-alt"
