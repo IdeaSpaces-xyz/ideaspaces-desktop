@@ -3,6 +3,7 @@ import {
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
+  ChevronRight,
   Cloud,
   Download,
   FolderInput,
@@ -226,14 +227,31 @@ function CloudRow({
               <Download size={14} strokeWidth={1.333} className="text-is-text-tertiary" aria-hidden="true" />
               Make available offline
             </DropdownMenu.Item>
-            <DropdownMenu.Item className={rowMenuItem} onSelect={() => onCloneTo(space)}>
-              <FolderInput size={14} strokeWidth={1.333} className="text-is-text-tertiary" aria-hidden="true" />
-              Make available offline at…
-            </DropdownMenu.Item>
             <DropdownMenu.Item className={rowMenuItem} onSelect={() => onLinkExisting(space)}>
               <Link2 size={14} strokeWidth={1.333} className="text-is-text-tertiary" aria-hidden="true" />
               Link a folder I already have…
             </DropdownMenu.Item>
+            {/* The per-clone destination override — kept, but tucked under
+                Advanced: the happy path clones into your workspace, so choosing
+                a folder per repo is the rare escape hatch, not a peer choice. */}
+            <DropdownMenu.Sub>
+              <DropdownMenu.SubTrigger className={rowMenuItem}>
+                <FolderInput size={14} strokeWidth={1.333} className="text-is-text-tertiary" aria-hidden="true" />
+                <span className="flex-1">Advanced</span>
+                <ChevronRight size={14} strokeWidth={1.333} className="text-is-text-tertiary" aria-hidden="true" />
+              </DropdownMenu.SubTrigger>
+              <DropdownMenu.Portal>
+                <DropdownMenu.SubContent
+                  sideOffset={2}
+                  className="z-50 min-w-[13rem] rounded-lg border border-is-border bg-is-surface p-1 shadow-md"
+                >
+                  <DropdownMenu.Item className={rowMenuItem} onSelect={() => onCloneTo(space)}>
+                    <FolderInput size={14} strokeWidth={1.333} className="text-is-text-tertiary" aria-hidden="true" />
+                    Clone to a specific folder…
+                  </DropdownMenu.Item>
+                </DropdownMenu.SubContent>
+              </DropdownMenu.Portal>
+            </DropdownMenu.Sub>
           </RowMenu>
         ))}
     </li>

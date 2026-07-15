@@ -14,6 +14,7 @@ export function Header({
   onSelectContext,
   onOpenFolder,
   onCloseFolder,
+  onOpenWorkspaceFolder,
   onChangeCloneRoot,
   onHome,
   username,
@@ -27,6 +28,8 @@ export function Header({
   onSelectContext: (ref: string) => void;
   onOpenFolder: () => void;
   onCloseFolder: (ctx: SpaceContext) => void;
+  /** Open the active context's workspace folder in the OS file manager. */
+  onOpenWorkspaceFolder?: () => void;
   /** Set the active account's clone root (absent for folder contexts). */
   onChangeCloneRoot?: () => void;
   /** Click the logo → back to the conversations home (closes the editor). */
@@ -57,6 +60,7 @@ export function Header({
             onSelect={onSelectContext}
             onOpenFolder={onOpenFolder}
             onCloseFolder={onCloseFolder}
+            onOpenWorkspaceFolder={onOpenWorkspaceFolder}
             onChangeCloneRoot={onChangeCloneRoot}
           />
         </div>

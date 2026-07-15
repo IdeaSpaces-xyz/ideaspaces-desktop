@@ -184,6 +184,9 @@ function SignedInView({
         onSelectContext={onSelectContext}
         onOpenFolder={onOpenFolder}
         onCloseFolder={onCloseFolder}
+        onOpenWorkspaceFolder={
+          activeContext ? () => void actions.openWorkspaceFolder(activeContext) : undefined
+        }
         onChangeCloneRoot={
           activeContext && activeContext.kind !== "folder"
             ? () => void actions.changeCloneRoot(activeContext)

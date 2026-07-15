@@ -1,7 +1,8 @@
 import { useCallback, useState } from "react";
 import { join } from "@tauri-apps/api/path";
 import { ask, open } from "@tauri-apps/plugin-dialog";
-import { revealItemInDir } from "@tauri-apps/plugin-opener";
+import { openPath, revealItemInDir } from "@tauri-apps/plugin-opener";
+import { exists, mkdir } from "@tauri-apps/plugin-fs";
 import { cloneSpace, forgetClone, linkClone, pullClone, pushClone, type Space } from "../lib/cli";
 import { pullThenPush } from "../lib/sync";
 import { accountRoot, setAccountRoot } from "../lib/workspace";
@@ -84,6 +85,38 @@ export function useSpaceActions(reload: () => Promise<void> | void, username: st
       }
     },
     [toast],
+  );
+
+  // Open the account's workspace root in the OS file manager — the "here's all
+  // my stuff" affordance (S3b). Create it on first open so the workspace exists
+  // as a home even before the first clone lands in it. Opens the folder (shows
+  // its spaces), not a reveal-in-parent.
+  const openWorkspaceFolder = useCallback(
+    async (context: SpaceContext) => {
+      try {
+        // A folder context already exists (the user opened it) — just open it.
+        if (context.path) {
+          await openPath(context.path);
+          return;
+        }
+        const root = await accountRoot(context.hostname, username);
+        // Best-effort create so an untouched default root (`~/IdeaSpaces`) opens
+        // as an empty home even before its first clone. The fs plugin is scoped
+        // to `$HOME/**`, so a per-account override pointing outside it throws
+        // here — that's fine: such a root was picked via a dialog so it already
+        // exists, and `openPath` (unscoped) opens it regardless. Never let the
+        // create block the open.
+        try {
+          if (!(await exists(root))) await mkdir(root, { recursive: true });
+        } catch {
+          /* outside the fs scope (external override) — the folder already exists */
+        }
+        await openPath(root);
+      } catch (err) {
+        toast(errMessage(err), "error");
+      }
+    },
+    [toast, username],
   );
 
   // Repo-first: bind a folder you already have to THIS space. The CLI verifies
@@ -216,6 +249,7 @@ export function useSpaceActions(reload: () => Promise<void> | void, username: st
     clone,
     cloneTo,
     changeCloneRoot,
+    openWorkspaceFolder,
     linkExisting,
     linkFolder,
     pull,
