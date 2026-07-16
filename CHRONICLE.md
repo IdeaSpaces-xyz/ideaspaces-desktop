@@ -3,6 +3,14 @@
 What we forged, and what it frees — newest first. Written in our house voice
 (see [`_agent/skills/chronicle.md`](https://github.com/IdeaSpaces-xyz/ideaspaces/blob/main/_agent/skills/chronicle.md) in the root ideaspace). Each release's entry is also its GitHub release notes.
 
+## v0.5.0 · A resident for the workshop
+
+The app used to lean on the server — you signed in to do anything, and your spaces scattered wherever they landed. Now the workshop is your own: open **any folder** and work it offline, no account asked, and each account keeps **one home** — `~/IdeaSpaces` — where its spaces gather, laid open at a click with **Open workspace folder**.
+
+Then the workshop takes a resident. **Pi** — a local agent — now lives inside the app, no separate install. Sign in a model provider, **pick the model** that answers, and set it to work across your own folders: offline, on your own key.
+
+→ *Work any folder without signing in, keep everything in one place you can open, and think alongside a local agent that runs on your own machine.*
+
 ## v0.4.0 · The walls learn to open
 
 Your space was a sealed room; now it has a door. **Share** a repo from the tree — invite people by email with a role, or set a public link anyone can read. The exchange with the server is named at last: no lone *Sync*, but **Pull** to bring others' work down and **Push** to send yours up, each counted so you see which way the knowledge moves. And a note can now leave the room whole — **Save as PDF or Word**.
