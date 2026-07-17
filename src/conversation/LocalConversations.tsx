@@ -4,6 +4,7 @@ import {
   createLocalConversation,
   getLocalConversation,
   listLocalConversations,
+  listFiles,
   streamLocalConversation,
   type Conversation,
   type StreamHandle,
@@ -111,6 +112,7 @@ export function LocalConversations({ context, username }: { context: string; use
             placeholder="Ask Pi…"
             showModelControls={false}
             models={models}
+            mentionSource={(q) => listFiles(context, q)}
           />
         </div>
       </section>
@@ -379,6 +381,7 @@ export function LocalConversationView({
           showModelControls={false}
           models={models}
           initialModel={initialSend?.model}
+          mentionSource={(q) => listFiles(context, q)}
         />
       </div>
     </div>

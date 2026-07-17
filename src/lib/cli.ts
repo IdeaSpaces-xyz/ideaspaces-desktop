@@ -986,6 +986,35 @@ export async function piModels(): Promise<PiModel[]> {
   return parseJson<{ models: PiModel[] }>(stdout, "pi-models").models;
 }
 
+/** A file or folder under a workspace, for @-mention autocomplete. Folders are
+ *  typed so the picker can tell a plain folder from a code repo (`.git`) or an
+ *  ideaspace repo (`_agent/`). Mirrors the CLI `ls` verb's entry shape. */
+export type MentionEntryKind = "file" | "folder" | "code-repo" | "ideaspace-repo";
+export interface MentionEntry {
+  /** Path relative to the workspace root — the token an @mention inserts. */
+  path: string;
+  name: string;
+  kind: MentionEntryKind;
+}
+
+/**
+ * List files and folders under `root` for @-mention autocomplete, via the CLI
+ * `ls` verb (a bounded, typed, noise-excluding walk). `query` filters+ranks
+ * server-side; an empty query returns the shallow head. The `=` flag form guards
+ * a query that begins with `-` (the mention regex can capture one). Local (Pi)
+ * surface only — Keeper resolves mentions server-side.
+ */
+export async function listFiles(root: string, query: string, limit = 8): Promise<MentionEntry[]> {
+  const args = ["ls", root, `--limit=${limit}`, "--json"];
+  const trimmed = query.trim();
+  if (trimmed) args.push(`--query=${trimmed}`);
+  const { code, stdout, stderr } = await runCli(args);
+  if (code !== 0) {
+    throw new Error(stderr.trim() || `Could not list files (exit ${code ?? "unknown"}).`);
+  }
+  return parseJson<{ entries: MentionEntry[] }>(stdout, "ls").entries;
+}
+
 // --- Local (Pi) conversations ---
 // Pi runs standalone over a folder path (no repo_id, no account). Same JSON
 // contracts as the remote conversation verbs, so the reducer + transcript reuse.
