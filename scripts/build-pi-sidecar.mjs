@@ -108,6 +108,18 @@ function assetsStaged() {
   return existsSync(join(assetsDir, "theme", "dark.json"));
 }
 
+// Version stamp beside the binary, so the cache is keyed on PI_VERSION — bumping
+// the pinned version forces a re-fetch instead of silently keeping a stale binary
+// (the release binaries report `--version` as 0.0.0, so we can't ask the binary).
+const versionStamp = join(outDir, ".pi-version");
+function stampMatches() {
+  try {
+    return existsSync(versionStamp) && readFileSync(versionStamp, "utf8").trim() === PI_VERSION;
+  } catch {
+    return false;
+  }
+}
+
 const base = `https://github.com/${PI_REPO}/releases/download/v${PI_VERSION}`;
 
 async function download(url) {
@@ -140,11 +152,12 @@ async function expectedSha(asset) {
 // land regardless of what a prior single-arch run left on disk.
 async function stage(triple, { forceAssets = false } = {}) {
   const out = join(outDir, `pi-${triple}`);
-  // Skip only when the binary + its assets are present and we're not forcing an
-  // asset re-stage — a cached binary with missing assets would ship a pi that
-  // can't start.
-  if (existsSync(out) && assetsStaged() && !forceAssets) {
-    console.log(`build-pi-sidecar: ${out} + assets present — skipping (delete to re-fetch).`);
+  // Skip only when the binary + its assets are present, the staged version still
+  // matches PI_VERSION, and we're not forcing an asset re-stage. Checking the
+  // stamp (not just existence) is what makes a version bump re-fetch — otherwise
+  // a stale binary from a prior version is kept and the bump silently no-ops.
+  if (existsSync(out) && assetsStaged() && stampMatches() && !forceAssets) {
+    console.log(`build-pi-sidecar: ${out} + assets present (v${PI_VERSION}) — skipping (delete to re-fetch).`);
     return out;
   }
   const asset = ASSET_FOR[triple];
@@ -165,7 +178,8 @@ async function stage(triple, { forceAssets = false } = {}) {
     if (!pi) fail(`no \`pi\` executable found in ${asset}`);
     execFileSync("install", ["-m", "0755", pi, out]); // copy + chmod +x
     stageAssets(dirname(pi)); // pi's package dir is the extracted `pi/` folder
-    console.log(`build-pi-sidecar: staged ${out} + package assets`);
+    writeFileSync(versionStamp, `${PI_VERSION}\n`); // record what's staged, for the next build's cache check
+    console.log(`build-pi-sidecar: staged ${out} + package assets (v${PI_VERSION})`);
   } finally {
     rmSync(work, { recursive: true, force: true });
   }
