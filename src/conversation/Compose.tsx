@@ -8,11 +8,12 @@
 // typing `@` opens a typed file/folder picker that inserts an `@path` pointer
 // token. Keeper omits the source and the composer behaves exactly as before.
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { MODEL_TIERS, MODEL_TIER_INFO } from "./model-tiers";
 import type { ModelTier } from "./keeper-types";
 import type { MentionEntry, PiModel, PiThinkingLevel } from "../lib/cli";
 import { PI_THINKING_LEVELS } from "../lib/cli";
+import { usePiHiddenModels, visibleModels } from "../pi/model-prefs";
 import { getMentionState, insertMention, type MentionState } from "./mentions";
 import { cn } from "../lib/cn";
 import { useToast } from "../toast/toast-context";
@@ -93,18 +94,27 @@ export function Compose({
   const [thinkingLevel, setThinkingLevel] = useState<PiThinkingLevel | "">("");
   const taRef = useRef<HTMLTextAreaElement>(null);
 
+  // Model curation: the picker shows only models the user hasn't hidden (in Pi
+  // settings). Memoized so its identity is stable for the selection effect below.
+  const { hidden } = usePiHiddenModels();
+  const shownModels = useMemo(
+    () => (models ? visibleModels(models, hidden) : undefined),
+    [models, hidden],
+  );
+
   // Whether the picked local model can reason — gates the thinking control. A
   // non-reasoning model hides it, and its level is never sent.
-  const canThink = !!models?.find((m) => m.ref === model)?.reasoning;
+  const canThink = !!shownModels?.find((m) => m.ref === model)?.reasoning;
 
   // Default the local picker, keeping a valid current selection across (re)loads:
-  // keep the user's pick if still present, else the seed (initialModel), else the
-  // first model. So an opened conversation starts on the model picked at its start.
+  // keep the user's pick if still shown, else the seed (initialModel), else the
+  // first shown model. So an opened conversation starts on the model picked at its
+  // start, and hiding the selected model falls back to a visible one.
   useEffect(() => {
-    if (!models || models.length === 0) return;
-    const has = (ref?: string) => !!ref && models.some((m) => m.ref === ref);
-    setModel((cur) => (has(cur) ? cur : has(initialModel) ? initialModel : models[0].ref));
-  }, [models, initialModel]);
+    if (!shownModels || shownModels.length === 0) return;
+    const has = (ref?: string) => !!ref && shownModels.some((m) => m.ref === ref);
+    setModel((cur) => (has(cur) ? cur : has(initialModel) ? initialModel : shownModels[0].ref));
+  }, [shownModels, initialModel]);
 
   // Seed the thinking level from the conversation's start (mirrors initialModel).
   // Fires once per distinct seed; a later user change isn't clobbered since the
@@ -327,10 +337,11 @@ export function Compose({
             </button>
           </>
         )}
-        {models && models.length > 0 && (
+        {shownModels && shownModels.length > 0 && (
           // Local (Pi) model picker. A native <select>, not the Keeper segments:
-          // there can be dozens of models, so a dropdown is the honest fit. The
-          // chosen ref rides on SendOptions.model.
+          // there can be dozens of models, so a dropdown is the honest fit. Shows
+          // only un-hidden models (curated in Pi settings). The chosen ref rides
+          // on SendOptions.model.
           <select
             aria-label="Model"
             value={model ?? ""}
@@ -338,7 +349,7 @@ export function Compose({
             disabled={disabled}
             className="max-w-[12rem] rounded border border-is-border bg-is-surface-alt px-2 py-1 font-chrome text-[11px] text-is-text-secondary outline-none transition-colors hover:text-is-text focus-visible:ring-2 focus-visible:ring-is-focus-ring disabled:opacity-50"
           >
-            {models.map((m) => (
+            {shownModels.map((m) => (
               <option key={m.ref} value={m.ref}>
                 {m.name}
                 {m.reasoning ? " · thinking" : ""}

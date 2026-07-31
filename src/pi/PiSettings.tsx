@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { RefreshCw, X } from "lucide-react";
-import { piLogout } from "../lib/cli";
+import { piLogout, type PiModel } from "../lib/cli";
 import { usePiStatus } from "./usePiStatus";
 import { usePiModels } from "./usePiModels";
+import { usePiHiddenModels } from "./model-prefs";
 import { PI_PROVIDERS, providerRows, labelFor, type ProviderConnState } from "./providers";
 import { ProviderLoginForm } from "./ProviderLoginForm";
 import { useToast } from "../toast/toast-context";
@@ -75,6 +76,14 @@ export function PiSettings({ onClose }: { onClose: () => void }) {
   // OAuth (openai-codex) and env-configured providers that auth.json alone misses.
   const availableProviderIds = [...new Set(models.map((m) => m.provider))];
   const rows = providerRows(PI_PROVIDERS, statusProviders, availableProviderIds);
+
+  // Curation — the composer shows only models the user leaves checked here.
+  const { hidden, toggle } = usePiHiddenModels();
+  const modelGroups = useMemo(() => {
+    const groups = new Map<string, PiModel[]>();
+    for (const m of models) groups.set(m.provider, [...(groups.get(m.provider) ?? []), m]);
+    return [...groups.entries()];
+  }, [models]);
 
   // A provider change (connect or disconnect) invalidates both the auth status
   // and the model list — re-read both so the view (and count) reflect it.
@@ -189,6 +198,45 @@ export function PiSettings({ onClose }: { onClose: () => void }) {
               }}
             />
           </div>
+
+          {modelGroups.length > 0 && (
+            <div className="mt-4">
+              <p className="mb-1 font-chrome text-[11px] uppercase tracking-[0.08em] text-is-text-tertiary">
+                Show in composer
+              </p>
+              <p className="mb-2 text-[12px] text-is-text-tertiary">
+                Uncheck models you don&apos;t use to keep the composer picker short.
+              </p>
+              <div className="rounded-lg border border-is-border">
+                {modelGroups.map(([provider, group]) => (
+                  <div key={provider} className="border-b border-is-border last:border-b-0">
+                    <p className="bg-is-surface-alt/40 px-3 py-1.5 font-chrome text-[11px] text-is-text-secondary">
+                      {labelFor(provider)}
+                    </p>
+                    <ul>
+                      {group.map((m) => (
+                        <li key={m.ref} className="flex items-center gap-2.5 px-3 py-1.5">
+                          <input
+                            type="checkbox"
+                            id={`show-${m.ref}`}
+                            checked={!hidden.has(m.ref)}
+                            onChange={() => toggle(m.ref)}
+                            className="h-3.5 w-3.5 shrink-0 accent-is-text"
+                          />
+                          <label htmlFor={`show-${m.ref}`} className="min-w-0 flex-1 cursor-pointer truncate text-sm text-is-text">
+                            {m.name}
+                            {m.reasoning && (
+                              <span className="ml-1.5 text-[11px] text-is-text-tertiary">· thinking</span>
+                            )}
+                          </label>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="flex shrink-0 items-center justify-between border-t border-is-border px-5 py-3">
