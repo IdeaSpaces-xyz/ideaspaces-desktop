@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { RefreshCw, X } from "lucide-react";
-import { piLogout, type PiModel } from "../lib/cli";
+import { piLogout } from "../lib/cli";
 import { usePiStatus } from "./usePiStatus";
 import { usePiModels } from "./usePiModels";
-import { usePiHiddenModels } from "./model-prefs";
+import { usePiHiddenModels, collapseSnapshots, groupByProvider } from "./model-prefs";
 import { PI_PROVIDERS, providerRows, labelFor, type ProviderConnState } from "./providers";
 import { ProviderLoginForm } from "./ProviderLoginForm";
 import { useToast } from "../toast/toast-context";
@@ -78,12 +78,10 @@ export function PiSettings({ onClose }: { onClose: () => void }) {
   const rows = providerRows(PI_PROVIDERS, statusProviders, availableProviderIds);
 
   // Curation — the composer shows only models the user leaves checked here.
+  // Collapse dated snapshots so the list matches the composer (one entry/model).
   const { hidden, toggle } = usePiHiddenModels();
-  const modelGroups = useMemo(() => {
-    const groups = new Map<string, PiModel[]>();
-    for (const m of models) groups.set(m.provider, [...(groups.get(m.provider) ?? []), m]);
-    return [...groups.entries()];
-  }, [models]);
+  const curatable = useMemo(() => collapseSnapshots(models), [models]);
+  const modelGroups = useMemo(() => groupByProvider(curatable), [curatable]);
 
   // A provider change (connect or disconnect) invalidates both the auth status
   // and the model list — re-read both so the view (and count) reflect it.
@@ -207,7 +205,7 @@ export function PiSettings({ onClose }: { onClose: () => void }) {
               <p className="mb-2 text-[12px] text-is-text-tertiary">
                 Uncheck models you don&apos;t use to keep the composer picker short.
               </p>
-              {models.length > 0 && models.every((m) => hidden.has(m.ref)) && (
+              {curatable.length > 0 && curatable.every((m) => hidden.has(m.ref)) && (
                 // The composer falls back to showing all when everything is hidden
                 // (it can't be left with no models) — say so, so it's not confusing.
                 <p className="mb-2 text-[12px] text-is-danger-text">

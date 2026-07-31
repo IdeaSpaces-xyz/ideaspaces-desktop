@@ -13,7 +13,8 @@ import { MODEL_TIERS, MODEL_TIER_INFO } from "./model-tiers";
 import type { ModelTier } from "./keeper-types";
 import type { MentionEntry, PiModel, PiThinkingLevel } from "../lib/cli";
 import { PI_THINKING_LEVELS } from "../lib/cli";
-import { usePiHiddenModels, visibleModels } from "../pi/model-prefs";
+import { usePiHiddenModels, visibleModels, collapseSnapshots, groupByProvider } from "../pi/model-prefs";
+import { labelFor } from "../pi/providers";
 import { getMentionState, insertMention, type MentionState } from "./mentions";
 import { cn } from "../lib/cn";
 import { useToast } from "../toast/toast-context";
@@ -97,10 +98,13 @@ export function Compose({
   // Model curation: the picker shows only models the user hasn't hidden (in Pi
   // settings). Memoized so its identity is stable for the selection effect below.
   const { hidden } = usePiHiddenModels();
+  // Collapse duplicate dated snapshots, then apply curation. Grouped by provider
+  // for the picker's <optgroup> headers.
   const shownModels = useMemo(
-    () => (models ? visibleModels(models, hidden) : undefined),
+    () => (models ? visibleModels(collapseSnapshots(models), hidden) : undefined),
     [models, hidden],
   );
+  const modelGroups = useMemo(() => (shownModels ? groupByProvider(shownModels) : []), [shownModels]);
 
   // Whether the picked local model can reason — gates the thinking control. A
   // non-reasoning model hides it, and its level is never sent.
@@ -339,9 +343,9 @@ export function Compose({
         )}
         {shownModels && shownModels.length > 0 && (
           // Local (Pi) model picker. A native <select>, not the Keeper segments:
-          // there can be dozens of models, so a dropdown is the honest fit. Shows
-          // only un-hidden models (curated in Pi settings). The chosen ref rides
-          // on SendOptions.model.
+          // there can be dozens of models, so a dropdown is the honest fit. Grouped
+          // by provider, dated-snapshot duplicates collapsed, and curated (Pi
+          // settings) models hidden. The chosen ref rides on SendOptions.model.
           <select
             aria-label="Model"
             value={model ?? ""}
@@ -349,11 +353,15 @@ export function Compose({
             disabled={disabled}
             className="max-w-[12rem] rounded border border-is-border bg-is-surface-alt px-2 py-1 font-chrome text-[11px] text-is-text-secondary outline-none transition-colors hover:text-is-text focus-visible:ring-2 focus-visible:ring-is-focus-ring disabled:opacity-50"
           >
-            {shownModels.map((m) => (
-              <option key={m.ref} value={m.ref}>
-                {m.name}
-                {m.reasoning ? " · thinking" : ""}
-              </option>
+            {modelGroups.map(([provider, group]) => (
+              <optgroup key={provider} label={labelFor(provider)}>
+                {group.map((m) => (
+                  <option key={m.ref} value={m.ref}>
+                    {m.name}
+                    {m.reasoning ? " · thinking" : ""}
+                  </option>
+                ))}
+              </optgroup>
             ))}
           </select>
         )}
