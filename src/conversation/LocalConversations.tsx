@@ -19,6 +19,7 @@ import { bucketByTime, relativeTime } from "../lib/time";
 import { useToast } from "../toast/toast-context";
 import { PiLogo } from "../pi/PiLogo";
 import { usePiModels } from "../pi/usePiModels";
+import { getConversationModel, setConversationModel } from "../pi/conversation-model";
 
 // Local (Pi) conversations over a folder — the "Discuss" surface. Standalone: no
 // account, no repo_id. Pi runs over `context` (the folder path); sessions live at
@@ -37,10 +38,14 @@ export function LocalConversations({ context, username }: { context: string; use
   const [status, setStatus] = useState<"loading" | "loaded" | "error">("loading");
   const [error, setError] = useState<string | undefined>(undefined);
   // The open conversation, plus an optional first message to auto-send (a freshly
-  // created one), with the picked model. `null` = the list.
+  // created one), and the model/thinking to seed the composer with — the pick a
+  // fresh conversation started with, or (on reopen) the last-used pick restored
+  // from settings. `null` = the list.
   const [open, setOpen] = useState<{
     id: string;
     initialSend?: { message: string; model?: string; thinkingLevel?: PiThinkingLevel };
+    initialModel?: string;
+    initialThinkingLevel?: PiThinkingLevel;
   } | null>(null);
   const [creating, setCreating] = useState(false);
 
@@ -70,7 +75,12 @@ export function LocalConversations({ context, username }: { context: string; use
       setCreating(true);
       try {
         const { conversation_id } = await createLocalConversation();
-        setOpen({ id: conversation_id, initialSend: { message: text, model, thinkingLevel } });
+        setOpen({
+          id: conversation_id,
+          initialSend: { message: text, model, thinkingLevel },
+          initialModel: model,
+          initialThinkingLevel: thinkingLevel,
+        });
       } catch (err) {
         toast(err instanceof Error ? err.message : String(err), "error");
       } finally {
@@ -87,6 +97,8 @@ export function LocalConversations({ context, username }: { context: string; use
         conversationId={open.id}
         username={username}
         initialSend={open.initialSend}
+        initialModel={open.initialModel}
+        initialThinkingLevel={open.initialThinkingLevel}
         onBack={() => {
           setOpen(null);
           void load();
@@ -154,7 +166,17 @@ export function LocalConversations({ context, username }: { context: string; use
                   <li key={c.conversation_id}>
                     <button
                       type="button"
-                      onClick={() => setOpen({ id: c.conversation_id })}
+                      // Restore the last-used model/thinking before opening, so the
+                      // composer seeds them instead of resetting to the default.
+                      onClick={() =>
+                        void getConversationModel(c.conversation_id).then((m) =>
+                          setOpen({
+                            id: c.conversation_id,
+                            initialModel: m.model,
+                            initialThinkingLevel: m.thinking,
+                          }),
+                        )
+                      }
                       className="block w-full rounded-lg border border-is-border bg-is-surface px-4 py-3.5 text-left transition-colors hover:bg-is-surface-alt focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
                     >
                       <span className="flex items-baseline justify-between gap-3">
@@ -192,12 +214,18 @@ export function LocalConversationView({
   conversationId,
   username,
   initialSend,
+  initialModel,
+  initialThinkingLevel,
   onBack,
 }: {
   context: string;
   conversationId: string;
   username: string;
   initialSend?: { message: string; model?: string; thinkingLevel?: PiThinkingLevel };
+  /** Seed the composer's model/thinking — a fresh conversation's pick, or the
+   *  last-used pick restored on reopen. */
+  initialModel?: string;
+  initialThinkingLevel?: PiThinkingLevel;
   onBack: () => void;
 }) {
   const toast = useToast();
@@ -283,6 +311,8 @@ export function LocalConversationView({
       }
       handleRef.current = null;
       if (streamError && mounted.current) toast(streamError, "error");
+      // Remember this turn's pick so reopening the conversation restores it.
+      void setConversationModel(conversationId, { model, thinking: thinkingLevel });
       try {
         const d = await getLocalConversation(context, conversationId);
         if (mounted.current) setDetail(d);
@@ -381,8 +411,8 @@ export function LocalConversationView({
           placeholder="Ask Pi…"
           showModelControls={false}
           models={models}
-          initialModel={initialSend?.model}
-          initialThinkingLevel={initialSend?.thinkingLevel}
+          initialModel={initialModel}
+          initialThinkingLevel={initialThinkingLevel}
           mentionSource={(q) => listFiles(context, q)}
         />
       </div>
