@@ -19,7 +19,6 @@ function store(): Promise<Store> {
 // Module state. `hidden` gets a fresh identity on every change so
 // useSyncExternalStore's snapshot equality detects it.
 let hidden = new Set<string>();
-let loaded = false;
 const listeners = new Set<() => void>();
 const emit = (): void => listeners.forEach((l) => l());
 
@@ -34,10 +33,7 @@ function ensureLoaded(): Promise<void> {
       .catch(() => {
         /* first run / unreadable store → empty set = show all */
       })
-      .finally(() => {
-        loaded = true;
-        emit();
-      });
+      .finally(emit);
   }
   return loadPromise;
 }
@@ -70,15 +66,12 @@ function snapshot(): Set<string> {
   return hidden;
 }
 
-/** Reactive access to the hidden-model set. `loaded` is false until the store
- *  has been read once (so callers can avoid flashing an un-curated list). */
-export function usePiHiddenModels(): {
-  hidden: Set<string>;
-  loaded: boolean;
-  toggle: (ref: string) => void;
-} {
+/** Reactive access to the hidden-model set. The first subscribe kicks off the
+ *  store read; the local read resolves well before the (CLI-backed) model list,
+ *  so there's no un-curated flash to guard against. */
+export function usePiHiddenModels(): { hidden: Set<string>; toggle: (ref: string) => void } {
   const h = useSyncExternalStore(subscribe, snapshot, snapshot);
-  return { hidden: h, loaded, toggle: toggleHiddenModel };
+  return { hidden: h, toggle: toggleHiddenModel };
 }
 
 /**
