@@ -968,6 +968,19 @@ export async function piLogin(provider: string, apiKey: string): Promise<void> {
   }
 }
 
+/**
+ * Disconnect a local-agent model provider — runs `pi-logout`, which drops the
+ * provider's entry from pi's `auth.json` (nothing else). Like {@link piLogin} it
+ * only touches the credential file, so no `--pi-bin`. Recheck {@link piStatus}
+ * (and refetch models) after to reflect the change.
+ */
+export async function piLogout(provider: string): Promise<void> {
+  const { code, stderr } = await runCli(["pi-logout", "--provider", provider, "--json"]);
+  if (code !== 0) {
+    throw new Error(stderr.trim() || `Provider disconnect failed (exit ${code ?? "unknown"}).`);
+  }
+}
+
 /** One model a local Pi turn can use — mirrors the CLI `pi-models` shape
  *  (commands/pi-models.ts). `ref` (`provider/id`) is what rides back as `--model`. */
 export interface PiModel {

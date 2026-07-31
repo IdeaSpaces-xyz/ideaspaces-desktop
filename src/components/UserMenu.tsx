@@ -1,8 +1,10 @@
+import { useState } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { Monitor, Moon, Sun, type LucideIcon } from "lucide-react";
 import { cn } from "../lib/cn";
 import type { ThemeMode } from "../theme/useTheme";
 import { useUpdater } from "../updater/updater-context";
+import { PiSettings } from "../pi/PiSettings";
 
 // User menu in the header — identity, theme picker, sign out. Radix-backed
 // (matching ContextSwitcher) so keyboard nav / focus management come for free.
@@ -23,8 +25,13 @@ export function UserMenu({
   const initial = (username ?? "u").slice(0, 1).toUpperCase();
   const updater = useUpdater();
   const checking = updater.status.phase === "checking";
+  // The Pi settings modal lives here (not threaded through Header/App): the menu
+  // item opens it, and it renders as a sibling to the dropdown so it survives the
+  // menu closing on select.
+  const [piSettingsOpen, setPiSettingsOpen] = useState(false);
 
   return (
+    <>
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>
         <button
@@ -81,6 +88,13 @@ export function UserMenu({
           <DropdownMenu.Separator className="my-1 h-px bg-is-border" />
 
           <DropdownMenu.Item
+            onSelect={() => setPiSettingsOpen(true)}
+            className="flex h-11 cursor-pointer items-center px-3 text-sm text-is-text outline-none data-[highlighted]:bg-is-surface-alt"
+          >
+            Model providers
+          </DropdownMenu.Item>
+
+          <DropdownMenu.Item
             disabled={checking}
             // Keep the menu open while the check runs so its result (the "up to
             // date" toast or the update banner) lands with the menu still there.
@@ -103,6 +117,8 @@ export function UserMenu({
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
     </DropdownMenu.Root>
+    {piSettingsOpen && <PiSettings onClose={() => setPiSettingsOpen(false)} />}
+    </>
   );
 }
 
