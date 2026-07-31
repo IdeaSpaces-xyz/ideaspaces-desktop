@@ -59,6 +59,7 @@ export function Compose({
   showModelControls = true,
   models,
   initialModel,
+  initialThinkingLevel,
   mentionSource,
 }: {
   onSend: (text: string, opts: SendOptions) => void;
@@ -75,6 +76,9 @@ export function Compose({
   /** Seed the local picker with this ref (when valid) instead of the first model
    *  — e.g. an opened conversation inherits the model picked at its start. */
   initialModel?: string;
+  /** Seed the thinking picker with this level — the level round-trips the same
+   *  way {@link initialModel} does, so a continued conversation keeps it. */
+  initialThinkingLevel?: PiThinkingLevel;
   /** Local (Pi) only — resolves @-mention candidates for a query. When provided,
    *  typing `@` opens the file/folder picker. Keeper omits it (no @-mentions). */
   mentionSource?: (query: string) => Promise<MentionEntry[]>;
@@ -101,6 +105,13 @@ export function Compose({
     const has = (ref?: string) => !!ref && models.some((m) => m.ref === ref);
     setModel((cur) => (has(cur) ? cur : has(initialModel) ? initialModel : models[0].ref));
   }, [models, initialModel]);
+
+  // Seed the thinking level from the conversation's start (mirrors initialModel).
+  // Fires once per distinct seed; a later user change isn't clobbered since the
+  // stable prop keeps the dep unchanged.
+  useEffect(() => {
+    if (initialThinkingLevel) setThinkingLevel(initialThinkingLevel);
+  }, [initialThinkingLevel]);
 
   // Auto-grow the textarea with its content, up to a max height.
   useEffect(() => {

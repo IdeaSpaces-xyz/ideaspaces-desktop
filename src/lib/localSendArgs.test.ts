@@ -27,6 +27,11 @@ describe("buildLocalSendArgs", () => {
     expect(args).toContain("--pi-thinking=high");
   });
 
+  it("sends an explicit off (semantically distinct from Auto/no-flag)", () => {
+    const args = buildLocalSendArgs("/ws", "c1", { message: "hi", piThinking: "off" }, []);
+    expect(args).toContain("--pi-thinking=off");
+  });
+
   it("omits --pi-thinking when unset (Auto → pi keeps its default)", () => {
     expect(base().some((a) => a.startsWith("--pi-thinking"))).toBe(false);
   });

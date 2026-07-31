@@ -382,6 +382,7 @@ export function LocalConversationView({
           showModelControls={false}
           models={models}
           initialModel={initialSend?.model}
+          initialThinkingLevel={initialSend?.thinkingLevel}
           mentionSource={(q) => listFiles(context, q)}
         />
       </div>
