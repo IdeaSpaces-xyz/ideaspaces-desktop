@@ -33,7 +33,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // Pin the pi release. Bump alongside the CLI/translator (the version triple).
-const PI_VERSION = "0.80.3";
+const PI_VERSION = "0.83.0";
 const PI_REPO = "badlogic/pi-mono";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
