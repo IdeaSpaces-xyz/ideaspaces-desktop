@@ -1,21 +1,7 @@
 import { useState } from "react";
 import { piLogin } from "../lib/cli";
+import { PI_PROVIDERS as PROVIDERS } from "./providers";
 import { useToast } from "../toast/toast-context";
-
-// The API-key providers a user is most likely to hold a key for, by pi's own
-// provider ids (KnownProvider in @earendil-works/pi-ai). pi accepts any provider
-// string, but a curated list keeps the picker honest; OAuth ("log in with…") is
-// a later slice. Anthropic first — the default local-agent model.
-const PROVIDERS: { id: string; label: string }[] = [
-  { id: "anthropic", label: "Anthropic (Claude)" },
-  { id: "openai", label: "OpenAI" },
-  { id: "google", label: "Google (Gemini)" },
-  { id: "xai", label: "xAI (Grok)" },
-  { id: "groq", label: "Groq" },
-  { id: "deepseek", label: "DeepSeek" },
-  { id: "mistral", label: "Mistral" },
-  { id: "openrouter", label: "OpenRouter" },
-];
 
 const labelCls = "font-chrome text-[11px] uppercase tracking-[0.08em] text-is-text-tertiary";
 const fieldCls =
@@ -29,9 +15,20 @@ const submitCls =
  * pi-status (via `onDone`) so the card flips to `ready`. The key never leaves
  * this form except as the `pi-login` argument — the desktop never stores it.
  */
-export function ProviderLoginForm({ onDone }: { onDone: () => void }) {
+export function ProviderLoginForm({
+  onDone,
+  initialProvider,
+}: {
+  onDone: () => void;
+  /** Pre-select this provider id (e.g. the settings row the user clicked). */
+  initialProvider?: string;
+}) {
   const toast = useToast();
-  const [provider, setProvider] = useState(PROVIDERS[0].id);
+  const [provider, setProvider] = useState(
+    initialProvider && PROVIDERS.some((p) => p.id === initialProvider)
+      ? initialProvider
+      : PROVIDERS[0].id,
+  );
   const [apiKey, setApiKey] = useState("");
   const [busy, setBusy] = useState(false);
 
