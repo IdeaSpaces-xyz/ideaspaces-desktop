@@ -3,7 +3,7 @@ import { RefreshCw, X } from "lucide-react";
 import { piLogout } from "../lib/cli";
 import { usePiStatus } from "./usePiStatus";
 import { usePiModels } from "./usePiModels";
-import { PI_PROVIDERS, providerRows, type ProviderConnState } from "./providers";
+import { PI_PROVIDERS, providerRows, labelFor, type ProviderConnState } from "./providers";
 import { ProviderLoginForm } from "./ProviderLoginForm";
 import { useToast } from "../toast/toast-context";
 import { cn } from "../lib/cn";
@@ -21,6 +21,10 @@ const BADGE: Record<ProviderConnState, { label: string; cls: string }> = {
 
 const rowBtn =
   "rounded-md border border-is-border px-2.5 py-1 font-chrome text-[11px] text-is-text-secondary transition hover:text-is-text disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring";
+
+// Providers connectable via the API-key form — the only ones a Connect/Reconnect
+// button can act on (OAuth providers like openai-codex are set up via pi itself).
+const API_KEY_IDS = new Set(PI_PROVIDERS.map((p) => p.id));
 
 export function PiSettings({ onClose }: { onClose: () => void }) {
   const toast = useToast();
@@ -67,7 +71,10 @@ export function PiSettings({ onClose }: { onClose: () => void }) {
   // pi-status carries the provider list in every kind that has a `pi` payload;
   // "checking"/"unavailable" don't, so default to empty.
   const statusProviders = "pi" in state ? state.pi.providers : [];
-  const rows = providerRows(PI_PROVIDERS, statusProviders);
+  // The providers that actually have models (pi's real getAvailable) — folds in
+  // OAuth (openai-codex) and env-configured providers that auth.json alone misses.
+  const availableProviderIds = [...new Set(models.map((m) => m.provider))];
+  const rows = providerRows(PI_PROVIDERS, statusProviders, availableProviderIds);
 
   // A provider change (connect or disconnect) invalidates both the auth status
   // and the model list — re-read both so the view (and count) reflect it.
@@ -81,8 +88,7 @@ export function PiSettings({ onClose }: { onClose: () => void }) {
     setBusyProvider(id);
     try {
       await piLogout(id);
-      const label = PI_PROVIDERS.find((p) => p.id === id)?.label ?? id;
-      toast(`Disconnected ${label}`, "success");
+      toast(`Disconnected ${labelFor(id)}`, "success");
       onProviderChange();
     } catch (err) {
       toast(err instanceof Error ? err.message : String(err), "error");
@@ -144,9 +150,12 @@ export function PiSettings({ onClose }: { onClose: () => void }) {
                     <button type="button" className={rowBtn} onClick={() => setConnectProvider(row.id)}>
                       Connect
                     </button>
+                  ) : !row.removable ? (
+                    // Usable via env var / ambient creds — no auth.json entry to drop.
+                    <span className="shrink-0 font-chrome text-[11px] text-is-text-tertiary">via environment</span>
                   ) : (
                     <div className="flex shrink-0 gap-1.5">
-                      {row.state === "expired" && (
+                      {row.state === "expired" && API_KEY_IDS.has(row.id) && (
                         <button type="button" className={rowBtn} onClick={() => setConnectProvider(row.id)}>
                           Reconnect
                         </button>
@@ -199,7 +208,10 @@ export function PiSettings({ onClose }: { onClose: () => void }) {
           </span>
           <button
             type="button"
-            onClick={() => void refetch()}
+            // Refresh re-reads BOTH provider status and models: connecting a
+            // provider elsewhere (or pi's own sign-in) should update the rows too,
+            // not just the model count.
+            onClick={onProviderChange}
             disabled={modelsLoading}
             className="inline-flex items-center gap-1.5 rounded-md border border-is-border px-2.5 py-1 font-chrome text-[11px] text-is-text-secondary transition hover:text-is-text disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
           >
