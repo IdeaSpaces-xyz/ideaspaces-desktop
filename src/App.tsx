@@ -348,7 +348,16 @@ function FolderWorkspace({
           </TabButton>
         </div>
       )}
-      <div id="folder-panel" role="tabpanel" className="min-h-0 flex-1 overflow-hidden">
+      {/* flex-col so the child (EditorSurface / LocalConversations) can bound its
+          own height via flex-1 and scroll internally — a plain block parent leaves
+          its flex-1 inert, so the editor grows and overflow-hidden clips it (no
+          vertical scroll). The repo path already renders EditorSurface under a
+          flex column; this makes the folder path match. */}
+      <div
+        id="folder-panel"
+        role="tabpanel"
+        className="flex min-h-0 flex-1 flex-col overflow-hidden"
+      >
         {view === "discuss" ? (
           // Keyed on the path so switching the active folder resets the open
           // conversation — it belongs to the folder it was opened in (matches
