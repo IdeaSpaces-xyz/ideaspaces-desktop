@@ -8,6 +8,7 @@ import {
   streamLocalConversation,
   type Conversation,
   type StreamHandle,
+  type PiThinkingLevel,
 } from "../lib/cli";
 import type { KeeperConversationDetail } from "./keeper-types";
 import { createInitialKeeperStreamState, reduceKeeperStreamState } from "./keeper-stream-state";
@@ -39,7 +40,7 @@ export function LocalConversations({ context, username }: { context: string; use
   // created one), with the picked model. `null` = the list.
   const [open, setOpen] = useState<{
     id: string;
-    initialSend?: { message: string; model?: string };
+    initialSend?: { message: string; model?: string; thinkingLevel?: PiThinkingLevel };
   } | null>(null);
   const [creating, setCreating] = useState(false);
 
@@ -64,12 +65,12 @@ export function LocalConversations({ context, username }: { context: string; use
 
   // A new conversation is minted on the first message, then opened with it queued.
   const startNew = useCallback(
-    async (text: string, model?: string) => {
+    async (text: string, model?: string, thinkingLevel?: PiThinkingLevel) => {
       if (creating) return; // guard a fast double-submit from minting two ids
       setCreating(true);
       try {
         const { conversation_id } = await createLocalConversation();
-        setOpen({ id: conversation_id, initialSend: { message: text, model } });
+        setOpen({ id: conversation_id, initialSend: { message: text, model, thinkingLevel } });
       } catch (err) {
         toast(err instanceof Error ? err.message : String(err), "error");
       } finally {
@@ -105,7 +106,7 @@ export function LocalConversations({ context, username }: { context: string; use
         </div>
         <div className="rounded-2xl border border-is-border bg-is-surface">
           <Compose
-            onSend={(t, opts) => void startNew(t, opts.model)}
+            onSend={(t, opts) => void startNew(t, opts.model, opts.thinkingLevel)}
             onStop={() => {}}
             streaming={false}
             disabled={creating}
@@ -196,7 +197,7 @@ export function LocalConversationView({
   context: string;
   conversationId: string;
   username: string;
-  initialSend?: { message: string; model?: string };
+  initialSend?: { message: string; model?: string; thinkingLevel?: PiThinkingLevel };
   onBack: () => void;
 }) {
   const toast = useToast();
@@ -256,7 +257,7 @@ export function LocalConversationView({
     streamState.state === "tool_running";
 
   const send = useCallback(
-    async (text: string, model?: string) => {
+    async (text: string, model?: string, thinkingLevel?: PiThinkingLevel) => {
       if (handleRef.current || sendingRef.current) return;
       sendingRef.current = true;
       setSending(true);
@@ -266,7 +267,7 @@ export function LocalConversationView({
       const handle = streamLocalConversation(
         context,
         conversationId,
-        { message: text, model },
+        { message: text, model, piThinking: thinkingLevel },
         {
           onEvent: (e) => {
             if (e.type === "error" && typeof e.message === "string") streamError = e.message;
@@ -308,7 +309,7 @@ export function LocalConversationView({
   useEffect(() => {
     if (status === "loaded" && initialSend && !autoSent.current) {
       autoSent.current = true;
-      void send(initialSend.message, initialSend.model);
+      void send(initialSend.message, initialSend.model, initialSend.thinkingLevel);
     }
   }, [status, initialSend, send]);
 
@@ -373,7 +374,7 @@ export function LocalConversationView({
       </div>
       <div className="mt-4 rounded-2xl border border-is-border bg-is-surface">
         <Compose
-          onSend={(t, opts) => void send(t, opts.model)}
+          onSend={(t, opts) => void send(t, opts.model, opts.thinkingLevel)}
           onStop={stop}
           streaming={streaming}
           disabled={sending && !streaming}
@@ -381,6 +382,7 @@ export function LocalConversationView({
           showModelControls={false}
           models={models}
           initialModel={initialSend?.model}
+          initialThinkingLevel={initialSend?.thinkingLevel}
           mentionSource={(q) => listFiles(context, q)}
         />
       </div>

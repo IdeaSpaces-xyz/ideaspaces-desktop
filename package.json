@@ -60,7 +60,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
-    "@ideaspaces/cli": "github:IdeaSpaces-xyz/cli#874d2ae032ec3a1483c58f9aecaf5d6b71ce22a7",
+    "@ideaspaces/cli": "github:IdeaSpaces-xyz/cli#af788f860bb6874787b3b59d72a75f5c075045d7",
     "@ideaspaces/editor": "github:IdeaSpaces-xyz/editor",
     "@ideaspaces/pi-is-space": "github:IdeaSpaces-xyz/pi-is-space#5182b583bd960430dc9380132dfbd52313e5842b",
     "@ideaspaces/pi-local-context": "github:IdeaSpaces-xyz/pi-local-context",

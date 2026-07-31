@@ -22,6 +22,20 @@ describe("buildLocalSendArgs", () => {
     expect(args.some((a) => a.startsWith("--pi-model"))).toBe(false);
   });
 
+  it("passes the thinking level as --pi-thinking=<level> when set", () => {
+    const args = buildLocalSendArgs("/ws", "c1", { message: "hi", piThinking: "high" }, []);
+    expect(args).toContain("--pi-thinking=high");
+  });
+
+  it("sends an explicit off (semantically distinct from Auto/no-flag)", () => {
+    const args = buildLocalSendArgs("/ws", "c1", { message: "hi", piThinking: "off" }, []);
+    expect(args).toContain("--pi-thinking=off");
+  });
+
+  it("omits --pi-thinking when unset (Auto → pi keeps its default)", () => {
+    expect(base().some((a) => a.startsWith("--pi-thinking"))).toBe(false);
+  });
+
   it("carries the core local-send flags and appends extras in order", () => {
     const args = buildLocalSendArgs("/ws", "c1", { message: "hi", model: "p/m" }, ["--ext", "/x"]);
     expect(args.slice(0, 10)).toEqual([

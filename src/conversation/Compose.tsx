@@ -11,7 +11,8 @@
 import { useEffect, useRef, useState } from "react";
 import { MODEL_TIERS, MODEL_TIER_INFO } from "./model-tiers";
 import type { ModelTier } from "./keeper-types";
-import type { MentionEntry, PiModel } from "../lib/cli";
+import type { MentionEntry, PiModel, PiThinkingLevel } from "../lib/cli";
+import { PI_THINKING_LEVELS } from "../lib/cli";
 import { getMentionState, insertMention, type MentionState } from "./mentions";
 import { cn } from "../lib/cn";
 import { useToast } from "../toast/toast-context";
@@ -24,6 +25,16 @@ const MENTION_KIND_LABEL: Record<MentionEntry["kind"], string> = {
   "ideaspace-repo": "ideaspace",
 };
 
+// Display labels for the local (Pi) thinking-level picker. "" is Auto (send no
+// flag → pi keeps the model/session default); the rest are pi's graded levels.
+const THINKING_OPTIONS: { value: PiThinkingLevel | ""; label: string }[] = [
+  { value: "", label: "Auto" },
+  ...PI_THINKING_LEVELS.map((l) => ({
+    value: l,
+    label: l === "xhigh" ? "X-High" : l.charAt(0).toUpperCase() + l.slice(1),
+  })),
+];
+
 // OS arg-length cap on the CLI's `--message` (see lib/cli.ts). macOS ARG_MAX is
 // ~256 KB shared across all args; keep a safe ceiling well under it.
 const MAX_MESSAGE_CHARS = 100_000;
@@ -34,6 +45,9 @@ export interface SendOptions {
   /** Local (Pi) only — the chosen `pi-models` ref, when the local picker is shown.
    *  Undefined for Keeper (which uses `modelTier`) and when no models are loaded. */
   model?: string;
+  /** Local (Pi) only — a graded thinking level for the picked model. Undefined =
+   *  Auto (pi's default) or a non-reasoning model (the control is hidden). */
+  thinkingLevel?: PiThinkingLevel;
 }
 
 export function Compose({
@@ -45,6 +59,7 @@ export function Compose({
   showModelControls = true,
   models,
   initialModel,
+  initialThinkingLevel,
   mentionSource,
 }: {
   onSend: (text: string, opts: SendOptions) => void;
@@ -61,6 +76,9 @@ export function Compose({
   /** Seed the local picker with this ref (when valid) instead of the first model
    *  — e.g. an opened conversation inherits the model picked at its start. */
   initialModel?: string;
+  /** Seed the thinking picker with this level — the level round-trips the same
+   *  way {@link initialModel} does, so a continued conversation keeps it. */
+  initialThinkingLevel?: PiThinkingLevel;
   /** Local (Pi) only — resolves @-mention candidates for a query. When provided,
    *  typing `@` opens the file/folder picker. Keeper omits it (no @-mentions). */
   mentionSource?: (query: string) => Promise<MentionEntry[]>;
@@ -70,7 +88,14 @@ export function Compose({
   const [modelTier, setModelTier] = useState<ModelTier>("sonnet");
   const [thinking, setThinking] = useState(false);
   const [model, setModel] = useState<string | undefined>(undefined);
+  // Local (Pi) thinking level. "" = Auto (send no flag). Only sent for a
+  // reasoning-capable model; the control is hidden otherwise.
+  const [thinkingLevel, setThinkingLevel] = useState<PiThinkingLevel | "">("");
   const taRef = useRef<HTMLTextAreaElement>(null);
+
+  // Whether the picked local model can reason — gates the thinking control. A
+  // non-reasoning model hides it, and its level is never sent.
+  const canThink = !!models?.find((m) => m.ref === model)?.reasoning;
 
   // Default the local picker, keeping a valid current selection across (re)loads:
   // keep the user's pick if still present, else the seed (initialModel), else the
@@ -80,6 +105,13 @@ export function Compose({
     const has = (ref?: string) => !!ref && models.some((m) => m.ref === ref);
     setModel((cur) => (has(cur) ? cur : has(initialModel) ? initialModel : models[0].ref));
   }, [models, initialModel]);
+
+  // Seed the thinking level from the conversation's start (mirrors initialModel).
+  // Fires once per distinct seed; a later user change isn't clobbered since the
+  // stable prop keeps the dep unchanged.
+  useEffect(() => {
+    if (initialThinkingLevel) setThinkingLevel(initialThinkingLevel);
+  }, [initialThinkingLevel]);
 
   // Auto-grow the textarea with its content, up to a max height.
   useEffect(() => {
@@ -152,7 +184,13 @@ export function Compose({
       toast(`Message is too long (max ${MAX_MESSAGE_CHARS.toLocaleString()} characters).`, "error");
       return;
     }
-    onSend(trimmed, { modelTier, thinking, model });
+    onSend(trimmed, {
+      modelTier,
+      thinking,
+      model,
+      // Only a reasoning model with an explicit (non-Auto) level sends one.
+      thinkingLevel: canThink && thinkingLevel ? thinkingLevel : undefined,
+    });
     setText("");
   };
 
@@ -307,6 +345,27 @@ export function Compose({
               </option>
             ))}
           </select>
+        )}
+        {canThink && (
+          // Local (Pi) thinking level — shown only for a reasoning-capable model,
+          // graded (pi supports minimal→max, unlike Keeper's on/off). "Auto" sends
+          // no flag so pi keeps the model default.
+          <label className="flex items-center gap-1 font-chrome text-[11px] uppercase tracking-[0.04em] text-is-text-tertiary">
+            <span>Think</span>
+            <select
+              aria-label="Thinking level"
+              value={thinkingLevel}
+              onChange={(e) => setThinkingLevel(e.target.value as PiThinkingLevel | "")}
+              disabled={disabled}
+              className="rounded border border-is-border bg-is-surface-alt px-2 py-1 font-chrome text-[11px] text-is-text-secondary outline-none transition-colors hover:text-is-text focus-visible:ring-2 focus-visible:ring-is-focus-ring disabled:opacity-50"
+            >
+              {THINKING_OPTIONS.map((o) => (
+                <option key={o.value || "auto"} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
         )}
         {streaming ? (
           <button
