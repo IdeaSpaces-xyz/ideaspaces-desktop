@@ -664,6 +664,12 @@ export async function getConversation(
   return parseJson<KeeperConversationDetail>(stdout, "conversation get");
 }
 
+/** pi's graded thinking levels (mirrors the CLI's `PI_THINKING_LEVELS`, itself
+ *  mirroring pi's upstream `VALID_THINKING_LEVELS`). `off` explicitly disables
+ *  reasoning; omitting the flag leaves pi on the model/session default. */
+export const PI_THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
+export type PiThinkingLevel = (typeof PI_THINKING_LEVELS)[number];
+
 export interface SendMessage {
   message: string;
   modelTier?: ModelTier;
@@ -671,6 +677,10 @@ export interface SendMessage {
   /** Local (Pi) only — a `pi-models` ref (e.g. `anthropic/claude-…`) passed as
    *  `--model`. Keeper uses `modelTier`; Pi has many models, picked by ref. */
   model?: string;
+  /** Local (Pi) only — a graded thinking level passed as `--pi-thinking=<level>`.
+   *  Omitted → pi keeps the model/session default. Only meaningful for reasoning
+   *  models (the composer gates the control on the model's `reasoning` flag). */
+  piThinking?: PiThinkingLevel;
 }
 
 export interface StreamHandlers {
@@ -738,6 +748,9 @@ export function buildLocalSendArgs(
     "--json",
   ];
   if (body.model) args.push(`--pi-model=${body.model}`);
+  // `=` form keeps it flag-safe and mirrors --pi-model. Omitted when unset so pi
+  // keeps its default rather than being forced to a level.
+  if (body.piThinking) args.push(`--pi-thinking=${body.piThinking}`);
   args.push(...extras);
   return args;
 }
