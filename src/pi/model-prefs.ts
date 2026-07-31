@@ -84,3 +84,26 @@ export function visibleModels<T extends { ref: string }>(models: T[], hidden: Se
   const shown = models.filter((m) => !hidden.has(m.ref));
   return shown.length ? shown : models;
 }
+
+/**
+ * Collapse dated snapshot ids (…-YYYYMMDD) when their base alias is also present.
+ * pi lists both `claude-opus-4-5` (name "… (latest)") and the pinned
+ * `claude-opus-4-5-20251101` — the alias tracks the same model, so the dated pin
+ * is just a duplicate in the picker. Drop it only when the alias exists (same
+ * provider); a snapshot with no alias stays.
+ */
+export function collapseSnapshots<T extends { id: string; provider: string }>(models: T[]): T[] {
+  const present = new Set(models.map((m) => `${m.provider}/${m.id}`));
+  return models.filter((m) => {
+    const base = m.id.replace(/-\d{8}$/, "");
+    return base === m.id || !present.has(`${m.provider}/${base}`);
+  });
+}
+
+/** Group models by provider, preserving first-seen provider order. Used to render
+ *  the picker with `<optgroup>` headers instead of one flat list. */
+export function groupByProvider<T extends { provider: string }>(models: T[]): [string, T[]][] {
+  const groups = new Map<string, T[]>();
+  for (const m of models) groups.set(m.provider, [...(groups.get(m.provider) ?? []), m]);
+  return [...groups.entries()];
+}
