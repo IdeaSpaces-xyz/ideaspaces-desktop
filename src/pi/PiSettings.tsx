@@ -26,7 +26,7 @@ export function PiSettings({ onClose }: { onClose: () => void }) {
   const toast = useToast();
   const cardRef = useRef<HTMLDivElement>(null);
   const { state, recheck } = usePiStatus();
-  const { models, loading: modelsLoading, refetch } = usePiModels();
+  const { models, loading: modelsLoading, error: modelsError, refetch } = usePiModels();
   // The provider pre-selected in the connect form (set by a row's Connect), and
   // the provider a disconnect is in flight for (to disable its row).
   const [connectProvider, setConnectProvider] = useState<string | undefined>(undefined);
@@ -81,7 +81,8 @@ export function PiSettings({ onClose }: { onClose: () => void }) {
     setBusyProvider(id);
     try {
       await piLogout(id);
-      toast(`Disconnected ${id}`, "success");
+      const label = PI_PROVIDERS.find((p) => p.id === id)?.label ?? id;
+      toast(`Disconnected ${label}`, "success");
       onProviderChange();
     } catch (err) {
       toast(err instanceof Error ? err.message : String(err), "error");
@@ -182,10 +183,19 @@ export function PiSettings({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="flex shrink-0 items-center justify-between border-t border-is-border px-5 py-3">
-          <span className="font-chrome text-[11px] text-is-text-tertiary">
+          <span
+            className={cn(
+              "font-chrome text-[11px]",
+              modelsError ? "text-is-danger-text" : "text-is-text-tertiary",
+            )}
+          >
             {modelsLoading
               ? "Checking models…"
-              : `${models.length} model${models.length === 1 ? "" : "s"} available`}
+              : modelsError
+                ? // Distinguish a genuine failure from an empty (no-provider) list —
+                  // otherwise both read as "0 models".
+                  `Couldn't load models: ${modelsError}`
+                : `${models.length} model${models.length === 1 ? "" : "s"} available`}
           </span>
           <button
             type="button"
