@@ -68,7 +68,8 @@ function assertCliFresh() {
       encoding: "utf8",
     });
     const output = `${res.stdout ?? ""}${res.stderr ?? ""}`;
-    if (res.status !== 0 || /unknown command/i.test(output)) {
+    // "Unknown command" is the stale-CLI signature — send the dev to the fix.
+    if (/unknown command/i.test(output)) {
       fail(
         "the bundled @ideaspaces/cli is stale — it's missing the `ls` verb.\n" +
           "  npm caches github: deps and won't re-fetch on a SHA bump, so a plain\n" +
@@ -77,6 +78,14 @@ function assertCliFresh() {
           "  or force just the CLI:\n" +
           "    rm -rf node_modules/@ideaspaces/cli && npm install\n" +
           "  then rebuild.",
+      );
+    }
+    // Any other failure isn't necessarily staleness (a probe/permissions/crash) —
+    // surface the real error instead of mislabeling it.
+    if (res.error || res.status !== 0) {
+      fail(
+        `couldn't verify the bundled CLI (\`ls\` probe exited ${res.status ?? res.error?.code ?? "?"}).\n` +
+          `  ${output.trim() || res.error?.message || "no output"}`,
       );
     }
   } finally {

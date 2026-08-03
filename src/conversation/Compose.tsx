@@ -157,6 +157,7 @@ export function Compose({
       void mentionSource(state.query)
         .then((items) => {
           if (mentionReq.current !== req) return; // superseded by a newer keystroke
+          mentionErrShown.current = false; // recovered — let a later failure toast again
           setMenu(items.length ? { state, items, active: 0 } : null);
         })
         .catch((err) => {
