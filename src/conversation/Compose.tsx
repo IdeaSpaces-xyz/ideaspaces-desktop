@@ -19,7 +19,9 @@ import { getMentionState, insertMention, type MentionState } from "./mentions";
 import { cn } from "../lib/cn";
 import { useToast } from "../toast/toast-context";
 
-// Short badge + affordance per entry kind for the mention menu rows.
+// Row badge label per entry kind. Only repo/ideaspace kinds are badged in the
+// menu (like Keeper badges only a "perspective") — plain file/folder read from
+// the path alone.
 const MENTION_KIND_LABEL: Record<MentionEntry["kind"], string> = {
   file: "file",
   folder: "folder",
@@ -137,7 +139,14 @@ export function Compose({
 
   // --- @-mention menu (local Pi only; inert without a mentionSource) ---
   // `menu` holds the trigger state + resolved candidates + the highlighted row.
-  const [menu, setMenu] = useState<{ state: MentionState; items: MentionEntry[]; active: number } | null>(null);
+  // `loading` shows Keeper's "Searching…" while the lookup runs (menu opens on
+  // `@` immediately, not only once results arrive).
+  const [menu, setMenu] = useState<{
+    state: MentionState;
+    items: MentionEntry[];
+    active: number;
+    loading: boolean;
+  } | null>(null);
   const mentionTimer = useRef<number | undefined>(undefined);
   const mentionReq = useRef(0); // guards against out-of-order async results
   const mentionErrShown = useRef(false); // toast a lookup failure once, not per keystroke
@@ -152,13 +161,16 @@ export function Compose({
       return;
     }
     const req = ++mentionReq.current;
+    // Open immediately in a loading state so `@` feels responsive while ls runs.
+    setMenu({ state, items: [], active: 0, loading: true });
     if (mentionTimer.current) window.clearTimeout(mentionTimer.current);
     mentionTimer.current = window.setTimeout(() => {
       void mentionSource(state.query)
         .then((items) => {
           if (mentionReq.current !== req) return; // superseded by a newer keystroke
           mentionErrShown.current = false; // recovered — let a later failure toast again
-          setMenu(items.length ? { state, items, active: 0 } : null);
+          // Loaded: show matches, or close if there are none (matches Keeper).
+          setMenu(items.length ? { state, items, active: 0, loading: false } : null);
         })
         .catch((err) => {
           if (mentionReq.current === req) setMenu(null);
@@ -230,35 +242,45 @@ export function Compose({
       <div className="relative">
         {menu && (
           // Anchored above the textarea (the composer sits at the bottom of the
-          // view). Rows are chosen on mousedown so the textarea never blurs.
-          <ul
-            role="listbox"
-            aria-label="Mention a file or folder"
-            className="absolute bottom-full left-0 z-20 mb-1 max-h-64 w-full max-w-md overflow-y-auto rounded-md border border-is-border bg-is-surface py-1 shadow-lg"
-          >
-            {menu.items.map((item, i) => (
-              <li
-                key={item.path}
-                role="option"
-                aria-selected={i === menu.active}
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  chooseMention(item);
-                }}
-                onMouseEnter={() => setMenu((m) => (m ? { ...m, active: i } : m))}
-                className={cn(
-                  "flex cursor-pointer items-baseline gap-2 px-3 py-1.5 font-chrome text-sm",
-                  i === menu.active ? "bg-is-surface-alt text-is-text" : "text-is-text-secondary",
-                )}
-              >
-                <span className="truncate">{item.name}</span>
-                <span className="ml-auto shrink-0 rounded bg-is-surface-alt px-1.5 py-0.5 text-[10px] uppercase tracking-[0.04em] text-is-text-tertiary">
-                  {MENTION_KIND_LABEL[item.kind]}
-                </span>
-                <span className="w-full shrink truncate text-[11px] text-is-text-tertiary">{item.path}</span>
-              </li>
-            ))}
-          </ul>
+          // view). Aligned to Keeper's mention menu (is_web): two-line rows —
+          // `@ name` (+ a badge for repo/ideaspace) over the path — and a
+          // "Searching…" state. Rows are chosen on mousedown so the textarea
+          // never blurs.
+          <div className="absolute inset-x-0 bottom-full z-20 mb-2 overflow-hidden rounded-lg border border-is-border bg-is-surface shadow-[0_1px_2px_rgba(18,20,26,0.06),0_8px_24px_rgba(18,20,26,0.08)]">
+            {menu.loading && menu.items.length === 0 ? (
+              <p className="px-3 py-2 font-chrome text-xs text-is-text-tertiary">Searching…</p>
+            ) : (
+              <ul role="listbox" aria-label="Mention a file or folder" className="max-h-64 overflow-y-auto py-1">
+                {menu.items.map((item, i) => (
+                  <li
+                    key={item.path}
+                    role="option"
+                    aria-selected={i === menu.active}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      chooseMention(item);
+                    }}
+                    onMouseEnter={() => setMenu((m) => (m ? { ...m, active: i } : m))}
+                    className={cn(
+                      "flex cursor-pointer flex-col gap-0.5 px-3 py-2 transition-colors",
+                      i === menu.active ? "bg-is-surface-alt" : "hover:bg-is-surface-alt",
+                    )}
+                  >
+                    <span className="flex items-center gap-1.5 font-chrome text-sm text-is-text">
+                      <span className="text-is-text-tertiary">@</span>
+                      <span className="truncate">{item.name}</span>
+                      {(item.kind === "code-repo" || item.kind === "ideaspace-repo") && (
+                        <span className="shrink-0 rounded border border-is-border px-1 py-px text-[9px] uppercase tracking-[0.06em] text-is-text-tertiary">
+                          {MENTION_KIND_LABEL[item.kind]}
+                        </span>
+                      )}
+                    </span>
+                    <span className="truncate font-chrome text-[11px] text-is-text-tertiary">{item.path}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         )}
         <textarea
           ref={taRef}
@@ -270,25 +292,28 @@ export function Compose({
           }}
           onKeyDown={(e) => {
             if (menu) {
-              if (e.key === "ArrowDown") {
-                e.preventDefault();
-                setMenu((m) => (m ? { ...m, active: (m.active + 1) % m.items.length } : m));
-                return;
-              }
-              if (e.key === "ArrowUp") {
-                e.preventDefault();
-                setMenu((m) => (m ? { ...m, active: (m.active - 1 + m.items.length) % m.items.length } : m));
-                return;
-              }
-              if (e.key === "Enter" || e.key === "Tab") {
-                e.preventDefault();
-                chooseMention(menu.items[menu.active]);
-                return;
-              }
               if (e.key === "Escape") {
                 e.preventDefault();
                 closeMenu();
                 return;
+              }
+              // Navigation/selection only once results are in (not while loading).
+              if (menu.items.length > 0) {
+                if (e.key === "ArrowDown") {
+                  e.preventDefault();
+                  setMenu((m) => (m ? { ...m, active: (m.active + 1) % m.items.length } : m));
+                  return;
+                }
+                if (e.key === "ArrowUp") {
+                  e.preventDefault();
+                  setMenu((m) => (m ? { ...m, active: (m.active - 1 + m.items.length) % m.items.length } : m));
+                  return;
+                }
+                if (e.key === "Enter" || e.key === "Tab") {
+                  e.preventDefault();
+                  chooseMention(menu.items[menu.active]);
+                  return;
+                }
               }
             }
             if (e.key === "Enter" && !e.shiftKey) {
