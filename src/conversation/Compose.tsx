@@ -140,6 +140,7 @@ export function Compose({
   const [menu, setMenu] = useState<{ state: MentionState; items: MentionEntry[]; active: number } | null>(null);
   const mentionTimer = useRef<number | undefined>(undefined);
   const mentionReq = useRef(0); // guards against out-of-order async results
+  const mentionErrShown = useRef(false); // toast a lookup failure once, not per keystroke
 
   // Recompute the mention menu for the current value+caret. Debounced fetch; a
   // stale response (query moved on) is dropped via the request token.
@@ -156,10 +157,19 @@ export function Compose({
       void mentionSource(state.query)
         .then((items) => {
           if (mentionReq.current !== req) return; // superseded by a newer keystroke
+          mentionErrShown.current = false; // recovered — let a later failure toast again
           setMenu(items.length ? { state, items, active: 0 } : null);
         })
-        .catch(() => {
+        .catch((err) => {
           if (mentionReq.current === req) setMenu(null);
+          // Don't swallow it silently — a failing lookup (e.g. a stale CLI with
+          // no `ls`) otherwise reads as "@ does nothing". Log every time for
+          // devtools; toast once so the user sees it without per-keystroke spam.
+          console.error("@-mention lookup failed:", err);
+          if (!mentionErrShown.current) {
+            mentionErrShown.current = true;
+            toast("Couldn't load files for @-mention.", "error");
+          }
         });
     }, 120);
   };
