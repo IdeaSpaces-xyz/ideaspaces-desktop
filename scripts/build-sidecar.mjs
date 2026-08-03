@@ -19,8 +19,9 @@
 // Run automatically by Tauri's beforeDev/beforeBuild commands; also runnable
 // directly via `npm run build:sidecar` (host) or with `--universal`.
 
-import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -50,6 +51,39 @@ const bundle = join(root, "node_modules", "@ideaspaces", "cli", "bundle", "ideas
 if (!existsSync(bundle)) {
   fail(`CLI bundle missing at ${bundle} — run \`npm install\` (prepare builds it).`);
 }
+
+// Guard against a STALE CLI. npm caches `github:` deps and does NOT re-fetch when
+// the pinned SHA changes on a plain `npm install`, so a CLI bump can silently
+// leave an old build in node_modules — and we'd compile that into the sidecar,
+// shipping a CLI missing verbs the desktop needs (this is exactly what broke
+// `@`-mentions: the bundled CLI had no `ls`). npm's own bookkeeping can report
+// the pinned SHA even when the files on disk are stale, so instead of trusting
+// it we smoke-test the bundle behaviorally: `ls` is a load-bearing, recent verb,
+// so if the bundle doesn't recognize it the CLI is stale. Fail loud with the fix
+// rather than compile a broken sidecar.
+function assertCliFresh() {
+  const probe = mkdtempSync(join(tmpdir(), "cli-freshness-"));
+  try {
+    const res = spawnSync(process.execPath, [bundle, "ls", probe, "--json", "--limit=1"], {
+      encoding: "utf8",
+    });
+    const output = `${res.stdout ?? ""}${res.stderr ?? ""}`;
+    if (res.status !== 0 || /unknown command/i.test(output)) {
+      fail(
+        "the bundled @ideaspaces/cli is stale — it's missing the `ls` verb.\n" +
+          "  npm caches github: deps and won't re-fetch on a SHA bump, so a plain\n" +
+          "  `npm install` can keep an old CLI. Fix with a clean install:\n" +
+          "    npm ci\n" +
+          "  or force just the CLI:\n" +
+          "    rm -rf node_modules/@ideaspaces/cli && npm install\n" +
+          "  then rebuild.",
+      );
+    }
+  } finally {
+    rmSync(probe, { recursive: true, force: true });
+  }
+}
+assertCliFresh();
 
 const outDir = join(root, "src-tauri", "binaries");
 mkdirSync(outDir, { recursive: true });
