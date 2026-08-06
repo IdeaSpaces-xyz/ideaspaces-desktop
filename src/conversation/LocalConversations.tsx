@@ -20,7 +20,14 @@ import { useToast } from "../toast/toast-context";
 import { PiLogo } from "../pi/PiLogo";
 import { usePiModels } from "../pi/usePiModels";
 import { getConversationModel, setConversationModel } from "../pi/conversation-model";
-import { getConversationMounts } from "../pi/conversation-mounts";
+import {
+  getConversationMounts,
+  addConversationMount,
+  removeConversationMount,
+  isValidMountPath,
+} from "../pi/conversation-mounts";
+import { Resizer } from "../components/Resizer";
+import { LocalContextPanel, LocalContextTrigger } from "./LocalContextPanel";
 
 // Local (Pi) conversations over a folder — the "Discuss" surface. Standalone: no
 // account, no repo_id. Pi runs over `context` (the folder path); sessions live at
@@ -250,6 +257,57 @@ export function LocalConversationView({
     };
   }, []);
 
+  // The conversation's read-only working set (mounted references). Loaded once
+  // and owned here: the Context panel mutates it, and each turn seeds it as
+  // IS_MOUNTS. A ref mirrors it so `send` reads the current set without a store
+  // round-trip and without re-creating the callback on every mount change.
+  const [mounts, setMounts] = useState<string[]>([]);
+  const mountsRef = useRef<string[]>([]);
+  useEffect(() => {
+    mountsRef.current = mounts;
+  }, [mounts]);
+  useEffect(() => {
+    let alive = true;
+    getConversationMounts(context, conversationId)
+      .then((m) => {
+        if (alive) setMounts(m);
+      })
+      .catch(() => {
+        // Best-effort — a store miss just means no pinned references yet.
+      });
+    return () => {
+      alive = false;
+    };
+  }, [context, conversationId]);
+
+  // Right Context panel — closed by default; resets on a conversation switch.
+  const [contextOpen, setContextOpen] = useState(false);
+  const [panelWidth, setPanelWidth] = useState(320);
+  const containerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => setContextOpen(false), [conversationId]);
+
+  // Pin a folder (given relative to home) as a read-only reference. Absolute so
+  // pi resolves it the same regardless of cwd; comma-guarded (IS_MOUNTS delimiter).
+  const addMount = useCallback(
+    async (relPath: string) => {
+      const abs = `${context.replace(/\/+$/, "")}/${relPath}`;
+      if (!isValidMountPath(abs)) {
+        toast("That path can't be mounted — paths with commas aren't supported.", "error");
+        return;
+      }
+      const next = await addConversationMount(context, conversationId, abs);
+      if (mounted.current) setMounts(next);
+    },
+    [context, conversationId, toast],
+  );
+  const removeMount = useCallback(
+    async (abs: string) => {
+      const next = await removeConversationMount(context, conversationId, abs);
+      if (mounted.current) setMounts(next);
+    },
+    [context, conversationId],
+  );
+
   const load = useCallback(async () => {
     setStatus("loading");
     try {
@@ -295,7 +353,7 @@ export function LocalConversationView({
       let streamError: string | null = null;
       // The conversation's durable mounts ride the turn as IS_MOUNTS so pi-is-space
       // re-seeds its working set (in-session mounts reset each per-turn process).
-      const mounts = await getConversationMounts(context, conversationId);
+      // Read from the ref so a mount pinned mid-session lands on the next turn.
       const handle = streamLocalConversation(
         context,
         conversationId,
@@ -306,7 +364,7 @@ export function LocalConversationView({
             setStreamState((s) => reduceKeeperStreamState(s, e));
           },
         },
-        mounts,
+        mountsRef.current,
       );
       handleRef.current = handle;
       try {
@@ -357,7 +415,8 @@ export function LocalConversationView({
   });
 
   return (
-    <div className="mx-auto flex h-full min-h-0 w-full max-w-2xl flex-col px-6 py-8">
+    <div ref={containerRef} className="flex h-full min-h-0">
+      <div className="mx-auto flex h-full min-h-0 w-full max-w-2xl flex-col px-6 py-8">
       <button
         type="button"
         onClick={onBack}
@@ -407,7 +466,8 @@ export function LocalConversationView({
           </div>
         )}
       </div>
-      <div className="mt-4 rounded-2xl border border-is-border bg-is-surface">
+      <div className="mt-4 overflow-hidden rounded-2xl border border-is-border bg-is-surface">
+        <LocalContextTrigger count={mounts.length} onOpen={() => setContextOpen(true)} />
         <Compose
           onSend={(t, opts) => void send(t, opts.model, opts.thinkingLevel)}
           onStop={stop}
@@ -421,6 +481,29 @@ export function LocalConversationView({
           mentionSource={(q) => listFiles(context, q)}
         />
       </div>
+      </div>
+      {contextOpen && (
+        <>
+          <Resizer
+            side="right"
+            min={280}
+            max={520}
+            label="Context panel width"
+            containerRef={containerRef}
+            width={panelWidth}
+            onResize={setPanelWidth}
+          />
+          <LocalContextPanel
+            home={context}
+            mounts={mounts}
+            search={(q) => listFiles(context, q)}
+            onAdd={(rel) => void addMount(rel)}
+            onRemove={(abs) => void removeMount(abs)}
+            onClose={() => setContextOpen(false)}
+            style={{ width: panelWidth }}
+          />
+        </>
+      )}
     </div>
   );
 }
