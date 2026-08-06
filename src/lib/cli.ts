@@ -99,10 +99,15 @@ interface SidecarResult {
 /** The CLI sidecar command with the resolved `IS_CLI_PATH` env (D1b) applied to
  *  every spawn, so a bundled pi turn shells the bundled CLI. `env` merges with
  *  the inherited environment; it's undefined in dev (CLI via node_modules). */
-function sidecar(args: string[], cwd?: string) {
+function sidecar(args: string[], cwd?: string, extraEnv?: Record<string, string>) {
   const options: { cwd?: string; env?: Record<string, string> } = {};
   if (cwd) options.cwd = cwd;
-  if (piSidecarEnv) options.env = piSidecarEnv;
+  // Merge the global sidecar env (IS_CLI_PATH / PI_PACKAGE_DIR) with any per-call
+  // env (e.g. IS_MOUNTS for one conversation). `env` merges with the inherited
+  // environment, and pi inherits it from the CLI — so per-call vars reach the
+  // extension the same way IS_CLI_PATH does.
+  const env = { ...piSidecarEnv, ...extraEnv };
+  if (Object.keys(env).length) options.env = env;
   return Command.sidecar("binaries/ideaspaces", args, options);
 }
 
@@ -764,25 +769,34 @@ export function buildLocalSendArgs(
  * dev those are empty and the CLI falls back to `IDEASPACES_PI_EXTENSIONS`. No
  * repo_id, no account: Pi runs standalone over the local path.
  */
+/** The conversation's durable mounts → the `IS_MOUNTS` env pi-is-space seeds its
+ *  working set from. Comma-joined (the extension splits on comma; a path with a
+ *  comma is the known edge). Empty → no env var, no mounts. */
+export function mountsToEnv(mounts: string[] | undefined): Record<string, string> {
+  const list = (mounts ?? []).filter(Boolean);
+  return list.length ? { IS_MOUNTS: list.join(",") } : {};
+}
+
 export function streamLocalConversation(
   context: string,
   conversationId: string,
   body: SendMessage,
   handlers: StreamHandlers,
+  mounts?: string[],
 ): StreamHandle {
   const args = buildLocalSendArgs(context, conversationId, body, [
     ...piExtArgs,
     ...piSkillArgs,
     ...piBinArgs,
   ]);
-  return streamCli(args, handlers);
+  return streamCli(args, handlers, mountsToEnv(mounts));
 }
 
 /** Shared streaming core: spawn the sidecar with `args`, line-buffer stdout into
  *  {@link KeeperStreamEvent}s, expose done/cancel. Spawned (not execute()'d) so a
  *  turn can be cancelled mid-flight. */
-function streamCli(args: string[], handlers: StreamHandlers): StreamHandle {
-  const command = sidecar(args);
+function streamCli(args: string[], handlers: StreamHandlers, extraEnv?: Record<string, string>): StreamHandle {
+  const command = sidecar(args, undefined, extraEnv);
 
   let buffer = "";
   let stderr = "";
