@@ -7,8 +7,10 @@
 // runtime (they shell the bundled CLI via `IS_CLI_PATH`). So bundling is a copy,
 // not a build: for each extension we take its `package.json` (carries the
 // `pi.extensions` + `skills` manifest), `src/`, `skills/`, and — for pi-is-space
-// — the committed `reference/` its skills cite. No `node_modules`: the peer deps
-// (`@earendil-works/pi-coding-agent`, `typebox`) come from the pi runtime.
+// — the committed `reference/` its skills cite. Peer deps
+// (`@earendil-works/pi-coding-agent`, `typebox`) come from the pi runtime, but a
+// non-peer runtime dep (pi-is-space imports `@ideaspaces/protocol`) is vendored
+// into the extension's `node_modules` (see `deps` below) so jiti can resolve it.
 //
 // Source is `node_modules/@ideaspaces/pi-*` (github devDependencies), mirroring
 // how build-sidecar.mjs reads `@ideaspaces/cli` from node_modules — so CI
@@ -31,11 +33,23 @@ const outDir = join(root, "src-tauri", "resources", "pi-ext");
 // may not have them; there we warn and fall back to IDEASPACES_PI_EXTENSIONS.
 const isCI = !!process.env.CI;
 
-// Each extension: its package name (under node_modules) + the subdirs to carry.
-// package.json is always copied (the `pi.extensions`/`skills` manifest).
+// Each extension: its package name (under node_modules), the subdirs to carry,
+// and any RUNTIME deps to vendor into its node_modules. package.json is always
+// copied (the `pi.extensions`/`skills` manifest).
+//
+// `deps` are the packages the extension imports at runtime that the pi runtime
+// does NOT provide (unlike the `@earendil-works/pi-coding-agent` / `typebox`
+// peers). pi-is-space now assembles awareness in-process from
+// `@ideaspaces/protocol`, so that (and its own dep `yaml`) must sit in the
+// extension's node_modules for pi's jiti loader to resolve them.
 const EXTENSIONS = [
-  { pkg: "@ideaspaces/pi-is-space", name: "pi-is-space", dirs: ["src", "skills", "reference"] },
-  { pkg: "@ideaspaces/pi-local-context", name: "pi-local-context", dirs: ["src", "skills"] },
+  {
+    pkg: "@ideaspaces/pi-is-space",
+    name: "pi-is-space",
+    dirs: ["src", "skills", "reference"],
+    deps: ["@ideaspaces/protocol", "yaml"],
+  },
+  { pkg: "@ideaspaces/pi-local-context", name: "pi-local-context", dirs: ["src", "skills"], deps: [] },
 ];
 
 // The dir must always exist: `tauri.conf.json` lists `resources/pi-ext` in
@@ -70,7 +84,30 @@ for (const ext of EXTENSIONS) {
     const dirFrom = join(from, dir);
     if (existsSync(dirFrom)) cpSync(dirFrom, join(dest, dir), { recursive: true });
   }
-  console.log(`build-pi-extensions: staged ${ext.name} (${ext.dirs.join(", ")})`);
+  // Vendor runtime deps into the extension's node_modules so jiti resolves them
+  // (walks up from src/ → pi-is-space/node_modules). Pulled from the app's
+  // node_modules (npm-hoisted), mirroring how the extension source itself is read.
+  // NOTE: the extension packages are devDependencies, so these land dev-only in
+  // the lockfile. This step runs after a plain `npm ci` (dev deps present) — do
+  // NOT add `--omit=dev`/`NODE_ENV=production` before the Tauri build, or the
+  // extension would ship without its runtime dep (fails loudly in CI, degrades to
+  // warn-and-skip locally).
+  for (const dep of ext.deps ?? []) {
+    const depFrom = join(root, "node_modules", dep);
+    if (!existsSync(depFrom)) {
+      const msg = `${ext.pkg} runtime dep ${dep} not in node_modules`;
+      if (isCI) {
+        console.error(`build-pi-extensions: ${msg} — run \`npm ci\`.`);
+        process.exit(1);
+      }
+      console.warn(`build-pi-extensions: ${msg} — run \`npm install\`; skipping.`);
+      continue;
+    }
+    cpSync(depFrom, join(dest, "node_modules", dep), { recursive: true });
+  }
+  console.log(
+    `build-pi-extensions: staged ${ext.name} (${ext.dirs.join(", ")}${ext.deps?.length ? `; deps: ${ext.deps.join(", ")}` : ""})`,
+  );
   staged++;
 }
 
