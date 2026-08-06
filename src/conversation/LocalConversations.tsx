@@ -20,6 +20,7 @@ import { useToast } from "../toast/toast-context";
 import { PiLogo } from "../pi/PiLogo";
 import { usePiModels } from "../pi/usePiModels";
 import { getConversationModel, setConversationModel } from "../pi/conversation-model";
+import { getConversationMounts } from "../pi/conversation-mounts";
 
 // Local (Pi) conversations over a folder — the "Discuss" surface. Standalone: no
 // account, no repo_id. Pi runs over `context` (the folder path); sessions live at
@@ -292,6 +293,9 @@ export function LocalConversationView({
       setOptimistic(text);
       setStreamState({ ...createInitialKeeperStreamState(), state: "connecting" });
       let streamError: string | null = null;
+      // The conversation's durable mounts ride the turn as IS_MOUNTS so pi-is-space
+      // re-seeds its working set (in-session mounts reset each per-turn process).
+      const mounts = await getConversationMounts(context, conversationId);
       const handle = streamLocalConversation(
         context,
         conversationId,
@@ -302,6 +306,7 @@ export function LocalConversationView({
             setStreamState((s) => reduceKeeperStreamState(s, e));
           },
         },
+        mounts,
       );
       handleRef.current = handle;
       try {
