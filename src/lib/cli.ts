@@ -760,15 +760,6 @@ export function buildLocalSendArgs(
   return args;
 }
 
-/**
- * Stream a LOCAL (Pi) turn over a folder — `conversation send --local`. Same
- * event contract as {@link streamConversation} (the CLI emits the same 9 Keeper
- * events), so the reducer + transcript are reused unchanged. `context` is the
- * folder root; sessions live at `<context>/.pi/sessions/`. Extensions + skills
- * come from the bundle (`--ext`/`--skill`, resolved by {@link initPiRuntime}); in
- * dev those are empty and the CLI falls back to `IDEASPACES_PI_EXTENSIONS`. No
- * repo_id, no account: Pi runs standalone over the local path.
- */
 /** The conversation's durable mounts → the `IS_MOUNTS` env pi-is-space seeds its
  *  working set from. Comma-joined (the extension splits on comma; a path with a
  *  comma is the known edge). Empty → no env var, no mounts. */
@@ -777,6 +768,16 @@ export function mountsToEnv(mounts: string[] | undefined): Record<string, string
   return list.length ? { IS_MOUNTS: list.join(",") } : {};
 }
 
+/**
+ * Stream a LOCAL (Pi) turn over a folder — `conversation send --local`. Same
+ * event contract as {@link streamConversation} (the CLI emits the same 9 Keeper
+ * events), so the reducer + transcript are reused unchanged. `context` is the
+ * folder root; sessions live at `<context>/.pi/sessions/`. Extensions + skills
+ * come from the bundle (`--ext`/`--skill`, resolved by {@link initPiRuntime}); in
+ * dev those are empty and the CLI falls back to `IDEASPACES_PI_EXTENSIONS`. No
+ * repo_id, no account: Pi runs standalone over the local path. The conversation's
+ * durable `mounts` ride as `IS_MOUNTS` so pi-is-space re-seeds its working set.
+ */
 export function streamLocalConversation(
   context: string,
   conversationId: string,
