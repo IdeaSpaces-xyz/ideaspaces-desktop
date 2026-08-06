@@ -87,6 +87,11 @@ for (const ext of EXTENSIONS) {
   // Vendor runtime deps into the extension's node_modules so jiti resolves them
   // (walks up from src/ → pi-is-space/node_modules). Pulled from the app's
   // node_modules (npm-hoisted), mirroring how the extension source itself is read.
+  // NOTE: the extension packages are devDependencies, so these land dev-only in
+  // the lockfile. This step runs after a plain `npm ci` (dev deps present) — do
+  // NOT add `--omit=dev`/`NODE_ENV=production` before the Tauri build, or the
+  // extension would ship without its runtime dep (fails loudly in CI, degrades to
+  // warn-and-skip locally).
   for (const dep of ext.deps ?? []) {
     const depFrom = join(root, "node_modules", dep);
     if (!existsSync(depFrom)) {
