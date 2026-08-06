@@ -9,6 +9,24 @@ import { load, type Store } from "@tauri-apps/plugin-store";
 const FILE = "settings.json";
 const KEY = "pi-conversation-mounts";
 
+// IS_MOUNTS is a comma-delimited env string (mountsToEnv → cli.ts), so a mount
+// path may not contain a comma — it would split into two bogus entries pi then
+// skips. Reject at the boundary rather than silently corrupt the working set.
+export function isValidMountPath(path: string): boolean {
+  const p = path.trim();
+  return p.length > 0 && !p.includes(",");
+}
+
+/** Pure reducer — add `path`, absolute-deduped, order-preserving. No-op if present. */
+export function applyMount(cur: string[], path: string): string[] {
+  return cur.includes(path) ? cur : [...cur, path];
+}
+
+/** Pure reducer — drop `path`. */
+export function dropMount(cur: string[], path: string): string[] {
+  return cur.filter((p) => p !== path);
+}
+
 let storePromise: Promise<Store> | null = null;
 function store(): Promise<Store> {
   if (!storePromise) storePromise = load(FILE, { autoSave: true, defaults: {} });
@@ -26,32 +44,45 @@ export async function getConversationMounts(context: string, id: string): Promis
   }
 }
 
-async function writeMounts(context: string, id: string, mounts: string[]): Promise<void> {
-  try {
-    const s = await store();
-    const all = (await s.get<Record<string, string[]>>(KEY)) ?? {};
-    const k = keyFor(context, id);
-    if (mounts.length) all[k] = [...new Set(mounts)];
-    else delete all[k];
-    await s.set(KEY, all);
-  } catch {
-    /* best-effort — the panel already reflects the change in memory */
-  }
+// Serialize mutations so two overlapping add/remove calls can't each read the
+// same snapshot and clobber the other's write (the store's autoSave read-modify-
+// write is not atomic). Each critical section reads fresh state, applies its
+// reducer, and writes — chained so they run one at a time.
+let writeChain: Promise<unknown> = Promise.resolve();
+function serialize<T>(fn: () => Promise<T>): Promise<T> {
+  const run = writeChain.then(fn, fn);
+  writeChain = run.catch(() => {});
+  return run;
+}
+
+async function mutate(
+  context: string,
+  id: string,
+  reduce: (cur: string[]) => string[],
+): Promise<string[]> {
+  return serialize(async () => {
+    try {
+      const s = await store();
+      const all = (await s.get<Record<string, string[]>>(KEY)) ?? {};
+      const k = keyFor(context, id);
+      const next = reduce(all[k] ?? []);
+      if (next.length) all[k] = next;
+      else delete all[k];
+      await s.set(KEY, all);
+      return next;
+    } catch {
+      // Best-effort: reflect the change in memory even if the store write failed.
+      return reduce(await getConversationMounts(context, id));
+    }
+  });
 }
 
 /** Pin a mount; returns the updated set. No-op if already mounted. */
 export async function addConversationMount(context: string, id: string, path: string): Promise<string[]> {
-  const cur = await getConversationMounts(context, id);
-  if (cur.includes(path)) return cur;
-  const next = [...cur, path];
-  await writeMounts(context, id, next);
-  return next;
+  return mutate(context, id, (cur) => applyMount(cur, path));
 }
 
 /** Unpin a mount; returns the updated set. */
 export async function removeConversationMount(context: string, id: string, path: string): Promise<string[]> {
-  const cur = await getConversationMounts(context, id);
-  const next = cur.filter((p) => p !== path);
-  await writeMounts(context, id, next);
-  return next;
+  return mutate(context, id, (cur) => dropMount(cur, path));
 }
