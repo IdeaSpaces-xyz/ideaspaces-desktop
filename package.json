@@ -62,7 +62,7 @@
     "@eslint/js": "^9.39.4",
     "@ideaspaces/cli": "github:IdeaSpaces-xyz/cli#af788f860bb6874787b3b59d72a75f5c075045d7",
     "@ideaspaces/editor": "github:IdeaSpaces-xyz/editor",
-    "@ideaspaces/pi-is-space": "github:IdeaSpaces-xyz/pi-is-space#5182b583bd960430dc9380132dfbd52313e5842b",
+    "@ideaspaces/pi-is-space": "github:IdeaSpaces-xyz/pi-is-space#58c6ada767aac7fe556c7af20a83bbf5640bb1bb",
     "@ideaspaces/pi-local-context": "github:IdeaSpaces-xyz/pi-local-context",
     "@tauri-apps/cli": "^2",
     "@types/react": "^19.1.8",
