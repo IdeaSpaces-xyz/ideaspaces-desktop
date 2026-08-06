@@ -71,6 +71,7 @@ function AddMount({
   const [query, setQuery] = useState("");
   const [raw, setRaw] = useState<MentionEntry[]>([]);
   const [loading, setLoading] = useState(false);
+  const [failed, setFailed] = useState(false);
   const reqId = useRef(0);
   // `search` is an inline closure from the parent (new identity each render), so
   // hold it in a ref and key the fetch on `query` alone — otherwise the effect
@@ -84,10 +85,16 @@ function AddMount({
     searchRef
       .current(query)
       .then((entries) => {
-        if (id === reqId.current) setRaw(entries);
+        if (id !== reqId.current) return;
+        setRaw(entries);
+        setFailed(false);
       })
       .catch(() => {
-        if (id === reqId.current) setRaw([]);
+        // A real `ls` failure (sidecar hiccup, permissions) must read
+        // differently from an empty folder — surface it, don't blank out.
+        if (id !== reqId.current) return;
+        setRaw([]);
+        setFailed(true);
       })
       .finally(() => {
         if (id === reqId.current) setLoading(false);
@@ -131,8 +138,17 @@ function AddMount({
           );
         })}
         {!loading && results.length === 0 && (
-          <li className="px-2 py-2 font-chrome text-xs text-is-text-tertiary">
-            {query ? "No matching folders." : "No folders to add."}
+          <li
+            className={cn(
+              "px-2 py-2 font-chrome text-xs",
+              failed ? "text-is-danger-text" : "text-is-text-tertiary",
+            )}
+          >
+            {failed
+              ? "Couldn't list folders — try again."
+              : query
+                ? "No matching folders."
+                : "No folders to add."}
           </li>
         )}
       </ul>
