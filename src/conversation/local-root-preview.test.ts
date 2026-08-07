@@ -1,6 +1,19 @@
-import { describe, it, expect } from "vitest";
-import { rootDisplayPath, renderListing } from "./local-root-preview";
+import { describe, it, expect, vi } from "vitest";
+import {
+  rootDisplayPath,
+  renderListing,
+  escapeMarkdown,
+  loadRootPreview,
+} from "./local-root-preview";
 import type { MentionEntry } from "../lib/cli";
+
+// fs: pretend the first README candidate exists; content is irrelevant to the
+// path assertions. cli.listFiles is only hit on the no-README fallback path.
+vi.mock("@tauri-apps/plugin-fs", () => ({
+  exists: vi.fn(async (p: string) => p.endsWith("/README.md")),
+  readTextFile: vi.fn(async () => "# hi"),
+}));
+vi.mock("../lib/cli", () => ({ listFiles: vi.fn(async () => []) }));
 
 const entry = (name: string, kind: MentionEntry["kind"], path = name): MentionEntry => ({
   name,
@@ -23,6 +36,19 @@ describe("rootDisplayPath", () => {
   });
 });
 
+describe("escapeMarkdown", () => {
+  it("neutralizes a filename that looks like a markdown link", () => {
+    const out = escapeMarkdown("[Click here](https://evil.example)");
+    expect(out).not.toContain("](");
+    expect(out).toContain("\\[");
+    expect(out).toContain("\\]");
+    expect(out).toContain("\\(");
+  });
+  it("leaves an ordinary filename readable", () => {
+    expect(escapeMarkdown("my-notes.md")).toBe("my-notes.md");
+  });
+});
+
 describe("renderListing", () => {
   it("renders an empty-folder note", () => {
     expect(renderListing("ref", [])).toContain("_This folder is empty._");
@@ -37,5 +63,24 @@ describe("renderListing", () => {
     expect(md).toContain("📁 sub");
     expect(md).toContain("📦 lib");
     expect(md).toContain("📄 notes.md");
+  });
+  it("escapes markdown-significant characters in entry names", () => {
+    const md = renderListing("ref", [entry("[x](https://evil.example)", "file")]);
+    expect(md).not.toContain("](https://evil.example)");
+  });
+  it("adds a hint only when truncated", () => {
+    expect(renderListing("ref", [entry("a", "file")], false)).not.toContain("showing the first");
+    expect(renderListing("ref", [entry("a", "file")], true)).toContain("showing the first");
+  });
+});
+
+describe("loadRootPreview — README path composition", () => {
+  it("uses just the filename for home's own README (not home/README.md)", async () => {
+    const node = await loadRootPreview("/Users/me/space", "/Users/me/space");
+    expect(node.path).toBe("README.md");
+  });
+  it("nests the README under a mounted root's relative path", async () => {
+    const node = await loadRootPreview("/Users/me/space/notes/ref", "/Users/me/space");
+    expect(node.path).toBe("notes/ref/README.md");
   });
 });

@@ -2,10 +2,9 @@ import { useCallback, useEffect, useState } from "react";
 import { PreviewPane, type PreviewNodeState, type PreviewTarget } from "@ideaspaces/conversation-ui";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { loadRootPreview } from "./local-root-preview";
+import { basename } from "../lib/path";
 import { webUrl } from "../editor/linkResolve";
 import { useToast } from "../toast/toast-context";
-
-const basename = (p: string) => p.split("/").filter(Boolean).pop() || p;
 
 // The preview slot of the local Context panel: a mounted root (or home) rendered
 // read-only through the shared PreviewPane — its README, or a shallow listing.

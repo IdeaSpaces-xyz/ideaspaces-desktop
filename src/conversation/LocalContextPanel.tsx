@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { Boxes, Folder, FolderTree, GitBranch, House, Plus, Search, X } from "lucide-react";
 import type { PreviewTarget } from "@ideaspaces/conversation-ui";
 import type { MentionEntry, MentionEntryKind } from "../lib/cli";
+import { basename } from "../lib/path";
 import { cn } from "../lib/cn";
 
 // The local conversation's Context panel — Pi's read-only working set. Home (the
@@ -10,8 +11,6 @@ import { cn } from "../lib/cn";
 // context. Adding one seeds IS_MOUNTS on the next turn (conversation-mounts →
 // cli.ts → pi-is-space). Sibling of the remote Keeper NotesPanel; mounts, not
 // touched notes, are the local surface.
-
-const basename = (p: string) => p.split("/").filter(Boolean).pop() || p;
 
 const KIND_ICON: Record<MentionEntryKind, typeof Folder> = {
   file: Folder,
