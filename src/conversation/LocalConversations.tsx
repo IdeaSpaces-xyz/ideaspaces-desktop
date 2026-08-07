@@ -33,7 +33,7 @@ import {
   type FileEntry,
 } from "../pi/conversation-files";
 import { extractMentions } from "./mentions";
-import { isEditableFile, resolveUnder } from "./local-file-preview";
+import { isEditableFile, isWithinContext, resolveUnder } from "./local-file-preview";
 import { Resizer } from "../components/Resizer";
 import { LocalContextPanel, LocalContextTrigger } from "./LocalContextPanel";
 import { LocalRootPreview } from "./LocalRootPreview";
@@ -421,25 +421,29 @@ export function LocalConversationView({
       // Remember this turn's pick so reopening the conversation restores it.
       void setConversationModel(conversationId, { model, thinking: thinkingLevel });
       // Accumulate the files this turn brought into context: the @-mentions in
-      // the message, plus what pi read/edited. Absolute + existence-checked so
-      // the panel never lists a path that can't be opened.
+      // the message (the local pointer-token source — the CLI doesn't classify
+      // `mentioned`, so parse the text; `workspace.mentioned` is folded in too
+      // for parity/future-proofing), plus what pi read/edited. Every path is
+      // CONFINED to home/mounts before use — mention tokens are freely-typed, so
+      // this is the security gate that stops `@../../secret` escaping the
+      // workspace — then existence-checked so the panel never lists a dead path.
       void (async () => {
-        const raw: FileEntry[] = extractMentions(text).map((rel) => ({
-          path: resolveUnder(context, rel),
-          kind: "mentioned" as const,
-        }));
         const workspace = captured.workspace;
-        if (workspace) {
-          for (const p of workspace.read) raw.push({ path: resolveUnder(context, p), kind: "read" });
-          for (const p of [...workspace.modified, ...workspace.created])
-            raw.push({ path: resolveUnder(context, p), kind: "edited" });
-        }
+        const raw: FileEntry[] = [
+          ...extractMentions(text).map((rel) => ({ path: resolveUnder(context, rel), kind: "mentioned" as const })),
+          ...(workspace?.mentioned ?? []).map((p) => ({ path: resolveUnder(context, p), kind: "mentioned" as const })),
+          ...(workspace?.read ?? []).map((p) => ({ path: resolveUnder(context, p), kind: "read" as const })),
+          ...[...(workspace?.modified ?? []), ...(workspace?.created ?? [])].map((p) => ({
+            path: resolveUnder(context, p),
+            kind: "edited" as const,
+          })),
+        ].filter((e) => isWithinContext(e.path, context, mountsRef.current));
         const checked: FileEntry[] = [];
         for (const e of raw) {
           try {
             if (await exists(e.path)) checked.push(e);
           } catch {
-            // Unresolvable (e.g. a path relative to a navigated position) — skip.
+            // Unreadable (e.g. a permission error) — skip.
           }
         }
         if (checked.length === 0) return;
