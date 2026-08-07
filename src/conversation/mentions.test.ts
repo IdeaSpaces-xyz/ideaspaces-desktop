@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getMentionState, insertMention } from "./mentions";
+import { getMentionState, insertMention, extractMentions } from "./mentions";
 import type { MentionEntry } from "../lib/cli";
 
 const entry = (path: string): MentionEntry => ({ path, name: path.split("/").pop() ?? path, kind: "file" });
@@ -43,5 +43,23 @@ describe("insertMention", () => {
     const r = insertMention(v, state, entry("notes/awareness.md"));
     expect(r.value).toBe("@notes/awareness.md here");
     expect(r.value.slice(r.cursor)).toBe(" here"); // caret before the existing space
+  });
+});
+
+describe("extractMentions", () => {
+  it("pulls every @path token from a message", () => {
+    expect(extractMentions("look at @notes/a.md and @b.md")).toEqual(["notes/a.md", "b.md"]);
+  });
+  it("dedupes repeats", () => {
+    expect(extractMentions("@a.md @a.md")).toEqual(["a.md"]);
+  });
+  it("ignores an @ mid-word (e.g. an email)", () => {
+    expect(extractMentions("mail me at me@example.com")).toEqual([]);
+  });
+  it("trims trailing sentence punctuation from a path", () => {
+    expect(extractMentions("see @notes/a.md.")).toEqual(["notes/a.md"]);
+  });
+  it("returns nothing when there are no mentions", () => {
+    expect(extractMentions("plain message")).toEqual([]);
   });
 });

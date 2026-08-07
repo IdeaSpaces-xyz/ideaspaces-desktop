@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { Boxes, Folder, FolderTree, GitBranch, House, Plus, Search, X } from "lucide-react";
+import { Boxes, FileText, Folder, FolderTree, GitBranch, House, Pencil, Plus, Search, X } from "lucide-react";
 import type { PreviewTarget } from "@ideaspaces/conversation-ui";
 import type { MentionEntry, MentionEntryKind } from "../lib/cli";
+import { groupFiles, type FileMap } from "../pi/conversation-files";
 import { basename } from "../lib/path";
 import { cn } from "../lib/cn";
 
@@ -161,13 +162,77 @@ function AddMount({
   );
 }
 
+function FileGroup({
+  label,
+  paths,
+  icon: Icon,
+  onOpenFile,
+}: {
+  label: string;
+  paths: string[];
+  icon: typeof FileText;
+  onOpenFile: (target: PreviewTarget) => void;
+}) {
+  if (paths.length === 0) return null;
+  return (
+    <div>
+      <p className="px-2 font-chrome text-[10px] uppercase tracking-[0.06em] text-is-text-tertiary">
+        {label} · {paths.length}
+      </p>
+      <ul className="mt-1">
+        {paths.map((p) => (
+          <li key={p}>
+            <button
+              type="button"
+              onClick={() => onOpenFile({ id: p, label: basename(p) })}
+              title={p}
+              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-is-surface-alt focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
+            >
+              <Icon size={14} strokeWidth={1.333} className="shrink-0 text-is-text-tertiary" aria-hidden="true" />
+              <span className="min-w-0 flex-1 truncate font-chrome text-sm text-is-text">{basename(p)}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+// Files the conversation has touched — what Pi read or edited, and what you
+// @-mentioned. Grouped strongest-first (Edited / Read / Mentioned). Click one to
+// view it (and edit, for home files) in the preview slot.
+function FilesSection({ files, onOpenFile }: { files: FileMap; onOpenFile: (target: PreviewTarget) => void }) {
+  const groups = groupFiles(files);
+  const total = groups.edited.length + groups.read.length + groups.mentioned.length;
+  return (
+    <section aria-label="Files in context" className="border-t border-is-border/60 pt-4">
+      <p className="px-2 font-chrome text-[10px] uppercase tracking-[0.06em] text-is-text-tertiary">
+        Files{total > 0 ? ` · ${total}` : ""}
+      </p>
+      {total === 0 ? (
+        <p className="px-2 py-2 font-chrome text-xs text-is-text-tertiary">
+          Files you mention or Pi reads and edits appear here.
+        </p>
+      ) : (
+        <div className="mt-1 space-y-4">
+          <FileGroup label="Edited" paths={groups.edited} icon={Pencil} onOpenFile={onOpenFile} />
+          <FileGroup label="Read" paths={groups.read} icon={FileText} onOpenFile={onOpenFile} />
+          <FileGroup label="Mentioned" paths={groups.mentioned} icon={FileText} onOpenFile={onOpenFile} />
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function LocalContextPanel({
   home,
   mounts,
+  files,
   search,
   onAdd,
   onRemove,
   onOpenRoot,
+  onOpenFile,
   onClose,
   style,
 }: {
@@ -175,6 +240,8 @@ export function LocalContextPanel({
   home: string;
   /** Mounted read-only references (absolute paths). */
   mounts: string[];
+  /** Files the conversation has touched — absolute path → strongest kind. */
+  files: FileMap;
   /** Folder search over the home tree — `(q) => listFiles(home, q)`. */
   search: (query: string) => Promise<MentionEntry[]>;
   /** Pin a folder given as a path relative to home; returns whether it was added. */
@@ -182,6 +249,8 @@ export function LocalContextPanel({
   onRemove: (absPath: string) => void;
   /** Preview a root (home or a mount) in the pane's preview slot. */
   onOpenRoot: (target: PreviewTarget) => void;
+  /** Preview a file (editable when under home) in the pane's preview slot. */
+  onOpenFile: (target: PreviewTarget) => void;
   onClose: () => void;
   style?: CSSProperties;
 }) {
@@ -254,6 +323,8 @@ export function LocalContextPanel({
               </ul>
             )}
           </section>
+
+          <FilesSection files={files} onOpenFile={onOpenFile} />
 
           <section aria-label="Add a reference" className={cn("border-t border-is-border/60 pt-4")}>
             <AddMount search={search} mountedRel={mountedRel} onPick={onAdd} />

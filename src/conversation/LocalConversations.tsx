@@ -10,7 +10,7 @@ import {
   type StreamHandle,
   type PiThinkingLevel,
 } from "../lib/cli";
-import type { KeeperConversationDetail } from "./keeper-types";
+import type { KeeperConversationDetail, KeeperWorkspaceSurface } from "./keeper-types";
 import { createInitialKeeperStreamState, reduceKeeperStreamState } from "./keeper-stream-state";
 import { useChatScroll } from "./useChatScroll";
 import { V2Transcript } from "./V2Transcript";
@@ -26,9 +26,19 @@ import {
   removeConversationMount,
   isValidMountPath,
 } from "../pi/conversation-mounts";
+import {
+  getConversationFiles,
+  addConversationFiles,
+  type FileMap,
+  type FileEntry,
+} from "../pi/conversation-files";
+import { extractMentions } from "./mentions";
+import { isEditableFile, resolveUnder } from "./local-file-preview";
 import { Resizer } from "../components/Resizer";
 import { LocalContextPanel, LocalContextTrigger } from "./LocalContextPanel";
 import { LocalRootPreview } from "./LocalRootPreview";
+import { LocalFilePreview } from "./LocalFilePreview";
+import { exists } from "@tauri-apps/plugin-fs";
 import type { PreviewTarget } from "@ideaspaces/conversation-ui";
 
 // Local (Pi) conversations over a folder — the "Discuss" surface. Standalone: no
@@ -282,11 +292,33 @@ export function LocalConversationView({
     };
   }, [context, conversationId]);
 
-  // Right panel — one slot, mutually exclusive: closed, the Context list, or one
-  // root's read-only preview (Back-to-context when opened from the list). Resets
-  // on a conversation switch.
+  // The conversation's files in context — what it's @-mentioned and what Pi read
+  // or edited. Desktop-owned and durable (`get --local` doesn't persist a
+  // workspace surface), accumulated after each turn. Ref-mirrored so the panel's
+  // editability check reads the current set.
+  const [files, setFiles] = useState<FileMap>({});
+  useEffect(() => {
+    let alive = true;
+    getConversationFiles(context, conversationId)
+      .then((f) => {
+        if (alive) setFiles(f);
+      })
+      .catch(() => {
+        // Best-effort — a store miss just means nothing touched yet.
+      });
+    return () => {
+      alive = false;
+    };
+  }, [context, conversationId]);
+
+  // Right panel — one slot, mutually exclusive: closed, the Context list, one
+  // root's preview, or one file's preview (Back-to-context when opened from the
+  // list). Resets on a conversation switch.
   const [panel, setPanel] = useState<
-    null | { kind: "context" } | { kind: "preview"; target: PreviewTarget; fromContext: boolean }
+    | null
+    | { kind: "context" }
+    | { kind: "root"; target: PreviewTarget; fromContext: boolean }
+    | { kind: "file"; target: PreviewTarget; fromContext: boolean; editable: boolean }
   >(null);
   const [panelWidth, setPanelWidth] = useState(320);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -357,6 +389,11 @@ export function LocalConversationView({
       setOptimistic(text);
       setStreamState({ ...createInitialKeeperStreamState(), state: "connecting" });
       let streamError: string | null = null;
+      // The files pi read/edited this turn — harvested from turn_complete's
+      // workspace surface (paths, classified in the CLI), accumulated below. Held
+      // on an object so the assignment inside onEvent survives type-narrowing
+      // (a bare `let` reassigned in a closure narrows back to its null init).
+      const captured: { workspace: KeeperWorkspaceSurface | null } = { workspace: null };
       // The conversation's durable mounts ride the turn as IS_MOUNTS so pi-is-space
       // re-seeds its working set (in-session mounts reset each per-turn process).
       // Read from the ref so a mount pinned mid-session lands on the next turn.
@@ -367,6 +404,7 @@ export function LocalConversationView({
         {
           onEvent: (e) => {
             if (e.type === "error" && typeof e.message === "string") streamError = e.message;
+            if (e.type === "turn_complete") captured.workspace = e.result.workspace;
             setStreamState((s) => reduceKeeperStreamState(s, e));
           },
         },
@@ -382,6 +420,32 @@ export function LocalConversationView({
       if (streamError && mounted.current) toast(streamError, "error");
       // Remember this turn's pick so reopening the conversation restores it.
       void setConversationModel(conversationId, { model, thinking: thinkingLevel });
+      // Accumulate the files this turn brought into context: the @-mentions in
+      // the message, plus what pi read/edited. Absolute + existence-checked so
+      // the panel never lists a path that can't be opened.
+      void (async () => {
+        const raw: FileEntry[] = extractMentions(text).map((rel) => ({
+          path: resolveUnder(context, rel),
+          kind: "mentioned" as const,
+        }));
+        const workspace = captured.workspace;
+        if (workspace) {
+          for (const p of workspace.read) raw.push({ path: resolveUnder(context, p), kind: "read" });
+          for (const p of [...workspace.modified, ...workspace.created])
+            raw.push({ path: resolveUnder(context, p), kind: "edited" });
+        }
+        const checked: FileEntry[] = [];
+        for (const e of raw) {
+          try {
+            if (await exists(e.path)) checked.push(e);
+          } catch {
+            // Unresolvable (e.g. a path relative to a navigated position) — skip.
+          }
+        }
+        if (checked.length === 0) return;
+        const next = await addConversationFiles(context, conversationId, checked);
+        if (mounted.current) setFiles(next);
+      })();
       try {
         const d = await getLocalConversation(context, conversationId);
         if (mounted.current) setDetail(d);
@@ -503,17 +567,35 @@ export function LocalConversationView({
             <LocalContextPanel
               home={context}
               mounts={mounts}
+              files={files}
               search={(q) => listFiles(context, q)}
               onAdd={(rel) => void addMount(rel)}
               onRemove={(abs) => void removeMount(abs)}
-              onOpenRoot={(target) => setPanel({ kind: "preview", target, fromContext: true })}
+              onOpenRoot={(target) => setPanel({ kind: "root", target, fromContext: true })}
+              onOpenFile={(target) =>
+                setPanel({
+                  kind: "file",
+                  target,
+                  fromContext: true,
+                  editable: isEditableFile(target.id, context, mountsRef.current),
+                })
+              }
               onClose={() => setPanel(null)}
               style={{ width: panelWidth }}
             />
-          ) : (
+          ) : panel.kind === "root" ? (
             <LocalRootPreview
               root={panel.target.id}
               home={context}
+              width={panelWidth}
+              onClose={() => setPanel(null)}
+              onBack={panel.fromContext ? () => setPanel({ kind: "context" }) : undefined}
+            />
+          ) : (
+            <LocalFilePreview
+              path={panel.target.id}
+              home={context}
+              editable={panel.editable}
               width={panelWidth}
               onClose={() => setPanel(null)}
               onBack={panel.fromContext ? () => setPanel({ kind: "context" }) : undefined}

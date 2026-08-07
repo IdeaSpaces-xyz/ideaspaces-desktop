@@ -18,6 +18,23 @@ export interface MentionState {
 // so a nested path like `@notes/aw` keeps the menu open.
 const MENTION_RE = /(^|\s)@([\w./-]*)$/;
 
+// Every completed `@path` pointer in a message — the same charset as the live
+// menu, matched globally. Used to recover the files a turn brought into context
+// from the message text (the pointer *is* the payload; there's no context array
+// locally). A trailing `/`, `.`, or `-` is trimmed so sentence punctuation after
+// a mention doesn't ride along into the path.
+const MENTION_GLOBAL_RE = /(?:^|\s)@([\w./-]+)/g;
+
+/** Extract the relative-path tokens from every `@mention` in a message. */
+export function extractMentions(text: string): string[] {
+  const out: string[] = [];
+  for (const m of text.matchAll(MENTION_GLOBAL_RE)) {
+    const path = m[1].replace(/[./-]+$/, "");
+    if (path) out.push(path);
+  }
+  return [...new Set(out)];
+}
+
 export function getMentionState(value: string, cursor: number | null): MentionState | null {
   if (cursor == null) return null;
   const before = value.slice(0, cursor);
