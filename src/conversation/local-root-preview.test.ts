@@ -47,6 +47,10 @@ describe("escapeMarkdown", () => {
   it("leaves an ordinary filename readable", () => {
     expect(escapeMarkdown("my-notes.md")).toBe("my-notes.md");
   });
+  it("collapses newlines so a name can't inject a fake heading/rule", () => {
+    const out = escapeMarkdown("a\n# Fake heading");
+    expect(out).not.toContain("\n");
+  });
 });
 
 describe("renderListing", () => {

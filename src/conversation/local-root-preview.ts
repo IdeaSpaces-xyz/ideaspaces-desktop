@@ -29,9 +29,11 @@ export function rootDisplayPath(root: string, home: string): string {
 // Mounted references hold third-party/cloned content, so a filename is untrusted
 // text — never markdown. Escape the characters that would otherwise render as a
 // link, image, emphasis, code, or raw HTML so a file named e.g. "[x](evil)"
-// shows literally instead of becoming a live link.
+// shows literally instead of becoming a live link. A filename may also legally
+// contain newlines, which would break out of the list item into a fake
+// heading/rule — collapse those to spaces so a name stays one line.
 export function escapeMarkdown(s: string): string {
-  return s.replace(/[\\`*_[\]()<>~|#]/g, "\\$&");
+  return s.replace(/[\r\n]+/g, " ").replace(/[\\`*_[\]()<>~|#]/g, "\\$&");
 }
 
 /** Pure: render a shallow folder listing as read-only markdown (README fallback). */
