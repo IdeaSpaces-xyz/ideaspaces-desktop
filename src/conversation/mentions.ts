@@ -23,6 +23,11 @@ const MENTION_RE = /(^|\s)@([\w./-]*)$/;
 // from the message text (the pointer *is* the payload; there's no context array
 // locally). A trailing `/`, `.`, or `-` is trimmed so sentence punctuation after
 // a mention doesn't ride along into the path.
+//
+// SAFETY: the charset mirrors the picker for UX, NOT for safety — it permits `.`
+// and `/`, so `@../../x` is representable. Confinement is enforced downstream by
+// `isWithinContext` (local-file-preview.ts), which normalizes and rejects any
+// path outside home/mounts. Never treat a token from here as pre-validated.
 const MENTION_GLOBAL_RE = /(?:^|\s)@([\w./-]+)/g;
 
 /** Extract the relative-path tokens from every `@mention` in a message. */
