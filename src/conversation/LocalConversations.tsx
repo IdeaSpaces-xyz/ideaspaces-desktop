@@ -28,6 +28,8 @@ import {
 } from "../pi/conversation-mounts";
 import { Resizer } from "../components/Resizer";
 import { LocalContextPanel, LocalContextTrigger } from "./LocalContextPanel";
+import { LocalRootPreview } from "./LocalRootPreview";
+import type { PreviewTarget } from "@ideaspaces/conversation-ui";
 
 // Local (Pi) conversations over a folder — the "Discuss" surface. Standalone: no
 // account, no repo_id. Pi runs over `context` (the folder path); sessions live at
@@ -280,11 +282,15 @@ export function LocalConversationView({
     };
   }, [context, conversationId]);
 
-  // Right Context panel — closed by default; resets on a conversation switch.
-  const [contextOpen, setContextOpen] = useState(false);
+  // Right panel — one slot, mutually exclusive: closed, the Context list, or one
+  // root's read-only preview (Back-to-context when opened from the list). Resets
+  // on a conversation switch.
+  const [panel, setPanel] = useState<
+    null | { kind: "context" } | { kind: "preview"; target: PreviewTarget; fromContext: boolean }
+  >(null);
   const [panelWidth, setPanelWidth] = useState(320);
   const containerRef = useRef<HTMLDivElement>(null);
-  useEffect(() => setContextOpen(false), [conversationId]);
+  useEffect(() => setPanel(null), [conversationId]);
 
   // Pin a folder (given relative to home) as a read-only reference. Absolute so
   // pi resolves it the same regardless of cwd; comma-guarded (IS_MOUNTS delimiter).
@@ -467,7 +473,7 @@ export function LocalConversationView({
         )}
       </div>
       <div className="mt-4 overflow-hidden rounded-2xl border border-is-border bg-is-surface">
-        <LocalContextTrigger count={mounts.length} onOpen={() => setContextOpen(true)} />
+        <LocalContextTrigger count={mounts.length} onOpen={() => setPanel({ kind: "context" })} />
         <Compose
           onSend={(t, opts) => void send(t, opts.model, opts.thinkingLevel)}
           onStop={stop}
@@ -482,7 +488,7 @@ export function LocalConversationView({
         />
       </div>
       </div>
-      {contextOpen && (
+      {panel && (
         <>
           <Resizer
             side="right"
@@ -493,15 +499,26 @@ export function LocalConversationView({
             width={panelWidth}
             onResize={setPanelWidth}
           />
-          <LocalContextPanel
-            home={context}
-            mounts={mounts}
-            search={(q) => listFiles(context, q)}
-            onAdd={(rel) => void addMount(rel)}
-            onRemove={(abs) => void removeMount(abs)}
-            onClose={() => setContextOpen(false)}
-            style={{ width: panelWidth }}
-          />
+          {panel.kind === "context" ? (
+            <LocalContextPanel
+              home={context}
+              mounts={mounts}
+              search={(q) => listFiles(context, q)}
+              onAdd={(rel) => void addMount(rel)}
+              onRemove={(abs) => void removeMount(abs)}
+              onOpenRoot={(target) => setPanel({ kind: "preview", target, fromContext: true })}
+              onClose={() => setPanel(null)}
+              style={{ width: panelWidth }}
+            />
+          ) : (
+            <LocalRootPreview
+              root={panel.target.id}
+              home={context}
+              width={panelWidth}
+              onClose={() => setPanel(null)}
+              onBack={panel.fromContext ? () => setPanel({ kind: "context" }) : undefined}
+            />
+          )}
         </>
       )}
     </div>
