@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { Boxes, Folder, FolderTree, GitBranch, House, Plus, Search, X } from "lucide-react";
+import type { PreviewTarget } from "@ideaspaces/conversation-ui";
 import type { MentionEntry, MentionEntryKind } from "../lib/cli";
+import { basename } from "../lib/path";
 import { cn } from "../lib/cn";
 
 // The local conversation's Context panel — Pi's read-only working set. Home (the
@@ -9,8 +11,6 @@ import { cn } from "../lib/cn";
 // context. Adding one seeds IS_MOUNTS on the next turn (conversation-mounts →
 // cli.ts → pi-is-space). Sibling of the remote Keeper NotesPanel; mounts, not
 // touched notes, are the local surface.
-
-const basename = (p: string) => p.split("/").filter(Boolean).pop() || p;
 
 const KIND_ICON: Record<MentionEntryKind, typeof Folder> = {
   file: Folder,
@@ -37,13 +37,18 @@ export function LocalContextTrigger({ count, onOpen }: { count: number; onOpen: 
   );
 }
 
-function MountRow({ path, onRemove }: { path: string; onRemove: () => void }) {
+function MountRow({ path, onOpen, onRemove }: { path: string; onOpen: () => void; onRemove: () => void }) {
   return (
-    <li className="group flex items-center gap-2 rounded-md px-2 py-2 transition-colors hover:bg-is-surface-alt">
-      <Folder size={14} strokeWidth={1.333} className="shrink-0 text-is-text-tertiary" aria-hidden="true" />
-      <span className="min-w-0 flex-1 truncate font-chrome text-sm text-is-text" title={path}>
-        {basename(path)}
-      </span>
+    <li className="group flex items-center gap-1 rounded-md pr-1 transition-colors hover:bg-is-surface-alt">
+      <button
+        type="button"
+        onClick={onOpen}
+        title={path}
+        className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
+      >
+        <Folder size={14} strokeWidth={1.333} className="shrink-0 text-is-text-tertiary" aria-hidden="true" />
+        <span className="min-w-0 flex-1 truncate font-chrome text-sm text-is-text">{basename(path)}</span>
+      </button>
       <button
         type="button"
         onClick={onRemove}
@@ -162,6 +167,7 @@ export function LocalContextPanel({
   search,
   onAdd,
   onRemove,
+  onOpenRoot,
   onClose,
   style,
 }: {
@@ -174,6 +180,8 @@ export function LocalContextPanel({
   /** Pin a folder given as a path relative to home; returns whether it was added. */
   onAdd: (relPath: string) => void;
   onRemove: (absPath: string) => void;
+  /** Preview a root (home or a mount) in the pane's preview slot. */
+  onOpenRoot: (target: PreviewTarget) => void;
   onClose: () => void;
   style?: CSSProperties;
 }) {
@@ -209,9 +217,11 @@ export function LocalContextPanel({
             <p className="px-2 font-chrome text-[10px] uppercase tracking-[0.06em] text-is-text-tertiary">
               Home
             </p>
-            <div
-              className="mt-1 flex items-center gap-2 rounded-md px-2 py-2"
+            <button
+              type="button"
+              onClick={() => onOpenRoot({ id: home, label: basename(home) })}
               title={home}
+              className="mt-1 flex w-full items-center gap-2 rounded-md px-2 py-2 text-left transition-colors hover:bg-is-surface-alt focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
             >
               <House size={14} strokeWidth={1.333} className="shrink-0 text-is-text-secondary" aria-hidden="true" />
               <span className="min-w-0 flex-1 truncate font-chrome text-sm text-is-text">
@@ -220,7 +230,7 @@ export function LocalContextPanel({
               <span className="shrink-0 font-chrome text-[10px] uppercase tracking-[0.04em] text-is-text-tertiary">
                 read-write
               </span>
-            </div>
+            </button>
           </section>
 
           <section aria-label="Mounted references">
@@ -234,7 +244,12 @@ export function LocalContextPanel({
             ) : (
               <ul className="mt-1">
                 {mounts.map((m) => (
-                  <MountRow key={m} path={m} onRemove={() => onRemove(m)} />
+                  <MountRow
+                    key={m}
+                    path={m}
+                    onOpen={() => onOpenRoot({ id: m, label: basename(m) })}
+                    onRemove={() => onRemove(m)}
+                  />
                 ))}
               </ul>
             )}
