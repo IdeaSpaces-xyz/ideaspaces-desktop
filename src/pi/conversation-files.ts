@@ -40,6 +40,23 @@ export function groupFiles(map: FileMap): { edited: string[]; read: string[]; me
   return groups;
 }
 
+/** Pure: drop `paths` from the map (files a turn deleted leave the context). */
+export function dropFiles(cur: FileMap, paths: string[]): FileMap {
+  if (paths.length === 0) return cur;
+  const gone = new Set(paths);
+  const next: FileMap = {};
+  for (const [path, kind] of Object.entries(cur)) if (!gone.has(path)) next[path] = kind;
+  return next;
+}
+
+/** Pure: which `${context}::${id}` store keys belong to a conversation that no
+ *  longer exists — the orphans to sweep. Keys for other contexts are untouched. */
+export function orphanKeys(keys: string[], context: string, liveIds: string[]): string[] {
+  const prefix = `${context}::`;
+  const live = new Set(liveIds);
+  return keys.filter((k) => k.startsWith(prefix) && !live.has(k.slice(prefix.length)));
+}
+
 let storePromise: Promise<Store> | null = null;
 function store(): Promise<Store> {
   if (!storePromise) storePromise = load(FILE, { autoSave: true, defaults: {} });
@@ -84,6 +101,46 @@ export async function addConversationFiles(
       return next;
     } catch {
       return mergeFiles(await getConversationFiles(context, id), incoming);
+    }
+  });
+}
+
+/** Drop `paths` from the conversation's set (e.g. files a turn deleted). */
+export async function removeConversationFiles(
+  context: string,
+  id: string,
+  paths: string[],
+): Promise<FileMap> {
+  if (paths.length === 0) return getConversationFiles(context, id);
+  return serialize(async () => {
+    try {
+      const s = await store();
+      const all = (await s.get<Record<string, FileMap>>(KEY)) ?? {};
+      const k = keyFor(context, id);
+      const next = dropFiles(all[k] ?? {}, paths);
+      if (Object.keys(next).length) all[k] = next;
+      else delete all[k];
+      await s.set(KEY, all);
+      return next;
+    } catch {
+      return dropFiles(await getConversationFiles(context, id), paths);
+    }
+  });
+}
+
+/** Sweep entries for conversations that no longer exist in `context`. Call only
+ *  with a COMPLETE live-id list — a partial list would drop live conversations. */
+export async function pruneConversationFiles(context: string, liveIds: string[]): Promise<void> {
+  return serialize(async () => {
+    try {
+      const s = await store();
+      const all = (await s.get<Record<string, FileMap>>(KEY)) ?? {};
+      const orphans = orphanKeys(Object.keys(all), context, liveIds);
+      if (orphans.length === 0) return;
+      for (const k of orphans) delete all[k];
+      await s.set(KEY, all);
+    } catch {
+      /* best-effort — GC is hygiene, never blocks the list */
     }
   });
 }
