@@ -612,7 +612,7 @@ export function LocalConversationView({
           <Resizer
             side="right"
             min={280}
-            max={520}
+            max={760}
             label="Context panel width"
             containerRef={containerRef}
             width={panelWidth}
