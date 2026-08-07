@@ -463,9 +463,14 @@ export function LocalConversationView({
       // Remember this turn's pick — for reopening this conversation, and as the
       // app-wide default so the next new conversation opens with it too. Report
       // it to the list so its in-memory default updates now, not just on remount.
-      void setConversationModel(conversationId, { model, thinking: thinkingLevel });
-      void setDefaultModel({ model, thinking: thinkingLevel });
-      onModelUsed?.({ model, thinkingLevel });
+      // Only when a model actually resolved: a turn sent before the model list
+      // loads has model undefined, and recording that would clobber a good
+      // default (app-wide and this conversation's) with "no model".
+      if (model) {
+        void setConversationModel(conversationId, { model, thinking: thinkingLevel });
+        void setDefaultModel({ model, thinking: thinkingLevel });
+        onModelUsed?.({ model, thinkingLevel });
+      }
       // Accumulate the files this turn brought into context: the @-mentions in
       // the message (the local pointer-token source — the CLI doesn't classify
       // `mentioned`, so parse the text; `workspace.mentioned` is folded in too
