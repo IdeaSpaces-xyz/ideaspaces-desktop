@@ -74,8 +74,16 @@ export function LocalConversations({ context, username }: { context: string; use
   } | null>(null);
   const [creating, setCreating] = useState(false);
   // The app-wide default a new conversation opens with (last model+thinking
-  // used), so the composer doesn't snap back to the first model each time.
+  // used), so the composer doesn't snap back to the first model each time. Kept
+  // fresh in memory: an open conversation reports its pick back via onModelUsed,
+  // so the next new conversation seeds from it without a store round-trip (and
+  // without a stale mount-time value — the bug this PR would otherwise reintroduce
+  // after the first conversation).
   const [defaultModel, setDefaultModelState] = useState<{ model?: string; thinkingLevel?: PiThinkingLevel }>({});
+  // Gate the "Talk to Pi" composer until the default has loaded, so it never
+  // seeds from the first model in a race with the (slower) model-list load and
+  // then ignores the default when it arrives.
+  const [defaultLoaded, setDefaultLoaded] = useState(false);
   useEffect(() => {
     let alive = true;
     getDefaultModel()
@@ -84,6 +92,9 @@ export function LocalConversations({ context, username }: { context: string; use
       })
       .catch(() => {
         /* no default yet — the composer falls back to the first model */
+      })
+      .finally(() => {
+        if (alive) setDefaultLoaded(true);
       });
     return () => {
       alive = false;
@@ -140,6 +151,7 @@ export function LocalConversations({ context, username }: { context: string; use
         initialSend={open.initialSend}
         initialModel={open.initialModel}
         initialThinkingLevel={open.initialThinkingLevel}
+        onModelUsed={setDefaultModelState}
         onBack={() => {
           setOpen(null);
           void load();
@@ -158,18 +170,20 @@ export function LocalConversations({ context, username }: { context: string; use
           <span>Pi — your local agent, over this folder</span>
         </div>
         <div className="rounded-2xl border border-is-border bg-is-surface">
-          <Compose
-            onSend={(t, opts) => void startNew(t, opts.model, opts.thinkingLevel)}
-            onStop={() => {}}
-            streaming={false}
-            disabled={creating}
-            placeholder="Ask Pi…"
-            showModelControls={false}
-            models={models}
-            initialModel={defaultModel.model}
-            initialThinkingLevel={defaultModel.thinkingLevel}
-            mentionSource={(q) => listFiles(context, q)}
-          />
+          {defaultLoaded && (
+            <Compose
+              onSend={(t, opts) => void startNew(t, opts.model, opts.thinkingLevel)}
+              onStop={() => {}}
+              streaming={false}
+              disabled={creating}
+              placeholder="Ask Pi…"
+              showModelControls={false}
+              models={models}
+              initialModel={defaultModel.model}
+              initialThinkingLevel={defaultModel.thinkingLevel}
+              mentionSource={(q) => listFiles(context, q)}
+            />
+          )}
         </div>
       </section>
 
@@ -260,6 +274,7 @@ export function LocalConversationView({
   initialSend,
   initialModel,
   initialThinkingLevel,
+  onModelUsed,
   onBack,
 }: {
   context: string;
@@ -270,6 +285,9 @@ export function LocalConversationView({
    *  last-used pick restored on reopen. */
   initialModel?: string;
   initialThinkingLevel?: PiThinkingLevel;
+  /** Report the model/thinking a turn was sent with, so the list can keep its
+   *  new-conversation default fresh without re-reading the store. */
+  onModelUsed?: (value: { model?: string; thinkingLevel?: PiThinkingLevel }) => void;
   onBack: () => void;
 }) {
   const toast = useToast();
@@ -443,9 +461,11 @@ export function LocalConversationView({
       handleRef.current = null;
       if (streamError && mounted.current) toast(streamError, "error");
       // Remember this turn's pick — for reopening this conversation, and as the
-      // app-wide default so the next new conversation opens with it too.
+      // app-wide default so the next new conversation opens with it too. Report
+      // it to the list so its in-memory default updates now, not just on remount.
       void setConversationModel(conversationId, { model, thinking: thinkingLevel });
       void setDefaultModel({ model, thinking: thinkingLevel });
+      onModelUsed?.({ model, thinkingLevel });
       // Accumulate the files this turn brought into context: the @-mentions in
       // the message (the local pointer-token source — the CLI doesn't classify
       // `mentioned`, so parse the text; `workspace.mentioned` is folded in too
@@ -490,7 +510,7 @@ export function LocalConversationView({
         }
       }
     },
-    [context, conversationId, toast],
+    [context, conversationId, toast, onModelUsed],
   );
 
   const stop = useCallback(() => {
