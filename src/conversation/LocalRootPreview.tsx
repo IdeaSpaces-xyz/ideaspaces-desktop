@@ -1,16 +1,22 @@
 import { useCallback, useEffect, useState } from "react";
-import { PreviewPane, type PreviewNodeState, type PreviewTarget } from "@ideaspaces/conversation-ui";
+import {
+  PreviewPane,
+  type PreviewEdit,
+  type PreviewNodeState,
+  type PreviewTarget,
+} from "@ideaspaces/conversation-ui";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { loadRootPreview } from "./local-root-preview";
 import { basename } from "../lib/path";
 import { webUrl } from "../editor/linkResolve";
 import { useToast } from "../toast/toast-context";
 
 // The preview slot of the local Context panel: a mounted root (or home) rendered
-// read-only through the shared PreviewPane — its README, or a shallow listing.
-// Read-only always (no `edit`): the working set is reference context, not the
-// workspace the turn writes to. Sibling of the remote NotePreview, minus the
-// server node get/put — content comes from disk.
+// through the shared PreviewPane — its README, or a shallow listing. The README
+// is a real file the user owns, so it's editable (pencil → save writes back);
+// the generated listing has no file to edit and stays read-only. Sibling of the
+// remote NotePreview, minus the server node get/put — content comes from disk.
 export function LocalRootPreview({
   root,
   home,
@@ -29,13 +35,19 @@ export function LocalRootPreview({
 }) {
   const toast = useToast();
   const [nodeState, setNodeState] = useState<PreviewNodeState>({ status: "loading" });
+  // The README's absolute path when the preview is an editable README (undefined
+  // for the listing fallback). Bump reloadTick after a save to re-read from disk.
+  const [readmePath, setReadmePath] = useState<string | undefined>(undefined);
+  const [reloadTick, setReloadTick] = useState(0);
 
   useEffect(() => {
     let alive = true;
     setNodeState({ status: "loading" });
     loadRootPreview(root, home)
-      .then((node) => {
-        if (alive) setNodeState({ status: "loaded", node });
+      .then((preview) => {
+        if (!alive) return;
+        setNodeState({ status: "loaded", node: preview.node });
+        setReadmePath(preview.readmePath);
       })
       .catch((err) => {
         if (alive)
@@ -44,17 +56,24 @@ export function LocalRootPreview({
     return () => {
       alive = false;
     };
-  }, [root, home]);
+  }, [root, home, reloadTick]);
 
-  // A web link opens the browser; anything else can't be followed from a
-  // read-only reference (no editor to route into), so say so rather than no-op.
+  const edit: PreviewEdit | undefined = readmePath
+    ? {
+        load: () => readTextFile(readmePath),
+        save: async (content: string) => {
+          await writeTextFile(readmePath, content);
+        },
+      }
+    : undefined;
+
   const onLinkClick = useCallback(
     (url: string) => {
       const web = webUrl(url);
       if (web) {
         void openUrl(web).catch((err) => toast(err instanceof Error ? err.message : String(err), "error"));
       } else {
-        toast("This is a read-only reference — open the folder to follow its links.");
+        toast("Open the folder to follow this link.");
       }
     },
     [toast],
@@ -66,8 +85,10 @@ export function LocalRootPreview({
     <PreviewPane
       target={target}
       nodeState={nodeState}
+      edit={edit}
       onClose={onClose}
       onBack={onBack}
+      onSaved={() => setReloadTick((t) => t + 1)}
       onLinkClick={onLinkClick}
       onError={(message) => toast(message, "error")}
       style={{ width }}

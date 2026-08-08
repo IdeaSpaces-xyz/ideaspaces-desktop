@@ -80,11 +80,15 @@ describe("renderListing", () => {
 
 describe("loadRootPreview — README path composition", () => {
   it("uses just the filename for home's own README (not home/README.md)", async () => {
-    const node = await loadRootPreview("/Users/me/space", "/Users/me/space");
-    expect(node.path).toBe("README.md");
+    const preview = await loadRootPreview("/Users/me/space", "/Users/me/space");
+    expect(preview.node.path).toBe("README.md");
   });
   it("nests the README under a mounted root's relative path", async () => {
-    const node = await loadRootPreview("/Users/me/space/notes/ref", "/Users/me/space");
-    expect(node.path).toBe("notes/ref/README.md");
+    const preview = await loadRootPreview("/Users/me/space/notes/ref", "/Users/me/space");
+    expect(preview.node.path).toBe("notes/ref/README.md");
+  });
+  it("exposes the README's absolute path so the pane can edit it", async () => {
+    const preview = await loadRootPreview("/Users/me/space", "/Users/me/space");
+    expect(preview.readmePath).toBe("/Users/me/space/README.md");
   });
 });

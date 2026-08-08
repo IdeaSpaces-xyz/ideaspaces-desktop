@@ -45,8 +45,15 @@ export function renderListing(label: string, entries: MentionEntry[], truncated 
   return `${head}\n\n_No README — folder contents:_\n\n${lines.join("\n")}${more}`;
 }
 
-/** Read a root's preview node: its README read-only, or a shallow listing. */
-export async function loadRootPreview(root: string, home: string): Promise<PreviewNode> {
+export interface RootPreview {
+  node: PreviewNode;
+  /** Absolute path of the README shown — present only when a real README was
+   *  found, so the pane can edit it. The listing fallback has no file to save. */
+  readmePath?: string;
+}
+
+/** Read a root's preview: its README (editable), or a read-only shallow listing. */
+export async function loadRootPreview(root: string, home: string): Promise<RootPreview> {
   const label = basename(root);
   for (const name of README_CANDIDATES) {
     const p = `${root}/${name}`;
@@ -55,15 +62,17 @@ export async function loadRootPreview(root: string, home: string): Promise<Previ
       // nested under the root's relative path. (rootDisplayPath returns home's
       // basename for home — a label, not a path prefix, so don't join it here.)
       const path = root === home ? name : `${rootDisplayPath(root, home)}/${name}`;
-      return { name: label, path, content: await readTextFile(p) };
+      return { node: { name: label, path, content: await readTextFile(p) }, readmePath: p };
     }
   }
   // Fetch one past the cap so we can tell a full listing from a truncated one.
   const entries = await listFiles(root, "", LISTING_LIMIT + 1);
   const truncated = entries.length > LISTING_LIMIT;
   return {
-    name: label,
-    path: rootDisplayPath(root, home),
-    content: renderListing(label, entries.slice(0, LISTING_LIMIT), truncated),
+    node: {
+      name: label,
+      path: rootDisplayPath(root, home),
+      content: renderListing(label, entries.slice(0, LISTING_LIMIT), truncated),
+    },
   };
 }

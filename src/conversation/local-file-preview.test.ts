@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveUnder, normalizePath, isWithinContext, isEditableFile } from "./local-file-preview";
+import { resolveUnder, normalizePath, isWithinContext } from "./local-file-preview";
 
 describe("normalizePath", () => {
   it("collapses . and .. segments in an absolute path", () => {
@@ -40,22 +40,9 @@ describe("isWithinContext (confinement gate)", () => {
   it("allows a file inside a mounted reference outside home", () => {
     expect(isWithinContext("/mnt/ref/a.md", home, ["/mnt/ref"])).toBe(true);
   });
-});
-
-describe("isEditableFile", () => {
-  const home = "/home/space";
-  it("is editable when directly under home", () => {
-    expect(isEditableFile("/home/space/notes/a.md", home, [])).toBe(true);
-  });
-  it("is NOT editable when outside home", () => {
-    expect(isEditableFile("/other/a.md", home, [])).toBe(false);
-  });
-  it("is NOT editable when inside a mounted (read-only) reference", () => {
-    expect(isEditableFile("/home/space/paul-graham/essays/x.md", home, ["/home/space/paul-graham"])).toBe(
-      false,
-    );
-  });
-  it("stays editable for a home file that isn't under any mount", () => {
-    expect(isEditableFile("/home/space/a.md", home, ["/home/space/paul-graham"])).toBe(true);
+  it("allows a file inside a mount under home (now user-editable)", () => {
+    expect(
+      isWithinContext("/home/space/paul-graham/essays/x.md", home, ["/home/space/paul-graham"]),
+    ).toBe(true);
   });
 });
