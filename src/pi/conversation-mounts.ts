@@ -1,4 +1,5 @@
 import { load, type Store } from "@tauri-apps/plugin-store";
+import { orphanKeys } from "./conversation-files";
 
 // The conversation's durable working set: mounted roots (absolute paths) the
 // user pins as read-only context alongside the workspace home. The desktop OWNS
@@ -85,4 +86,21 @@ export async function addConversationMount(context: string, id: string, path: st
 /** Unpin a mount; returns the updated set. */
 export async function removeConversationMount(context: string, id: string, path: string): Promise<string[]> {
   return mutate(context, id, (cur) => dropMount(cur, path));
+}
+
+/** Sweep entries for conversations that no longer exist in `context`. Call only
+ *  with a COMPLETE live-id list — a partial list would drop live conversations. */
+export async function pruneConversationMounts(context: string, liveIds: string[]): Promise<void> {
+  return serialize(async () => {
+    try {
+      const s = await store();
+      const all = (await s.get<Record<string, string[]>>(KEY)) ?? {};
+      const orphans = orphanKeys(Object.keys(all), context, liveIds);
+      if (orphans.length === 0) return;
+      for (const k of orphans) delete all[k];
+      await s.set(KEY, all);
+    } catch {
+      /* best-effort — GC is hygiene, never blocks the list */
+    }
+  });
 }

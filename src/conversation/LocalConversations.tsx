@@ -29,11 +29,14 @@ import {
   getConversationMounts,
   addConversationMount,
   removeConversationMount,
+  pruneConversationMounts,
   isValidMountPath,
 } from "../pi/conversation-mounts";
 import {
   getConversationFiles,
   addConversationFiles,
+  removeConversationFiles,
+  pruneConversationFiles,
   type FileMap,
   type FileEntry,
 } from "../pi/conversation-files";
@@ -110,6 +113,14 @@ export function LocalConversations({ context, username }: { context: string; use
       setRows([...r.conversations].sort((a, b) => (a.updated_at < b.updated_at ? 1 : -1)));
       setError(undefined);
       setStatus("loaded");
+      // Sweep durable store entries for conversations that no longer exist —
+      // only when the list is COMPLETE (`!has_more`), so a paged/partial list
+      // never drops a live conversation's mounts or files.
+      if (!r.has_more) {
+        const liveIds = r.conversations.map((c) => c.conversation_id);
+        void pruneConversationMounts(context, liveIds);
+        void pruneConversationFiles(context, liveIds);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setStatus("error");
@@ -497,8 +508,15 @@ export function LocalConversationView({
             // Unreadable (e.g. a permission error) — skip.
           }
         }
-        if (checked.length === 0) return;
-        const next = await addConversationFiles(context, conversationId, checked);
+        // Files pi deleted this turn should leave the list — they no longer exist
+        // (so they'd never survive the exists check above), but a prior turn may
+        // have added them, so drop them explicitly.
+        const deleted = (workspace?.deleted ?? [])
+          .map((p) => resolveUnder(context, p))
+          .filter((p) => isWithinContext(p, context, mountsRef.current));
+        if (checked.length === 0 && deleted.length === 0) return;
+        let next = await addConversationFiles(context, conversationId, checked);
+        if (deleted.length) next = await removeConversationFiles(context, conversationId, deleted);
         if (mounted.current) setFiles(next);
       })();
       try {

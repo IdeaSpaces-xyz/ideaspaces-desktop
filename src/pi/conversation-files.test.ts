@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mergeFiles, groupFiles, type FileMap } from "./conversation-files";
+import { mergeFiles, groupFiles, dropFiles, orphanKeys, type FileMap } from "./conversation-files";
 
 describe("mergeFiles (strongest kind wins)", () => {
   it("adds new paths", () => {
@@ -33,5 +33,33 @@ describe("groupFiles", () => {
       read: ["/m"],
       mentioned: ["/x"],
     });
+  });
+});
+
+describe("dropFiles", () => {
+  it("removes the given paths", () => {
+    const cur: FileMap = { "/a": "read", "/b": "edited", "/c": "mentioned" };
+    expect(dropFiles(cur, ["/b"])).toEqual({ "/a": "read", "/c": "mentioned" });
+  });
+  it("returns the same map when nothing to drop", () => {
+    const cur: FileMap = { "/a": "read" };
+    expect(dropFiles(cur, [])).toBe(cur);
+  });
+  it("ignores paths that aren't present", () => {
+    expect(dropFiles({ "/a": "read" }, ["/gone"])).toEqual({ "/a": "read" });
+  });
+});
+
+describe("orphanKeys (GC sweep)", () => {
+  const keys = ["/ctx::a", "/ctx::b", "/ctx::c", "/other::a"];
+  it("returns this-context keys whose id isn't live", () => {
+    expect(orphanKeys(keys, "/ctx", ["a", "c"])).toEqual(["/ctx::b"]);
+  });
+  it("never touches another context's keys", () => {
+    // 'a' is not live in /ctx, but /other::a must be left alone.
+    expect(orphanKeys(keys, "/ctx", [])).toEqual(["/ctx::a", "/ctx::b", "/ctx::c"]);
+  });
+  it("returns nothing when all ids are live", () => {
+    expect(orphanKeys(keys, "/ctx", ["a", "b", "c"])).toEqual([]);
   });
 });
