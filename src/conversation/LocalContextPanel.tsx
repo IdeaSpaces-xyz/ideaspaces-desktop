@@ -304,7 +304,7 @@ export function LocalContextPanel({
 
           <section aria-label="Mounted references">
             <p className="px-2 font-chrome text-[10px] uppercase tracking-[0.06em] text-is-text-tertiary">
-              Mounted (read-only){mounts.length > 0 ? ` · ${mounts.length}` : ""}
+              Mounted (reference){mounts.length > 0 ? ` · ${mounts.length}` : ""}
             </p>
             {mounts.length === 0 ? (
               <p className="px-2 py-2 font-chrome text-xs text-is-text-tertiary">

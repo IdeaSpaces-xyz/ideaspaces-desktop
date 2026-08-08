@@ -36,13 +36,10 @@ const under = (path: string, dir: string): boolean => {
 };
 
 /** Confinement gate: a path is allowed only inside home or a mounted reference.
- *  Pass a normalized path (resolveUnder already normalizes) so `..` can't escape. */
+ *  Pass a normalized path (resolveUnder already normalizes) so `..` can't escape.
+ *  Also the editability test: a doc in the workspace tree is the user's own
+ *  writable file, so it opens editable — mounts are read-only to Pi, not to the
+ *  user editing in the panel. */
 export function isWithinContext(path: string, home: string, mounts: string[]): boolean {
   return under(path, home) || mounts.some((m) => under(path, m));
-}
-
-/** A file is editable when under home and not inside any read-only mount. */
-export function isEditableFile(path: string, home: string, mounts: string[]): boolean {
-  if (!under(path, home)) return false;
-  return !mounts.some((m) => under(path, m));
 }

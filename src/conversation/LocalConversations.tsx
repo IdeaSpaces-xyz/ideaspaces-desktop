@@ -41,7 +41,7 @@ import {
   type FileEntry,
 } from "../pi/conversation-files";
 import { extractMentions } from "./mentions";
-import { isEditableFile, isWithinContext, resolveUnder } from "./local-file-preview";
+import { isWithinContext, resolveUnder } from "./local-file-preview";
 import { basename } from "../lib/path";
 import { Resizer } from "../components/Resizer";
 import { LocalContextPanel, LocalContextTrigger } from "./LocalContextPanel";
@@ -664,7 +664,9 @@ export function LocalConversationView({
                   kind: "file",
                   target,
                   fromContext: true,
-                  editable: isEditableFile(target.id, context, mountsRef.current),
+                  // Any doc in the workspace tree is the user's own writable file,
+                  // so it's editable — mounts are read-only to Pi, not to the user.
+                  editable: isWithinContext(target.id, context, mountsRef.current),
                 })
               }
               onClose={() => setPanel(null)}
