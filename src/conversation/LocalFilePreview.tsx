@@ -13,9 +13,10 @@ import { webUrl } from "../editor/linkResolve";
 import { useToast } from "../toast/toast-context";
 
 // A file in the conversation's context, opened in the shared PreviewPane. Reads
-// content from disk; when `editable` (a home file, not a read-only mount), passes
-// the edit IO so the pane's pencil writes straight back to the file. Sibling of
-// LocalRootPreview (folders) and the remote NotePreview (server nodes).
+// content from disk; when `editable` (any doc in the workspace tree — the user's
+// own writable file, mounts included), passes the edit IO so the pane's pencil
+// writes straight back to the file. Sibling of LocalRootPreview (folders) and
+// the remote NotePreview (server nodes).
 export function LocalFilePreview({
   path,
   home,
@@ -28,7 +29,8 @@ export function LocalFilePreview({
   path: string;
   /** Workspace home, for the display path under the title. */
   home: string;
-  /** Home files are read-write; mounted-reference files are read-only. */
+  /** Any doc in the workspace tree is the user's own writable file (mounts
+   *  included), so it opens editable; false only for a path outside the tree. */
   editable: boolean;
   width: number;
   onClose: () => void;
