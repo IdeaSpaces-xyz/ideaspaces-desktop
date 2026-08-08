@@ -9,6 +9,7 @@
 // token. Keeper omits the source and the composer behaves exactly as before.
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Pin } from "lucide-react";
 import { MODEL_TIERS, MODEL_TIER_INFO } from "./model-tiers";
 import type { ModelTier } from "./keeper-types";
 import type { MentionEntry, PiModel, PiThinkingLevel } from "../lib/cli";
@@ -65,6 +66,7 @@ export function Compose({
   initialModel,
   initialThinkingLevel,
   mentionSource,
+  onPinMount,
 }: {
   onSend: (text: string, opts: SendOptions) => void;
   onStop: () => void;
@@ -86,6 +88,10 @@ export function Compose({
   /** Local (Pi) only — resolves @-mention candidates for a query. When provided,
    *  typing `@` opens the file/folder picker. Keeper omits it (no @-mentions). */
   mentionSource?: (query: string) => Promise<MentionEntry[]>;
+  /** Local (Pi) only — pin a folder-kind mention straight to Context (a durable
+   *  mount), given its path relative to home. When provided, folder rows in the
+   *  mention menu get a "Pin" action. */
+  onPinMount?: (path: string) => void;
 }) {
   const toast = useToast();
   const [text, setText] = useState("");
@@ -262,20 +268,41 @@ export function Compose({
                     }}
                     onMouseEnter={() => setMenu((m) => (m ? { ...m, active: i } : m))}
                     className={cn(
-                      "flex cursor-pointer flex-col gap-0.5 px-3 py-2 transition-colors",
+                      "flex cursor-pointer items-center gap-2 px-3 py-2 transition-colors",
                       i === menu.active ? "bg-is-surface-alt" : "hover:bg-is-surface-alt",
                     )}
                   >
-                    <span className="flex items-center gap-1.5 font-chrome text-sm text-is-text">
-                      <span className="text-is-text-tertiary">@</span>
-                      <span className="truncate">{item.name}</span>
-                      {(item.kind === "code-repo" || item.kind === "ideaspace-repo") && (
-                        <span className="shrink-0 rounded border border-is-border px-1 py-px text-[9px] uppercase tracking-[0.06em] text-is-text-tertiary">
-                          {MENTION_KIND_LABEL[item.kind]}
-                        </span>
-                      )}
+                    <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                      <span className="flex items-center gap-1.5 font-chrome text-sm text-is-text">
+                        <span className="text-is-text-tertiary">@</span>
+                        <span className="truncate">{item.name}</span>
+                        {(item.kind === "code-repo" || item.kind === "ideaspace-repo") && (
+                          <span className="shrink-0 rounded border border-is-border px-1 py-px text-[9px] uppercase tracking-[0.06em] text-is-text-tertiary">
+                            {MENTION_KIND_LABEL[item.kind]}
+                          </span>
+                        )}
+                      </span>
+                      <span className="truncate font-chrome text-[11px] text-is-text-tertiary">{item.path}</span>
                     </span>
-                    <span className="truncate font-chrome text-[11px] text-is-text-tertiary">{item.path}</span>
+                    {onPinMount && item.kind !== "file" && (
+                      // Pin the folder to Context (a durable mount). Its own
+                      // mousedown stops the row's insert-token handler firing.
+                      <button
+                        type="button"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          onPinMount(item.path);
+                          closeMenu();
+                        }}
+                        title="Pin to Context"
+                        aria-label={`Pin ${item.name} to Context`}
+                        className="inline-flex shrink-0 items-center gap-1 rounded-md border border-is-border px-1.5 py-1 font-chrome text-[10px] uppercase tracking-[0.04em] text-is-text-tertiary transition hover:bg-is-surface hover:text-is-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-is-focus-ring"
+                      >
+                        <Pin size={11} strokeWidth={1.5} aria-hidden="true" />
+                        Pin
+                      </button>
+                    )}
                   </li>
                 ))}
               </ul>

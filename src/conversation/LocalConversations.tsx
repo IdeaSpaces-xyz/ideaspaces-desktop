@@ -42,6 +42,7 @@ import {
 } from "../pi/conversation-files";
 import { extractMentions } from "./mentions";
 import { isEditableFile, isWithinContext, resolveUnder } from "./local-file-preview";
+import { basename } from "../lib/path";
 import { Resizer } from "../components/Resizer";
 import { LocalContextPanel, LocalContextTrigger } from "./LocalContextPanel";
 import { LocalRootPreview } from "./LocalRootPreview";
@@ -379,17 +380,29 @@ export function LocalConversationView({
 
   // Pin a folder (given relative to home) as a read-only reference. Absolute so
   // pi resolves it the same regardless of cwd; comma-guarded (IS_MOUNTS delimiter).
+  // Returns whether it was pinned (false = rejected), so callers can confirm.
   const addMount = useCallback(
-    async (relPath: string) => {
+    async (relPath: string): Promise<boolean> => {
       const abs = `${context.replace(/\/+$/, "")}/${relPath}`;
       if (!isValidMountPath(abs)) {
         toast("That path can't be mounted — paths with commas aren't supported.", "error");
-        return;
+        return false;
       }
       const next = await addConversationMount(context, conversationId, abs);
       if (mounted.current) setMounts(next);
+      return true;
     },
     [context, conversationId, toast],
+  );
+  // Pin from an @-mention: same as the panel's Add, but confirm with a toast
+  // since the menu closes and the Context panel may not be open to show it.
+  const pinFromMention = useCallback(
+    (relPath: string) => {
+      void addMount(relPath).then((ok) => {
+        if (ok) toast(`Pinned ${basename(relPath)} to Context`);
+      });
+    },
+    [addMount, toast],
   );
   const removeMount = useCallback(
     async (abs: string) => {
@@ -622,6 +635,7 @@ export function LocalConversationView({
           initialModel={initialModel}
           initialThinkingLevel={initialThinkingLevel}
           mentionSource={(q) => listFiles(context, q)}
+          onPinMount={pinFromMention}
         />
       </div>
       </div>
